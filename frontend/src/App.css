@@ -1,4 +1,24 @@
 /* Reset */
+:root {
+  --bg-app: #111315;
+  --bg-panel: #1b1f24;
+  --bg-elevated: #232830;
+  --bg-input: #0f1317;
+
+  --border: #2d333b;
+
+  --text-main: #e6edf3;
+  --text-muted: #8b949e;
+
+  --accent: #9be9b3;
+  --accent-hover: #3ee68a;
+
+  --danger: #ef4444;
+  --warning: #f59e0b;
+
+  --success: #10b981;
+}
+
 * {
   box-sizing: border-box;
   margin: 0;
@@ -10,8 +30,8 @@
   display: flex;
   flex-direction: column;
   height: 100vh;
-  background: #071510;
-  color: #eaeaea;
+  background: var(--bg-panel);
+  color: var(--text-main);
 }
 
 /* Header */
@@ -20,8 +40,8 @@
   align-items: center;
   justify-content: space-between;
   padding: 0.5rem 1rem;
-  background: #0d2818;
-  border-bottom: 1px solid #1a3d22;
+  background: var(--bg-elevated);
+  border-bottom: 1px solid var(--border);
 }
 
 .app-header h1 {
@@ -30,7 +50,7 @@
   gap: 0.5rem;
   font-size: 1.25rem;
   font-weight: 600;
-  color: #22c55e;
+  color: var(--accent);
 }
 
 .header-logo {
@@ -46,19 +66,19 @@
 }
 
 .httpapi-url {
-  color: #4ade80;
+  color: var(--accent);
   font-family: monospace;
-  background: rgba(74, 222, 128, 0.08);
+  background: rgba(50, 209, 123, 0.08);
   padding: 0.2rem 0.5rem;
   border-radius: 4px;
-  border: 1px solid rgba(74, 222, 128, 0.2);
+  border: 1px solid rgba(50, 209, 123, 0.2);
   user-select: text;
 }
 
 .httpapi-edit-btn {
   background: none;
   border: none;
-  color: #8a8a9a;
+  color: var(--text-muted);
   cursor: pointer;
   padding: 0.2rem 0.35rem;
   border-radius: 3px;
@@ -68,7 +88,7 @@
 }
 
 .httpapi-edit-btn:hover {
-  color: #4ade80;
+  color: var(--accent-hover);
 }
 
 .httpapi-edit-form {
@@ -78,25 +98,25 @@
 }
 
 .httpapi-label {
-  color: #8a8a9a;
+  color: var(--text-muted);
   white-space: nowrap;
 }
 
 .httpapi-port-input {
   width: 5rem;
   padding: 0.2rem 0.4rem;
-  background: #1a3d22;
-  border: 1px solid #4ade80;
+  background: var(--bg-input);
+  border: 1px solid var(--accent);
   border-radius: 4px;
-  color: #eaeaea;
+  color: var(--text-main);
   font-size: 0.75rem;
   text-align: right;
 }
 
 .httpapi-port-input:focus {
   outline: none;
-  border-color: #4ade80;
-  box-shadow: 0 0 0 2px rgba(74, 222, 128, 0.2);
+  border-color: var(--accent-hover);
+  box-shadow: 0 0 0 2px rgba(50, 209, 123, 0.2);
 }
 
 .httpapi-save-btn,
@@ -110,18 +130,18 @@
 }
 
 .httpapi-save-btn {
-  background: #4ade80;
+  background: var(--success);
   color: #0d2818;
   font-weight: 600;
 }
 
 .httpapi-save-btn:hover {
-  background: #86efac;
+  background: var(--success);
 }
 
 .httpapi-cancel-btn {
   background: transparent;
-  color: #8a8a9a;
+  color: var(--text-muted);
   border: 1px solid #444;
 }
 
@@ -172,7 +192,7 @@
 
 /* Panel */
 .panel {
-  background: #0d2818;
+  background: var(--bg-elevated);
   border-radius: 8px;
   padding: 1.5rem;
   height: 100%;
@@ -182,8 +202,8 @@
 .panel h2 {
   font-size: 1.125rem;
   margin-bottom: 1rem;
-  color: #22c55e;
-  border-bottom: 1px solid #1a3d22;
+  color: var(--accent);
+  border-bottom: 1px solid var(--border);
   padding-bottom: 0.5rem;
 }
 
@@ -194,7 +214,7 @@
   gap: 1rem;
   margin-bottom: 1rem;
   padding: 0.75rem;
-  background: #1a3d22;
+  background: var(--bg-elevated);
   border-radius: 4px;
 }
 
@@ -265,7 +285,7 @@
   grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
   gap: 1rem;
   padding: 1rem;
-  background: #1a3d22;
+  background: var(--bg-elevated);
   border-radius: 4px;
 }
 
@@ -346,7 +366,7 @@ button:disabled {
   align-items: flex-end;
   margin-bottom: 1rem;
   padding: 1rem;
-  background: #1a3d22;
+  background: var(--bg-elevated);
   border-radius: 4px;
 }
 
@@ -359,7 +379,7 @@ button:disabled {
 .register-matrix-container {
   overflow: auto;
   max-height: calc(100vh - 350px);
-  border: 1px solid #1a3d22;
+  border: 1px solid var(--border);
   border-radius: 4px;
 }
 
@@ -367,31 +387,31 @@ button:disabled {
   width: 100%;
   border-collapse: collapse;
   font-size: 0.75rem;
-  font-family: 'Consolas', 'Monaco', monospace;
+  font-family: "Consolas", "Monaco", monospace;
 }
 
 .register-matrix th,
 .register-matrix td {
   padding: 0.25rem 0.5rem;
   text-align: center;
-  border: 1px solid #1a3d22;
+  border: 1px solid var(--border);
 }
 
 .register-matrix th {
   position: sticky;
   top: 0;
-  background: #0d2818;
+  background: var(--bg-elevated);
   font-weight: 500;
-  color: #9ca3af;
+  color: var(--text-muted);
   z-index: 2;
 }
 
 .register-matrix .row-header {
   position: sticky;
   left: 0;
-  background: #0d2818;
+  background: var(--bg-elevated);
   font-weight: 500;
-  color: #9ca3af;
+  color: var(--text-muted);
   text-align: right;
   min-width: 60px;
   z-index: 1;
@@ -424,7 +444,7 @@ button:disabled {
 }
 
 .matrix-cell.cell-selected {
-  outline: 2px solid #22c55e;
+  outline: 2px solid var(--accent);
   outline-offset: -2px;
   background: rgba(34, 197, 94, 0.15);
 }
@@ -438,13 +458,18 @@ button:disabled {
 }
 
 .register-matrix-container:focus .matrix-cell.cell-selected {
-  outline: 2px solid #22c55e;
+  outline: 2px solid var(--accent);
   animation: cursor-blink 1s infinite;
 }
 
 @keyframes cursor-blink {
-  0%, 100% { outline-color: #22c55e; }
-  50% { outline-color: #86efac; }
+  0%,
+  100% {
+    outline-color: var(--accent);
+  }
+  50% {
+    outline-color: var(--accent-hover);
+  }
 }
 
 .matrix-value {
@@ -467,8 +492,8 @@ button:disabled {
 }
 
 .dialog {
-  background: #0d2818;
-  border: 1px solid #1a3d22;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
   border-radius: 8px;
   padding: 1.5rem;
   min-width: 320px;
@@ -478,9 +503,9 @@ button:disabled {
 
 .dialog h3 {
   margin: 0 0 1rem 0;
-  color: #22c55e;
+  color: var(--accent);
   font-size: 1.125rem;
-  border-bottom: 1px solid #1a3d22;
+  border-bottom: 1px solid var(--border);
   padding-bottom: 0.5rem;
 }
 
@@ -508,10 +533,10 @@ button:disabled {
 .dialog-row input[type="text"] {
   flex: 1;
   padding: 0.5rem;
-  border: 1px solid #1a3d22;
+  border: 1px solid var(--border);
   border-radius: 4px;
-  background: #071510;
-  color: #eaeaea;
+  background: var(--bg-elevated);
+  color: var(--text);
   font-size: 0.875rem;
 }
 
@@ -519,7 +544,7 @@ button:disabled {
 .dialog-row input[type="number"]:focus,
 .dialog-row input[type="text"]:focus {
   outline: none;
-  border-color: #22c55e;
+  border-color: var(--accent);
 }
 
 /* ダイアログ内 variable-table の select / input スタイルを dialog-row に統一 */
@@ -527,10 +552,10 @@ button:disabled {
 .dialog .variable-table td input[type="number"],
 .dialog .variable-table td input[type="text"] {
   padding: 0.5rem;
-  border: 1px solid #1a3d22;
+  border: 1px solid var(--border);
   border-radius: 4px;
-  background: #071510;
-  color: #eaeaea;
+  background: var(--bg-elevated);
+  color: var(--text);
   font-size: 0.875rem;
   width: 100%;
   box-sizing: border-box;
@@ -540,13 +565,13 @@ button:disabled {
 .dialog .variable-table td input[type="number"]:focus,
 .dialog .variable-table td input[type="text"]:focus {
   outline: none;
-  border-color: #22c55e;
+  border-color: var(--accent);
 }
 
 .dialog-value {
-  font-family: 'Consolas', 'Monaco', monospace;
-  color: #eaeaea;
-  background: #1a3d22;
+  font-family: "Consolas", "Monaco", monospace;
+  color: var(--text);
+  background: var(--bg-elevated);
   padding: 0.25rem 0.5rem;
   border-radius: 4px;
 }
@@ -554,17 +579,17 @@ button:disabled {
 .dialog-input {
   flex: 1;
   padding: 0.5rem;
-  border: 1px solid #1a3d22;
+  border: 1px solid var(--border);
   border-radius: 4px;
-  background: #071510;
-  color: #eaeaea;
-  font-family: 'Consolas', 'Monaco', monospace;
+  background: var(--bg-elevated);
+  color: var(--text);
+  font-family: "Consolas", "Monaco", monospace;
   font-size: 0.875rem;
 }
 
 .dialog-input:focus {
   outline: none;
-  border-color: #22c55e;
+  border-color: var(--accent);
 }
 
 .dialog-buttons {
@@ -573,7 +598,7 @@ button:disabled {
   gap: 0.5rem;
   margin-top: 1.5rem;
   padding-top: 1rem;
-  border-top: 1px solid #1a3d22;
+  border-top: 1px solid var(--border);
 }
 
 .warning-text {
@@ -663,7 +688,7 @@ button:disabled {
   padding: 0.5rem 0.75rem;
   max-height: 220px;
   overflow-y: auto;
-  font-family: 'Consolas', 'Courier New', monospace;
+  font-family: "Consolas", "Courier New", monospace;
   font-size: 0.8em;
 }
 
@@ -781,7 +806,7 @@ button:disabled {
   border-radius: 4px;
   background: #020f06;
   color: #eaeaea;
-  font-family: 'Consolas', 'Monaco', monospace;
+  font-family: "Consolas", "Monaco", monospace;
   font-size: 0.875rem;
   line-height: 1.5;
   resize: vertical;
@@ -809,7 +834,7 @@ button:disabled {
 }
 
 .test-output pre {
-  font-family: 'Consolas', 'Monaco', monospace;
+  font-family: "Consolas", "Monaco", monospace;
   font-size: 0.875rem;
   color: #10b981;
   white-space: pre-wrap;
@@ -839,7 +864,7 @@ button:disabled {
   max-height: 200px;
   overflow-y: auto;
   padding: 0.5rem;
-  background: #071510;
+  background: var(--bg-app);
   border-radius: 4px;
 }
 
@@ -848,7 +873,7 @@ button:disabled {
   align-items: center;
   gap: 0.25rem;
   padding: 0.2rem 0.3rem;
-  background: #1a3d22;
+  background: var(--bg-app);
   border-radius: 3px;
   cursor: pointer;
   transition: background-color 0.2s;
@@ -868,7 +893,7 @@ button:disabled {
 
 .unit-id-label {
   font-size: 0.75rem;
-  font-family: 'Consolas', 'Monaco', monospace;
+  font-family: "Consolas", "Monaco", monospace;
   color: #eaeaea;
   min-width: 1.5rem;
   text-align: right;
@@ -880,8 +905,8 @@ button:disabled {
   gap: 0.25rem;
   margin-bottom: 1rem;
   padding: 0.25rem;
-  background: #1a3d22;
-  border-radius: 4px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
 }
 
 .sub-tab-button {
@@ -929,8 +954,8 @@ button:disabled {
 .monitoring-empty {
   padding: 2rem;
   text-align: center;
-  color: #9ca3af;
-  background: #1a3d22;
+  color: var(--text-muted);
+  background: var(--bg-elevated);
   border-radius: 4px;
 }
 
@@ -944,13 +969,13 @@ button:disabled {
 .monitoring-table td {
   padding: 0.5rem 0.75rem;
   text-align: left;
-  border-bottom: 1px solid #1a3d22;
+  border-bottom: 1px solid var(--border);
 }
 
 .monitoring-table th {
-  background: #1a3d22;
+  background: var(--bg-elevated);
   font-weight: 500;
-  color: #22c55e;
+  color: var(--accent);
 }
 
 .monitoring-table tbody tr:hover {
@@ -959,13 +984,13 @@ button:disabled {
 
 .monitoring-settings {
   font-size: 0.75rem;
-  color: #9ca3af;
+  color: var(--text-muted);
 }
 
 .monitoring-value {
-  font-family: 'Consolas', 'Monaco', monospace;
+  font-family: "Consolas", "Monaco", monospace;
   font-weight: 500;
-  color: #10b981;
+  color: var(--accent);
   cursor: pointer;
   transition: background-color 0.2s;
 }
@@ -1050,7 +1075,7 @@ button:disabled {
   align-items: center;
   gap: 1rem;
   padding: 0.25rem 0.75rem;
-  background: #1a3d22;
+  background: var(--bg-elevated);
   border-radius: 4px;
   margin-left: auto;
   margin-right: 1rem;
@@ -1064,14 +1089,14 @@ button:disabled {
 
 .indicator-label {
   font-size: 0.75rem;
-  color: #9ca3af;
+  color: var(--text-muted);
   font-weight: 500;
 }
 
 .indicator-value {
   font-size: 0.75rem;
-  font-family: 'Consolas', 'Monaco', monospace;
-  color: #eaeaea;
+  font-family: "Consolas", "Monaco", monospace;
+  color: var(--text);
   min-width: 1.5rem;
   text-align: center;
 }
@@ -1082,16 +1107,18 @@ button:disabled {
   border-radius: 50%;
   background: #374151;
   border: 1px solid #1f2937;
-  transition: background-color 0.1s, box-shadow 0.1s;
+  transition:
+    background-color 0.1s,
+    box-shadow 0.1s;
 }
 
 .indicator-lamp.active {
-  background: #10b981;
+  background: var(--accent);
   box-shadow: 0 0 8px rgba(16, 185, 129, 0.6);
 }
 
 .indicator-lamp.tx.active {
-  background: #f59e0b;
+  background: var(--accent-hover);
   box-shadow: 0 0 8px rgba(245, 158, 11, 0.6);
 }
 
@@ -1125,7 +1152,7 @@ button:disabled {
   display: flex;
   flex: 1;
   min-height: 0;
-  border: 1px solid #1a3d22;
+  border: 1px solid var(--border);
   border-radius: 4px;
   overflow: hidden;
 }
@@ -1133,8 +1160,8 @@ button:disabled {
 .server-tab-list {
   width: 200px;
   flex-shrink: 0;
-  background: #1a3d22;
-  border-right: 1px solid #071510;
+  background: var(--bg-elevated);
+  border-right: 1px solid var(--border);
   overflow-y: auto;
 }
 
@@ -1164,7 +1191,6 @@ button:disabled {
   white-space: nowrap;
 }
 
-
 .server-tab-item:hover {
   background: #0d2818;
 }
@@ -1189,11 +1215,10 @@ button:disabled {
   color: #9ca3af;
 }
 
-
 .server-tab-content {
   flex: 1;
   overflow-y: auto;
-  background: #0d2818;
+  background: var(--bg-panel);
 }
 
 /* 右ペイン: サーバー設定 */
@@ -1208,8 +1233,8 @@ button:disabled {
   align-items: center;
   justify-content: space-between;
   padding: 0.6rem 1rem;
-  background: #1a3d22;
-  border-bottom: 1px solid #071510;
+  background: var(--bg-elevated);
+  border-bottom: 1px solid var(--border);
   position: sticky;
   top: 0;
   z-index: 1;
@@ -1249,20 +1274,20 @@ button:disabled {
 
 .server-status-badge.running {
   background: rgba(16, 185, 129, 0.2);
-  color: #10b981;
-  border: 1px solid #10b981;
+  color: var(--accent);
+  border: 1px solid var(--accent);
 }
 
 .server-status-badge.stopped {
   background: rgba(107, 114, 128, 0.2);
-  color: #9ca3af;
-  border: 1px solid #6b7280;
+  color: var(--text-muted);
+  border: 1px solid var(--border);
 }
 
 .server-status-badge.error {
   background: rgba(220, 38, 38, 0.2);
-  color: #f87171;
-  border: 1px solid #dc2626;
+  color: var(--destructive);
+  border: 1px solid var(--destructive);
 }
 
 /* VSCode風設定リスト */
@@ -1361,7 +1386,7 @@ button:disabled {
   align-items: center;
   gap: 1rem;
   padding: 0.75rem;
-  background: #1a3d22;
+  background: var(--bg-elevated);
   border-radius: 4px;
 }
 
@@ -1388,9 +1413,9 @@ button:disabled {
 }
 
 .variable-table th {
-  background: #1a3d22;
+  background: var(--bg-elevated);
   font-weight: 500;
-  color: #22c55e;
+  color: var(--accent);
 }
 
 .variable-table tbody tr:hover {
@@ -1398,27 +1423,27 @@ button:disabled {
 }
 
 .variable-table .var-name {
-  font-family: 'Consolas', 'Monaco', monospace;
+  font-family: "Consolas", "Monaco", monospace;
   font-weight: 500;
-  color: #eaeaea;
+  color: var(--text);
 }
 
 .variable-table .var-type {
   font-size: 0.75rem;
-  color: #9ca3af;
+  color: var(--text-muted);
 }
 
 .variable-table .var-type span {
-  background: #071510;
+  background: var(--bg-elevated);
   padding: 0.125rem 0.5rem;
   border-radius: 3px;
   display: inline-block;
 }
 
 .variable-table .var-value {
-  font-family: 'Consolas', 'Monaco', monospace;
+  font-family: "Consolas", "Monaco", monospace;
   font-weight: 500;
-  color: #10b981;
+  color: var(--accent);
   cursor: pointer;
   transition: background-color 0.2s;
 }
@@ -1428,7 +1453,7 @@ button:disabled {
 }
 
 .variable-table .var-nodeid {
-  font-family: 'Consolas', 'Monaco', monospace;
+  font-family: "Consolas", "Monaco", monospace;
   font-size: 0.75rem;
   color: #9ca3af;
 }

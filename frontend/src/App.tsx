@@ -9,7 +9,7 @@ import { CommunicationIndicator } from "./components/CommunicationIndicator";
 import { KarakuriLogo } from "./components/KarakuriLogo";
 import { GetHTTPAPIPort, SetHTTPAPIPort } from "../wailsjs/go/main/App";
 
-const APP_VERSION = "v0.0.37";
+const APP_VERSION = "v0.0.38";
 
 type Tab = "server" | "variables" | "registers" | "scripts";
 
@@ -82,7 +82,10 @@ function App() {
   return (
     <div id="App">
       <header className="app-header">
-        <h1><KarakuriLogo size={28} className="header-logo" />Karakuri({APP_VERSION})</h1>
+        <h1>
+          <KarakuriLogo size={28} className="header-logo" />
+          Karakuri({APP_VERSION})
+        </h1>
         <CommunicationIndicator />
         <div className="httpapi-indicator">
           {editingPort ? (
@@ -98,14 +101,29 @@ function App() {
                 className="httpapi-port-input"
                 autoFocus
               />
-              <button className="httpapi-save-btn" onClick={handleSavePort}>保存</button>
-              <button className="httpapi-cancel-btn" onClick={() => setEditingPort(false)}>✕</button>
+              <button className="httpapi-save-btn" onClick={handleSavePort}>
+                保存
+              </button>
+              <button
+                className="httpapi-cancel-btn"
+                onClick={() => setEditingPort(false)}
+              >
+                ✕
+              </button>
               {portError && <span className="httpapi-error">{portError}</span>}
             </div>
           ) : (
             <>
-              <span className="httpapi-url">http://localhost:{httpAPIPort}/api</span>
-              <button className="httpapi-edit-btn" onClick={handleStartEdit} title="ポートを変更">✎</button>
+              <span className="httpapi-url">
+                http://localhost:{httpAPIPort}/api
+              </span>
+              <button
+                className="httpapi-edit-btn"
+                onClick={handleStartEdit}
+                title="ポートを変更"
+              >
+                ✎
+              </button>
             </>
           )}
         </div>
@@ -139,7 +157,10 @@ function App() {
 
       <main className="app-main">
         {activeTab === "server" && (
-          <ServerPanel ref={serverPanelRef} onDirtyChange={setServerPanelDirty} />
+          <ServerPanel
+            ref={serverPanelRef}
+            onDirtyChange={setServerPanelDirty}
+          />
         )}
         {activeTab === "variables" && <VariableView />}
         {activeTab === "registers" && (
@@ -160,13 +181,22 @@ function App() {
               <p>通信設定が変更されています。</p>
             </div>
             <div className="dialog-buttons">
-              <button onClick={() => setPendingTab(null)} className="btn-secondary">
+              <button
+                onClick={() => setPendingTab(null)}
+                className="btn-secondary"
+              >
                 キャンセル
               </button>
-              <button onClick={handleConfirmDiscardAndNavigate} className="btn-secondary">
+              <button
+                onClick={handleConfirmDiscardAndNavigate}
+                className="btn-secondary"
+              >
                 保存せずに移動
               </button>
-              <button onClick={handleConfirmSaveAndNavigate} className="btn-primary">
+              <button
+                onClick={handleConfirmSaveAndNavigate}
+                className="btn-primary"
+              >
                 保存してから移動
               </button>
             </div>
