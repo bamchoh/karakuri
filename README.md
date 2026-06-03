@@ -1,3 +1,5 @@
+![Logo](docs/karakuri.png)
+
 # Karakuri
 
 Karakuri は Modbus（TCP/RTU/ASCII）と OPC UA に対応した PLC シミュレーターです。GUI でレジスタの値を確認・編集でき、JavaScript でカスタムロジックを記述できます。
