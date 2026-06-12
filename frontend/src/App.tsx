@@ -8,6 +8,8 @@ import { ScriptPanel } from "./components/ScriptPanel";
 import { CommunicationIndicator } from "./components/CommunicationIndicator";
 import { KarakuriLogo } from "./components/KarakuriLogo";
 import { GetHTTPAPIPort, SetHTTPAPIPort } from "../wailsjs/go/main/App";
+import { Sidebar } from "./components/Sidebar";
+import { ExportProject, ImportProject } from "../wailsjs/go/main/App";
 
 const APP_VERSION = "v0.0.38";
 
@@ -129,80 +131,73 @@ function App() {
         </div>
         <nav className="tab-nav">
           <button
-            className={`tab-button ${activeTab === "server" ? "active" : ""}`}
-            onClick={() => handleTabClick("server")}
+            className={`btn-secondary`}
+            onClick={() => serverPanelRef.current?.exportProject()}
           >
-            サーバー
+            エクスポート
           </button>
           <button
-            className={`tab-button ${activeTab === "variables" ? "active" : ""}`}
-            onClick={() => handleTabClick("variables")}
+            className={`btn-secondary`}
+            onClick={() => serverPanelRef.current?.importProject()}
           >
-            変数
-          </button>
-          <button
-            className={`tab-button ${activeTab === "registers" ? "active" : ""}`}
-            onClick={() => handleTabClick("registers")}
-          >
-            レジスタ
-          </button>
-          <button
-            className={`tab-button ${activeTab === "scripts" ? "active" : ""}`}
-            onClick={() => handleTabClick("scripts")}
-          >
-            スクリプト
+            インポート
           </button>
         </nav>
       </header>
 
-      <main className="app-main">
-        {activeTab === "server" && (
-          <ServerPanel
-            ref={serverPanelRef}
-            onDirtyChange={setServerPanelDirty}
-          />
-        )}
-        {activeTab === "variables" && <VariableView />}
-        {activeTab === "registers" && (
-          <RegisterPanel
-            activeSubTab={registerSubTab}
-            onSubTabChange={setRegisterSubTab}
-          />
-        )}
-        <div style={{ display: activeTab === "scripts" ? undefined : "none" }}>
-          <ScriptPanel />
-        </div>
-      </main>
-      {pendingTab && (
-        <FocusTrap onConfirm={handleConfirmSaveAndNavigate}>
-          <div className="dialog">
-            <h3>設定が保存されていません</h3>
-            <div className="dialog-content">
-              <p>通信設定が変更されています。</p>
-            </div>
-            <div className="dialog-buttons">
-              <button
-                onClick={() => setPendingTab(null)}
-                className="btn-secondary"
-              >
-                キャンセル
-              </button>
-              <button
-                onClick={handleConfirmDiscardAndNavigate}
-                className="btn-secondary"
-              >
-                保存せずに移動
-              </button>
-              <button
-                onClick={handleConfirmSaveAndNavigate}
-                className="btn-primary"
-              >
-                保存してから移動
-              </button>
-            </div>
+      <div style={{ display: "flex" }}>
+        <Sidebar selected={activeTab} onSelect={(tab) => handleTabClick(tab)} />
+        <main className="app-main">
+          {activeTab === "server" && (
+            <ServerPanel
+              ref={serverPanelRef}
+              onDirtyChange={setServerPanelDirty}
+            />
+          )}
+          {activeTab === "variables" && <VariableView />}
+          {activeTab === "registers" && (
+            <RegisterPanel
+              activeSubTab={registerSubTab}
+              onSubTabChange={setRegisterSubTab}
+            />
+          )}
+          <div
+            style={{ display: activeTab === "scripts" ? undefined : "none" }}
+          >
+            <ScriptPanel />
           </div>
-        </FocusTrap>
-      )}
+        </main>{" "}
+        {pendingTab && (
+          <FocusTrap onConfirm={handleConfirmSaveAndNavigate}>
+            <div className="dialog">
+              <h3>設定が保存されていません</h3>
+              <div className="dialog-content">
+                <p>通信設定が変更されています。</p>
+              </div>
+              <div className="dialog-buttons">
+                <button
+                  onClick={() => setPendingTab(null)}
+                  className="btn-secondary"
+                >
+                  キャンセル
+                </button>
+                <button
+                  onClick={handleConfirmDiscardAndNavigate}
+                  className="btn-secondary"
+                >
+                  保存せずに移動
+                </button>
+                <button
+                  onClick={handleConfirmSaveAndNavigate}
+                  className="btn-primary"
+                >
+                  保存してから移動
+                </button>
+              </div>
+            </div>
+          </FocusTrap>
+        )}
+      </div>
     </div>
   );
 }

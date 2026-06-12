@@ -1499,3 +1499,38 @@ button:disabled {
 .context-menu button.context-menu-danger:hover {
   background: rgba(248, 113, 113, 0.15);
 }
+
+.sidebar {
+  width: 48px;
+  height: 100vh;
+
+  display: flex;
+  flex-direction: column;
+
+  background: #252526;
+  border-right: 1px solid #3c3c3c;
+}
+
+.sidebar-item {
+  width: 48px;
+  height: 48px;
+
+  border: none;
+  background: transparent;
+
+  color: #858585;
+  cursor: pointer;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.sidebar-item:hover {
+  color: white;
+}
+
+.sidebar-item.active {
+  color: white;
+  border-left: 2px solid #007acc;
+}
