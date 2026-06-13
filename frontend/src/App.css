@@ -1534,3 +1534,27 @@ button:disabled {
   color: white;
   border-left: 2px solid #007acc;
 }
+
+.toolbar-icon-button {
+  background: none;
+  border: none;
+  color: #9ca3af;
+
+  width: 48px;
+  height: 48px;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  border-radius: 6px;
+}
+
+.toolbar-icon-button:hover {
+  background: rgba(255, 255, 255, 0.06);
+  color: white;
+}
+
+.toolbar-icon-button:active {
+  transform: translateY(1px);
+}

@@ -11,6 +11,8 @@ import { GetHTTPAPIPort, SetHTTPAPIPort } from "../wailsjs/go/main/App";
 import { Sidebar } from "./components/Sidebar";
 import { ExportProject, ImportProject } from "../wailsjs/go/main/App";
 
+import { FolderOpen, Save } from "lucide-react";
+
 const APP_VERSION = "v0.0.38";
 
 type Tab = "server" | "variables" | "registers" | "scripts";
@@ -81,7 +83,7 @@ function App() {
     if (e.key === "Escape") setEditingPort(false);
   };
 
-  const handleExportProject = async () => {
+  const handleOpenProject = async () => {
     try {
       await ExportProject();
     } catch (e) {
@@ -89,7 +91,7 @@ function App() {
     }
   };
 
-  const handleImportProject = async () => {
+  const handleSaveProject = async () => {
     try {
       await ImportProject();
     } catch (e) {
@@ -146,11 +148,21 @@ function App() {
           )}
         </div>
         <nav className="tab-nav">
-          <button className={`btn-secondary`} onClick={handleExportProject}>
-            エクスポート
+          <button
+            className="toolbar-icon-button"
+            onClick={handleOpenProject}
+            title="プロジェクトオープン"
+            aria-label="プロジェクトオープン"
+          >
+            <FolderOpen size={22} />
           </button>
-          <button className={`btn-secondary`} onClick={handleImportProject}>
-            インポート
+          <button
+            className="toolbar-icon-button"
+            onClick={handleSaveProject}
+            title="プロジェクト保存"
+            aria-label="プロジェクト保存"
+          >
+            <Save size={22} />
           </button>
         </nav>
       </header>
