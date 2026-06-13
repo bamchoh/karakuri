@@ -83,7 +83,7 @@ function App() {
     if (e.key === "Escape") setEditingPort(false);
   };
 
-  const handleOpenProject = async () => {
+  const handleSaveProject = async () => {
     try {
       await ExportProject();
     } catch (e) {
@@ -91,7 +91,7 @@ function App() {
     }
   };
 
-  const handleSaveProject = async () => {
+  const handleOpenProject = async () => {
     try {
       await ImportProject();
     } catch (e) {
