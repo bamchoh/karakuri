@@ -267,9 +267,12 @@ export function VariableView() {
   // 変数一覧の初回読み込みとイベント購読
   useEffect(() => {
     loadVariables();
-    const off = EventsOn('plc:variables-changed', (variables: application.VariableDTO[]) => {
-      setVariables(variables || []);
-    });
+    const off = EventsOn(
+      "plc:variables-changed",
+      (variables: application.VariableDTO[]) => {
+        setVariables(variables || []);
+      },
+    );
     return off;
   }, [loadVariables]);
 
@@ -325,9 +328,8 @@ export function VariableView() {
   // 値編集ダイアログが開いたら最初の入力にフォーカス
   useEffect(() => {
     if (isEditDialogOpen && editDialogRef.current) {
-      const first = editDialogRef.current.querySelector<HTMLElement>(
-        "input, select",
-      );
+      const first =
+        editDialogRef.current.querySelector<HTMLElement>("input, select");
       first?.focus();
     }
   }, [isEditDialogOpen]);
@@ -343,7 +345,6 @@ export function VariableView() {
     }
   }, [focusedRowKey]);
 
-
   // キーボードナビゲーション: 値編集ダイアログが閉じたら行にフォーカスを戻す
   useEffect(() => {
     if (!isEditDialogOpen && focusedRowKey) {
@@ -351,8 +352,8 @@ export function VariableView() {
         rowRefs.current.get(focusedRowKey)?.focus({ preventScroll: false });
       });
     }
-  // isEditDialogOpen の変化にのみ反応（focusedRowKey は最新値を参照したいため除外）
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // isEditDialogOpen の変化にのみ反応（focusedRowKey は最新値を参照したいため除外）
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isEditDialogOpen]);
 
   // スカラー値のフォーマット
@@ -372,6 +373,17 @@ export function VariableView() {
     }
   };
 
+  // プロジェクトインポート完了イベントを購読して変数・構造体・サーバー情報をリロード
+  useEffect(() => {
+    const off = EventsOn("project:imported", () => {
+      loadVariables();
+      loadStructTypes();
+      loadServerInstancesAndAreas();
+    });
+
+    return off;
+  }, []);
+
   // 配列型かどうか判定（IEC 61131-3 形式および旧形式に対応）
   const isArrayType = (dataType: string): boolean => {
     if (!dataType.startsWith("ARRAY[")) return false;
@@ -384,7 +396,12 @@ export function VariableView() {
   // 旧形式（後方互換）: "ARRAY[INT;10]"  → { elemType: "INT", size: 10, lower: 0, upper: 9 }
   const parseArrayTypeFE = (
     dataType: string,
-  ): { elemType: string; size: number; lower: number; upper: number } | null => {
+  ): {
+    elemType: string;
+    size: number;
+    lower: number;
+    upper: number;
+  } | null => {
     if (!dataType.startsWith("ARRAY[")) return null;
     const ofIdx = dataType.indexOf("] OF ");
     if (ofIdx >= 0) {
@@ -401,8 +418,16 @@ export function VariableView() {
       if (dimParts.length === 1) {
         return { elemType: elemStr, size, lower, upper };
       } else {
-        const remaining = dimParts.slice(1).map((d) => d.trim()).join(", ");
-        return { elemType: `ARRAY[${remaining}] OF ${elemStr}`, size, lower, upper };
+        const remaining = dimParts
+          .slice(1)
+          .map((d) => d.trim())
+          .join(", ");
+        return {
+          elemType: `ARRAY[${remaining}] OF ${elemStr}`,
+          size,
+          lower,
+          upper,
+        };
       }
     }
     // 旧形式: ARRAY[ElementType;Size]
@@ -420,7 +445,10 @@ export function VariableView() {
   // "ARRAY[1..3, 0..4] OF INT" → { dims: [{lower:1,upper:3},{lower:0,upper:4}], baseElemType:"INT" }
   const parseAllDimsFE = (
     dataType: string,
-  ): { dims: Array<{ lower: number; upper: number }>; baseElemType: string } | null => {
+  ): {
+    dims: Array<{ lower: number; upper: number }>;
+    baseElemType: string;
+  } | null => {
     if (!dataType.startsWith("ARRAY[")) return null;
     const ofIdx = dataType.indexOf("] OF ");
     if (ofIdx < 0) return null;
@@ -612,10 +640,7 @@ export function VariableView() {
             const fieldPath = [...valuePath, field.name];
             const fieldName = `${displayName}.${field.name}`;
             const fieldOffset = wordOffset + field.offset;
-            if (
-              isStructType(field.dataType) ||
-              isArrayType(field.dataType)
-            ) {
+            if (isStructType(field.dataType) || isArrayType(field.dataType)) {
               expand(
                 fieldName,
                 field.dataType,
@@ -1012,7 +1037,10 @@ export function VariableView() {
           newArrayElemType,
           newStringLength,
         );
-        dataType = buildArrayTypeFE(baseElemType, newDimBounds.slice(0, newDimCount));
+        dataType = buildArrayTypeFE(
+          baseElemType,
+          newDimBounds.slice(0, newDimCount),
+        );
         value = generateDefaultForType(dataType);
       } else if (newTypeCategory === "struct") {
         // 構造体のデフォルト値を再帰的に生成
@@ -1036,7 +1064,11 @@ export function VariableView() {
       setNewArrayElemType("INT");
       setNewArrayElemCategory("scalar");
       setNewDimCount(1);
-      setNewDimBounds([{ lower: 0, upper: 9 }, { lower: 0, upper: 4 }, { lower: 0, upper: 2 }]);
+      setNewDimBounds([
+        { lower: 0, upper: 9 },
+        { lower: 0, upper: 4 },
+        { lower: 0, upper: 2 },
+      ]);
     } catch (e) {
       console.error("Failed to create variable:", e);
       alert("変数の作成に失敗しました: " + e);
@@ -1100,7 +1132,10 @@ export function VariableView() {
           metaEditArrayElemType,
           metaEditStringLength,
         );
-        dataType = buildArrayTypeFE(baseElemType, metaEditDimBounds.slice(0, metaEditDimCount));
+        dataType = buildArrayTypeFE(
+          baseElemType,
+          metaEditDimBounds.slice(0, metaEditDimCount),
+        );
       } else if (
         metaEditTypeCategory === "scalar" &&
         metaEditDataType === "STRING"
@@ -1406,8 +1441,10 @@ export function VariableView() {
     if (trimmed === "" || trimmed === "-") return null;
     try {
       const bigVal =
-        trimmed.startsWith("0x") || trimmed.startsWith("0X") ||
-        trimmed.startsWith("0b") || trimmed.startsWith("0B")
+        trimmed.startsWith("0x") ||
+        trimmed.startsWith("0X") ||
+        trimmed.startsWith("0b") ||
+        trimmed.startsWith("0B")
           ? BigInt(trimmed)
           : BigInt(trimmed);
       if (dataType === "LINT") {
@@ -1981,7 +2018,11 @@ export function VariableView() {
               tabIndex={0}
               onFocus={() => setFocusedRowKey(row.key)}
               onKeyDown={(e) => handleRowKeyDown(e, row, idx)}
-              onContextMenu={row.depth === 0 ? (e) => handleContextMenu(e, row.variable) : undefined}
+              onContextMenu={
+                row.depth === 0
+                  ? (e) => handleContextMenu(e, row.variable)
+                  : undefined
+              }
               style={{
                 backgroundColor:
                   focusedRowKey === row.key
@@ -1989,7 +2030,10 @@ export function VariableView() {
                     : row.isHeader
                       ? "rgba(255,255,255,0.03)"
                       : undefined,
-                outline: focusedRowKey === row.key ? "1px solid rgba(100,160,255,0.4)" : undefined,
+                outline:
+                  focusedRowKey === row.key
+                    ? "1px solid rgba(100,160,255,0.4)"
+                    : undefined,
                 fontWeight:
                   row.depth === 0 && row.isHeader ? "bold" : undefined,
               }}
@@ -2038,8 +2082,7 @@ export function VariableView() {
               >
                 {row.isHeader ? (
                   <span style={{ color: "#888", fontSize: "0.85em" }}>
-                    {isArrayType(row.dataType) &&
-                    Array.isArray(row.value)
+                    {isArrayType(row.dataType) && Array.isArray(row.value)
                       ? `(${row.value.length} 要素)`
                       : `{${row.dataType}}`}
                   </span>
@@ -2133,7 +2176,10 @@ export function VariableView() {
           <button
             className="context-menu-danger"
             onClick={() => {
-              handleDeleteVariable(contextMenu.variable.id, contextMenu.variable.name);
+              handleDeleteVariable(
+                contextMenu.variable.id,
+                contextMenu.variable.name,
+              );
               setContextMenu(null);
             }}
           >
@@ -2145,7 +2191,10 @@ export function VariableView() {
         <div
           className="context-menu-backdrop"
           onClick={() => setContextMenu(null)}
-          onContextMenu={(e) => { e.preventDefault(); setContextMenu(null); }}
+          onContextMenu={(e) => {
+            e.preventDefault();
+            setContextMenu(null);
+          }}
         />
       )}
 
@@ -2284,9 +2333,7 @@ export function VariableView() {
                     <label>次元数:</label>
                     <select
                       value={newDimCount}
-                      onChange={(e) =>
-                        setNewDimCount(parseInt(e.target.value))
-                      }
+                      onChange={(e) => setNewDimCount(parseInt(e.target.value))}
                     >
                       <option value={1}>1</option>
                       <option value={2}>2</option>
@@ -2383,10 +2430,7 @@ export function VariableView() {
                 <select
                   value={metaEditTypeCategory}
                   onChange={(e) => {
-                    const cat = e.target.value as
-                      | "scalar"
-                      | "array"
-                      | "struct";
+                    const cat = e.target.value as "scalar" | "array" | "struct";
                     setMetaEditTypeCategory(cat);
                     if (cat === "scalar") setMetaEditDataType("INT");
                     else if (cat === "struct" && structTypes.length > 0)
@@ -2424,9 +2468,7 @@ export function VariableView() {
                         type="number"
                         value={metaEditStringLength}
                         onChange={(e) =>
-                          setMetaEditStringLength(
-                            parseInt(e.target.value) || 1,
-                          )
+                          setMetaEditStringLength(parseInt(e.target.value) || 1)
                         }
                         min={1}
                         max={256}
@@ -2556,7 +2598,9 @@ export function VariableView() {
                 </div>
               )}
 
-              <p style={{ fontSize: "0.85em", color: "#aaa", margin: "8px 0 0" }}>
+              <p
+                style={{ fontSize: "0.85em", color: "#aaa", margin: "8px 0 0" }}
+              >
                 ※ データタイプを変更すると値はデフォルト値にリセットされます
               </p>
             </div>
@@ -3339,7 +3383,11 @@ export function VariableView() {
                             }}
                           >
                             {dataTypes.map((t) => (
-                              <option key={t.id} value={t.id} title={t.description}>
+                              <option
+                                key={t.id}
+                                value={t.id}
+                                title={t.description}
+                              >
                                 {t.displayName} ({t.description})
                               </option>
                             ))}
@@ -3452,8 +3500,7 @@ export function VariableView() {
                                   const updated = [...structTypeFields];
                                   updated[index] = {
                                     ...updated[index],
-                                    stringLength:
-                                      parseInt(e.target.value) || 1,
+                                    stringLength: parseInt(e.target.value) || 1,
                                   };
                                   setStructTypeFields(updated);
                                 }}

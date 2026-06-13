@@ -81,6 +81,22 @@ function App() {
     if (e.key === "Escape") setEditingPort(false);
   };
 
+  const handleExportProject = async () => {
+    try {
+      await ExportProject();
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  const handleImportProject = async () => {
+    try {
+      await ImportProject();
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
   return (
     <div id="App">
       <header className="app-header">
@@ -130,16 +146,10 @@ function App() {
           )}
         </div>
         <nav className="tab-nav">
-          <button
-            className={`btn-secondary`}
-            onClick={() => serverPanelRef.current?.exportProject()}
-          >
+          <button className={`btn-secondary`} onClick={handleExportProject}>
             エクスポート
           </button>
-          <button
-            className={`btn-secondary`}
-            onClick={() => serverPanelRef.current?.importProject()}
-          >
+          <button className={`btn-secondary`} onClick={handleImportProject}>
             インポート
           </button>
         </nav>

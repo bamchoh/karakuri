@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef } from "react";
 import {
   GetScripts,
   GetIntervalPresets,
@@ -11,9 +11,9 @@ import {
   ClearScriptError,
   GetConsoleLogs,
   ClearConsoleLogs,
-} from '../../wailsjs/go/main/App';
-import { EventsOn } from '../../wailsjs/runtime/runtime';
-import { application } from '../../wailsjs/go/models';
+} from "../../wailsjs/go/main/App";
+import { EventsOn } from "../../wailsjs/runtime/runtime";
+import { application } from "../../wailsjs/go/models";
 
 const DEFAULT_CODE = `// PLCオブジェクトで変数にアクセスできます
 //
@@ -38,27 +38,36 @@ plc.writeVariable("Counter", count + 1);
 export function ScriptPanel() {
   const [scripts, setScripts] = useState<application.ScriptDTO[]>([]);
   const [presets, setPresets] = useState<application.IntervalPresetDTO[]>([]);
-  const [selectedScript, setSelectedScript] = useState<application.ScriptDTO | null>(null);
+  const [selectedScript, setSelectedScript] =
+    useState<application.ScriptDTO | null>(null);
   const [isEditing, setIsEditing] = useState(false);
-  const [editName, setEditName] = useState('');
-  const [editCode, setEditCode] = useState('');
+  const [editName, setEditName] = useState("");
+  const [editCode, setEditCode] = useState("");
   const [editInterval, setEditInterval] = useState(1000);
   const [testOutput, setTestOutput] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [consoleLogs, setConsoleLogs] = useState<application.ConsoleLogDTO[]>([]);
+  const [consoleLogs, setConsoleLogs] = useState<application.ConsoleLogDTO[]>(
+    [],
+  );
   const consoleRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     loadData();
-    const offScripts = EventsOn('plc:scripts-changed', (scripts: application.ScriptDTO[]) => {
-      setScripts(scripts || []);
-    });
-    const offLog = EventsOn('plc:console-log-added', (entry: application.ConsoleLogDTO) => {
-      setConsoleLogs(prev => {
-        const next = [...prev, entry];
-        return next.length > 500 ? next.slice(-500) : next;
-      });
-    });
+    const offScripts = EventsOn(
+      "plc:scripts-changed",
+      (scripts: application.ScriptDTO[]) => {
+        setScripts(scripts || []);
+      },
+    );
+    const offLog = EventsOn(
+      "plc:console-log-added",
+      (entry: application.ConsoleLogDTO) => {
+        setConsoleLogs((prev) => {
+          const next = [...prev, entry];
+          return next.length > 500 ? next.slice(-500) : next;
+        });
+      },
+    );
     return () => {
       offScripts();
       offLog();
@@ -71,6 +80,14 @@ export function ScriptPanel() {
     }
   }, [consoleLogs]);
 
+  useEffect(() => {
+    const off = EventsOn("project:imported", () => {
+      loadData();
+    });
+
+    return off;
+  }, []);
+
   const loadData = async () => {
     await Promise.all([loadScripts(), loadPresets(), loadConsoleLogs()]);
   };
@@ -80,7 +97,7 @@ export function ScriptPanel() {
       const s = await GetScripts();
       setScripts(s || []);
     } catch (e) {
-      console.error('Failed to load scripts:', e);
+      console.error("Failed to load scripts:", e);
     }
   };
 
@@ -89,7 +106,7 @@ export function ScriptPanel() {
       const p = await GetIntervalPresets();
       setPresets(p || []);
     } catch (e) {
-      console.error('Failed to load presets:', e);
+      console.error("Failed to load presets:", e);
     }
   };
 
@@ -98,7 +115,7 @@ export function ScriptPanel() {
       const logs = await GetConsoleLogs();
       setConsoleLogs(logs || []);
     } catch (e) {
-      console.error('Failed to load console logs:', e);
+      console.error("Failed to load console logs:", e);
     }
   };
 
@@ -107,14 +124,14 @@ export function ScriptPanel() {
       await ClearConsoleLogs();
       setConsoleLogs([]);
     } catch (e) {
-      console.error('Failed to clear console logs:', e);
+      console.error("Failed to clear console logs:", e);
     }
   };
 
   const handleNew = () => {
     setSelectedScript(null);
     setIsEditing(true);
-    setEditName('新しいスクリプト');
+    setEditName("新しいスクリプト");
     setEditCode(DEFAULT_CODE);
     setEditInterval(1000);
     setError(null);
@@ -148,7 +165,7 @@ export function ScriptPanel() {
   };
 
   const handleDelete = async (id: string) => {
-    if (confirm('このスクリプトを削除しますか？')) {
+    if (confirm("このスクリプトを削除しますか？")) {
       try {
         await DeleteScript(id);
         await loadScripts();
@@ -176,7 +193,7 @@ export function ScriptPanel() {
       await ClearScriptError(id);
       await loadScripts();
     } catch (e) {
-      console.error('Failed to clear script error:', e);
+      console.error("Failed to clear script error:", e);
     }
   };
 
@@ -184,7 +201,9 @@ export function ScriptPanel() {
     try {
       setError(null);
       const result = await RunScriptOnce(editCode);
-      setTestOutput(result !== undefined ? JSON.stringify(result, null, 2) : '(no output)');
+      setTestOutput(
+        result !== undefined ? JSON.stringify(result, null, 2) : "(no output)",
+      );
     } catch (e) {
       setError(String(e));
       setTestOutput(null);
@@ -201,7 +220,7 @@ export function ScriptPanel() {
   if (isEditing) {
     return (
       <div className="panel">
-        <h2>{selectedScript ? 'スクリプト編集' : '新しいスクリプト'}</h2>
+        <h2>{selectedScript ? "スクリプト編集" : "新しいスクリプト"}</h2>
 
         {error && <div className="error-message">{error}</div>}
 
@@ -220,8 +239,10 @@ export function ScriptPanel() {
             value={editInterval}
             onChange={(e) => setEditInterval(parseInt(e.target.value))}
           >
-            {presets.map(p => (
-              <option key={p.ms} value={p.ms}>{p.label}</option>
+            {presets.map((p) => (
+              <option key={p.ms} value={p.ms}>
+                {p.label}
+              </option>
             ))}
           </select>
         </div>
@@ -274,35 +295,49 @@ export function ScriptPanel() {
         {scripts.length === 0 ? (
           <p className="empty-message">スクリプトがありません</p>
         ) : (
-          scripts.map(script => (
-            <div key={script.id} className={`script-item ${script.isRunning ? 'running' : ''}`}>
+          scripts.map((script) => (
+            <div
+              key={script.id}
+              className={`script-item ${script.isRunning ? "running" : ""}`}
+            >
               <div className="script-info">
                 <span className="script-name">{script.name}</span>
                 <span className="script-interval">
-                  {presets.find(p => p.ms === script.intervalMs)?.label || `${script.intervalMs}ms`}
+                  {presets.find((p) => p.ms === script.intervalMs)?.label ||
+                    `${script.intervalMs}ms`}
                 </span>
-                <span className={`script-status ${script.isRunning ? 'running' : 'stopped'}`}>
-                  {script.isRunning ? '実行中' : '停止'}
+                <span
+                  className={`script-status ${script.isRunning ? "running" : "stopped"}`}
+                >
+                  {script.isRunning ? "実行中" : "停止"}
                 </span>
               </div>
               {script.lastError && (
-                <div style={{
-                  background: 'rgba(255, 60, 60, 0.15)',
-                  border: '1px solid rgba(255, 60, 60, 0.4)',
-                  borderRadius: '4px',
-                  padding: '4px 8px',
-                  margin: '4px 0',
-                  fontSize: '0.82em',
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'flex-start',
-                  gap: '8px',
-                }}>
-                  <div style={{ color: '#ff6b6b', flex: 1 }}>
-                    <span style={{ fontWeight: 'bold' }}>Error: </span>
+                <div
+                  style={{
+                    background: "rgba(255, 60, 60, 0.15)",
+                    border: "1px solid rgba(255, 60, 60, 0.4)",
+                    borderRadius: "4px",
+                    padding: "4px 8px",
+                    margin: "4px 0",
+                    fontSize: "0.82em",
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "flex-start",
+                    gap: "8px",
+                  }}
+                >
+                  <div style={{ color: "#ff6b6b", flex: 1 }}>
+                    <span style={{ fontWeight: "bold" }}>Error: </span>
                     <span>{script.lastError}</span>
                     {script.errorAt > 0 && (
-                      <span style={{ color: '#999', marginLeft: '8px', fontSize: '0.9em' }}>
+                      <span
+                        style={{
+                          color: "#999",
+                          marginLeft: "8px",
+                          fontSize: "0.9em",
+                        }}
+                      >
                         ({new Date(script.errorAt).toLocaleTimeString()})
                       </span>
                     )}
@@ -310,12 +345,12 @@ export function ScriptPanel() {
                   <button
                     onClick={() => handleClearError(script.id)}
                     style={{
-                      background: 'none',
-                      border: 'none',
-                      color: '#999',
-                      cursor: 'pointer',
-                      padding: '0 2px',
-                      fontSize: '1em',
+                      background: "none",
+                      border: "none",
+                      color: "#999",
+                      cursor: "pointer",
+                      padding: "0 2px",
+                      fontSize: "1em",
                       lineHeight: 1,
                     }}
                     title="エラーをクリア"
@@ -327,11 +362,14 @@ export function ScriptPanel() {
               <div className="script-actions">
                 <button
                   onClick={() => handleToggle(script)}
-                  className={script.isRunning ? 'btn-danger' : 'btn-success'}
+                  className={script.isRunning ? "btn-danger" : "btn-success"}
                 >
-                  {script.isRunning ? '停止' : '開始'}
+                  {script.isRunning ? "停止" : "開始"}
                 </button>
-                <button onClick={() => handleEdit(script)} className="btn-secondary">
+                <button
+                  onClick={() => handleEdit(script)}
+                  className="btn-secondary"
+                >
                   編集
                 </button>
                 <button

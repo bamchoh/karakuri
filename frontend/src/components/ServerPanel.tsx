@@ -13,8 +13,6 @@ import {
   RemoveServer,
   StartServer,
   StopServer,
-  ExportProject,
-  ImportProject,
   GetSerialPorts,
   GetAvailableProtocols,
   GetProtocolSchema,
@@ -396,8 +394,6 @@ const ServerConfigPane = forwardRef<
 export interface ServerPanelHandle {
   save: () => Promise<void>;
   revert: () => Promise<void>;
-  exportProject: () => Promise<void>;
-  importProject: () => Promise<void>;
 }
 interface ServerPanelProps {
   onDirtyChange?: (dirty: boolean) => void;
@@ -430,13 +426,6 @@ export const ServerPanel = forwardRef<ServerPanelHandle, ServerPanelProps>(
       },
       revert: async () => {
         await configPaneRef.current?.revert();
-      },
-      exportProject: async () => {
-        await ExportProject();
-      },
-      importProject: async () => {
-        await ImportProject();
-        await loadInitialData();
       },
     }));
 
@@ -577,25 +566,6 @@ export const ServerPanel = forwardRef<ServerPanelHandle, ServerPanelProps>(
         const list = (await GetServerInstances()) || [];
         setServerInstances(list);
         setSelectedProtocolType(list.length > 0 ? list[0].protocolType : null);
-      } catch (e) {
-        setError(String(e));
-      }
-    };
-
-    const handleExport = async () => {
-      try {
-        setError(null);
-        await ExportProject();
-      } catch (e) {
-        setError(String(e));
-      }
-    };
-
-    const handleImport = async () => {
-      try {
-        setError(null);
-        await ImportProject();
-        await loadInitialData();
       } catch (e) {
         setError(String(e));
       }

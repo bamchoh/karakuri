@@ -412,7 +412,13 @@ func (a *App) ImportProject() error {
 	}
 
 	// プロジェクトをインポート
-	return a.plcService.ImportProject(&data)
+	if err := a.plcService.ImportProject(&data); err != nil {
+		return err
+	}
+
+	runtime.EventsEmit(a.ctx, "project:imported") // インポート完了イベントをフロントエンドに通知
+
+	return nil
 }
 
 // === モニタリング管理 ===
@@ -533,4 +539,3 @@ func (a *App) GetStructTypes() []application.StructTypeDTO {
 func (a *App) DeleteStructType(name string) error {
 	return a.plcService.DeleteStructType(name)
 }
-
