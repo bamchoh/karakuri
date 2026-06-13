@@ -167,7 +167,7 @@ function App() {
         </nav>
       </header>
 
-      <div style={{ display: "flex" }}>
+      <div className="main-layout">
         <Sidebar selected={activeTab} onSelect={(tab) => handleTabClick(tab)} />
         <main className="app-main">
           {activeTab === "server" && (

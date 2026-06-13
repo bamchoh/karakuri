@@ -183,18 +183,22 @@
   color: #071510;
 }
 
+.main-layout {
+  flex: 1;
+  display: flex;
+  overflow: hidden;
+}
+
 /* Main Content */
 .app-main {
   flex: 1;
   overflow: auto;
-  padding: 1rem;
 }
 
 /* Panel */
 .panel {
   background: var(--bg-elevated);
   border-radius: 8px;
-  padding: 1.5rem;
   height: 100%;
   overflow: auto;
 }
@@ -1129,7 +1133,6 @@ button:disabled {
   justify-content: space-between;
   margin-bottom: 0.75rem;
   padding-bottom: 0.5rem;
-  border-bottom: 1px solid #1a3d22;
   flex-shrink: 0;
 }
 
@@ -1158,28 +1161,33 @@ button:disabled {
 }
 
 .server-tab-list {
-  width: 200px;
+  width: 260px;
   flex-shrink: 0;
   background: var(--bg-elevated);
   border-right: 1px solid var(--border);
   overflow-y: auto;
+  background: var(--sidebar-bg);
+  padding: 0.5rem;
 }
 
 .server-tab-item {
+  height: 50px;
   display: flex;
   flex-direction: row;
-  align-items: stretch;
+  align-items: center;
+  justify-content: space-between;
   gap: 0.5rem;
-  padding: 0.6rem 0.75rem;
   cursor: pointer;
-  border-bottom: 1px solid #071510;
   transition: background 0.15s;
+  padding: 0.5rem;
 }
 
 .server-tab-left {
   display: flex;
-  flex-direction: column;
-  gap: 0.3rem;
+  flex-direction: row;
+  align-items: center;
+  gap: 0.5rem;
+
   flex: 1;
   min-width: 0;
 }
@@ -1192,18 +1200,26 @@ button:disabled {
 }
 
 .server-tab-item:hover {
-  background: #0d2818;
+  background: rgba(34, 197, 94, 0.08);
 }
 
 .server-tab-item.selected {
-  background: #0d2818;
-  border-left: 2px solid #22c55e;
-  padding-left: calc(0.75rem - 2px);
+  background: rgba(34, 197, 94, 0.08);
+  border-radius: 5px;
+}
+
+.server-tab-item.selected::before {
+  content: "";
+  position: absolute;
+  inset: 0 auto 0 0;
+
+  width: 3px;
+  background: #22c55e;
 }
 
 .server-tab-name {
   font-size: 0.875rem;
-  font-weight: 600;
+  font-weight: 400;
   color: #eaeaea;
   white-space: nowrap;
   overflow: hidden;
@@ -1502,7 +1518,6 @@ button:disabled {
 
 .sidebar {
   width: 48px;
-  height: 100vh;
 
   display: flex;
   flex-direction: column;
@@ -1557,4 +1572,34 @@ button:disabled {
 
 .toolbar-icon-button:active {
   transform: translateY(1px);
+}
+
+.server-status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.server-status-dot.running {
+  background: #22c55e;
+}
+
+.server-status-dot.stopped {
+  background: #64748b;
+}
+
+.server-status-dot.error {
+  background: #ef4444;
+}
+
+.server-actions {
+  opacity: 0;
+  flex-direction: row;
+  align-items: center;
+  transition: opacity 0.15s;
+}
+
+.server-tab-item:hover .server-actions {
+  opacity: 1;
 }

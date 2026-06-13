@@ -23,6 +23,7 @@ import {
 } from "../../wailsjs/go/main/App";
 import { EventsOn } from "../../wailsjs/runtime/runtime";
 import { application } from "../../wailsjs/go/models";
+import { SpaceIcon, Square, Play } from "lucide-react";
 
 // 動的フィールドコンポーネント
 interface DynamicFieldProps {
@@ -631,61 +632,58 @@ export const ServerPanel = forwardRef<ServerPanelHandle, ServerPanelProps>(
         className="panel"
         style={{ display: "flex", flexDirection: "column", height: "100%" }}
       >
-        <div className="server-panel-header">
-          <h2>サーバー</h2>
-          <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
-            <button
-              onClick={handleOpenAddDialog}
-              disabled={availableProtocols.length === 0}
-              className="btn-primary"
-            >
-              + サーバーを追加
-            </button>
-          </div>
-        </div>
-
         {error && <div className="error-message">{error}</div>}
 
-        {serverInstances.length === 0 ? (
-          <div className="server-instance-empty">
-            サーバーが登録されていません。「+
-            サーバーを追加」ボタンでサーバーを追加してください。
-          </div>
-        ) : (
-          <div className="server-vertical-tabs">
-            {/* 左ペイン: タブリスト */}
-            <div className="server-tab-list">
-              {serverInstances.map((instance) => {
-                const isSelected =
-                  instance.protocolType === selectedProtocolType;
-                const statusClass =
-                  instance.status === "Running"
-                    ? "running"
-                    : instance.status === "Error"
-                      ? "error"
-                      : "stopped";
-                const isRunning = instance.status === "Running";
-                return (
-                  <div
-                    key={instance.protocolType}
-                    className={`server-tab-item${isSelected ? " selected" : ""}`}
-                    onClick={() => handleSelectTab(instance.protocolType)}
-                  >
-                    <div className="server-tab-left">
-                      <span className="server-tab-name">
-                        {instance.displayName}
+        <div className="server-vertical-tabs">
+          {/* 左ペイン: タブリスト */}
+          <div className="server-tab-list">
+            <div className="server-panel-header">
+              <span>SERVERS</span>
+              <div
+                style={{ display: "flex", gap: "8px", alignItems: "center" }}
+              >
+                <button
+                  onClick={handleOpenAddDialog}
+                  disabled={availableProtocols.length === 0}
+                  className="btn-outline"
+                >
+                  +
+                </button>
+              </div>
+            </div>
+
+            {serverInstances.map((instance) => {
+              const isSelected = instance.protocolType === selectedProtocolType;
+              const statusClass =
+                instance.status === "Running"
+                  ? "running"
+                  : instance.status === "Error"
+                    ? "error"
+                    : "stopped";
+              const isRunning = instance.status === "Running";
+              return (
+                <div
+                  key={instance.protocolType}
+                  className={`server-tab-item${isSelected ? " selected" : ""}`}
+                  onClick={() => handleSelectTab(instance.protocolType)}
+                >
+                  <div className="server-tab-left">
+                    <div
+                      className={`server-status-dot ${statusClass}`}
+                      title={instance.status}
+                    />
+                    <span className="server-tab-name">
+                      {instance.displayName}
+                    </span>
+                    {instance.variant && (
+                      <span className="server-instance-variant">
+                        {instance.variant}
                       </span>
-                      {instance.variant && (
-                        <span className="server-instance-variant">
-                          {instance.variant}
-                        </span>
-                      )}
-                      <span className={`server-status-badge ${statusClass}`}>
-                        {instance.status}
-                      </span>
-                    </div>
+                    )}
+                  </div>
+                  <div className="server-actions">
                     <button
-                      className={`server-tab-toggle ${isRunning ? "btn-danger" : "btn-primary"}`}
+                      title={isRunning ? "停止" : "開始"}
                       onClick={(e) => {
                         e.stopPropagation();
                         isRunning
@@ -693,14 +691,21 @@ export const ServerPanel = forwardRef<ServerPanelHandle, ServerPanelProps>(
                           : handleStart(instance.protocolType);
                       }}
                     >
-                      {isRunning ? "停止" : "開始"}
+                      {isRunning ? <Square size={14} /> : <Play size={14} />}
                     </button>
                   </div>
-                );
-              })}
-            </div>
+                </div>
+              );
+            })}
+          </div>
 
-            {/* 右ペイン: 設定 */}
+          {/* 右ペイン: 設定 */}
+          {serverInstances.length === 0 ? (
+            <div className="server-instance-empty">
+              サーバーが登録されていません。「+
+              サーバーを追加」ボタンでサーバーを追加してください。
+            </div>
+          ) : (
             <div className="server-tab-content">
               {selectedInstance ? (
                 <ServerConfigPane
@@ -718,8 +723,8 @@ export const ServerPanel = forwardRef<ServerPanelHandle, ServerPanelProps>(
                 </div>
               )}
             </div>
-          </div>
-        )}
+          )}
+        </div>
 
         {/* 未保存設定の確認ダイアログ */}
         {pendingAction && (
