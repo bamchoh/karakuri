@@ -670,11 +670,21 @@ button:disabled {
   cursor: help;
 }
 
+.console-separator {
+  height: 3px;
+  background: var(--border);
+  margin: 0;
+  border: none;
+}
+
 .console-section {
-  margin-top: 1rem;
   border: 1px solid var(--border);
   border-radius: 4px;
   overflow: hidden;
+
+  background: var(--bg-elevated);
+  position: sticky;
+  bottom: 0;
 }
 
 .console-header {
@@ -1211,15 +1221,6 @@ button:disabled {
   border-radius: 5px;
 }
 
-.server-tab-item.selected::before {
-  content: "";
-  position: absolute;
-  inset: 0 auto 0 0;
-
-  width: 3px;
-  background: #22c55e;
-}
-
 .server-tab-name {
   font-size: 0.875rem;
   font-weight: 400;
@@ -1564,7 +1565,7 @@ button:disabled {
 
 .sidebar-item.active {
   color: white;
-  border-left: 2px solid #007acc;
+  border-left: 5px solid #007acc;
 }
 
 .toolbar-icon-button {

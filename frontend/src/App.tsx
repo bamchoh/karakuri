@@ -183,11 +183,7 @@ function App() {
               onSubTabChange={setRegisterSubTab}
             />
           )}
-          <div
-            style={{ display: activeTab === "scripts" ? undefined : "none" }}
-          >
-            <ScriptPanel />
-          </div>
+          {activeTab === "scripts" && <ScriptPanel />}
         </main>{" "}
         {pendingTab && (
           <FocusTrap onConfirm={handleConfirmSaveAndNavigate}>
