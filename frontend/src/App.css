@@ -1143,11 +1143,14 @@ button:disabled {
 }
 
 .server-instance-empty {
-  padding: 2rem;
+  margin: 1rem;
+  padding: 1rem;
   text-align: center;
   color: #9ca3af;
-  background: #1a3d22;
+  background: var(--bg-panel);
   border-radius: 4px;
+  border: 1px solid var(--border);
+  height: 60px;
 }
 
 /* 縦タブレイアウト */
@@ -1179,7 +1182,7 @@ button:disabled {
   gap: 0.5rem;
   cursor: pointer;
   transition: background 0.15s;
-  padding: 0.5rem;
+  padding-left: 0.5rem;
 }
 
 .server-tab-left {
@@ -1271,6 +1274,20 @@ button:disabled {
 .server-config-pane-actions {
   display: flex;
   gap: 0.5rem;
+}
+
+.server-config-pane-footer {
+  margin-top: auto;
+
+  display: flex;
+  justify-content: flex-end;
+
+  padding: 0.6rem 1rem;
+
+  background: var(--bg-elevated);
+  border-top: 1px solid var(--border);
+  position: sticky;
+  bottom: 0;
 }
 
 .server-instance-variant {
@@ -1602,4 +1619,24 @@ button:disabled {
 
 .server-tab-item:hover .server-actions {
   opacity: 1;
+}
+
+.server-run-icon-button {
+  background: none;
+  border: none;
+  color: #9ca3af;
+
+  width: 48px;
+  height: 48px;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  border-radius: 6px;
+}
+
+.server-run-icon-button:hover {
+  background: rgba(34, 197, 94, 0.1);
+  color: #22c55e;
 }

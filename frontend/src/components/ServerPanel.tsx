@@ -23,7 +23,7 @@ import {
 } from "../../wailsjs/go/main/App";
 import { EventsOn } from "../../wailsjs/runtime/runtime";
 import { application } from "../../wailsjs/go/models";
-import { SpaceIcon, Square, Play } from "lucide-react";
+import { SpaceIcon, Square, Play, Trash2, SquarePlus } from "lucide-react";
 
 // 動的フィールドコンポーネント
 interface DynamicFieldProps {
@@ -177,6 +177,13 @@ const ServerConfigPane = forwardRef<
 
   const isRunning = instance.status === "Running";
 
+  const statusClass =
+    instance.status === "Running"
+      ? "running"
+      : instance.status === "Error"
+        ? "error"
+        : "stopped";
+
   const loadSettings = useCallback(async () => {
     try {
       setPaneError(null);
@@ -289,21 +296,17 @@ const ServerConfigPane = forwardRef<
           <span className="server-config-pane-name">
             {instance.displayName}
           </span>
+          <span className={`server-status-badge ${statusClass}`}>
+            {instance.status}
+          </span>
+        </div>
+        <div className="server-config-pane-actions">
           <button
             onClick={() => onRemove(instance.protocolType)}
             className="btn-danger"
             disabled={isRunning}
           >
-            削除
-          </button>
-        </div>
-        <div className="server-config-pane-actions">
-          <button
-            onClick={handleSaveConfig}
-            disabled={isRunning}
-            className={isDirty ? "btn-primary" : "btn-secondary"}
-          >
-            {isDirty ? "保存 *" : "保存"}
+            <Trash2 size={16} />
           </button>
         </div>
       </div>
@@ -366,28 +369,40 @@ const ServerConfigPane = forwardRef<
             </div>
           ));
         })()}
+
+        {schema?.capabilities.supportsUnitId && unitIDSettings && (
+          <div className="unit-id-section">
+            <h4>UnitID 応答設定</h4>
+            <p className="help-text">
+              オフにしたUnitIDには応答しません（デフォルト: 全て応答）
+            </p>
+            <div className="unit-id-grid">
+              {unitIdRange.map((unitId) => (
+                <label key={unitId} className="unit-id-toggle">
+                  <input
+                    type="checkbox"
+                    checked={!disabledUnitIds.has(unitId)}
+                    onChange={(e) =>
+                      handleUnitIdToggle(unitId, e.target.checked)
+                    }
+                  />
+                  <span className="unit-id-label">{unitId}</span>
+                </label>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
 
-      {schema?.capabilities.supportsUnitId && unitIDSettings && (
-        <div className="unit-id-section">
-          <h4>UnitID 応答設定</h4>
-          <p className="help-text">
-            オフにしたUnitIDには応答しません（デフォルト: 全て応答）
-          </p>
-          <div className="unit-id-grid">
-            {unitIdRange.map((unitId) => (
-              <label key={unitId} className="unit-id-toggle">
-                <input
-                  type="checkbox"
-                  checked={!disabledUnitIds.has(unitId)}
-                  onChange={(e) => handleUnitIdToggle(unitId, e.target.checked)}
-                />
-                <span className="unit-id-label">{unitId}</span>
-              </label>
-            ))}
-          </div>
-        </div>
-      )}
+      <div className="server-config-pane-footer">
+        <button
+          onClick={handleSaveConfig}
+          disabled={isRunning}
+          className={isDirty ? "btn-primary" : "btn-secondary"}
+        >
+          {isDirty ? "保存 *" : "保存"}
+        </button>
+      </div>
     </div>
   );
 });
@@ -645,9 +660,9 @@ export const ServerPanel = forwardRef<ServerPanelHandle, ServerPanelProps>(
                 <button
                   onClick={handleOpenAddDialog}
                   disabled={availableProtocols.length === 0}
-                  className="btn-outline"
+                  className="toolbar-icon-button"
                 >
-                  +
+                  <SquarePlus size={14} />
                 </button>
               </div>
             </div>
@@ -690,6 +705,7 @@ export const ServerPanel = forwardRef<ServerPanelHandle, ServerPanelProps>(
                           ? handleStop(instance.protocolType)
                           : handleStart(instance.protocolType);
                       }}
+                      className="server-run-icon-button"
                     >
                       {isRunning ? <Square size={14} /> : <Play size={14} />}
                     </button>
@@ -702,8 +718,9 @@ export const ServerPanel = forwardRef<ServerPanelHandle, ServerPanelProps>(
           {/* 右ペイン: 設定 */}
           {serverInstances.length === 0 ? (
             <div className="server-instance-empty">
-              サーバーが登録されていません。「+
-              サーバーを追加」ボタンでサーバーを追加してください。
+              サーバーが登録されていません。
+              <SquarePlus size={14} style={{ marginRight: "0.5rem" }} />
+              ボタンでサーバーを追加してください。
             </div>
           ) : (
             <div className="server-tab-content">
