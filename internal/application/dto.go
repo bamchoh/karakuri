@@ -116,6 +116,7 @@ type ScriptDTO struct {
 	IsRunning  bool   `json:"isRunning"`
 	LastError  string `json:"lastError"`
 	ErrorAt    int64  `json:"errorAt"`
+	Order      int    `json:"order"`
 }
 
 // IntervalPresetDTO は周期プリセットのDTO
@@ -128,10 +129,10 @@ type IntervalPresetDTO struct {
 
 // ServerInstanceDTO はサーバーインスタンス一覧表示用
 type ServerInstanceDTO struct {
-	ProtocolType          string `json:"protocolType"`
-	DisplayName           string `json:"displayName"`
-	Variant               string `json:"variant"`
-	Status                string `json:"status"` // "Running" | "Stopped" | "Error"
+	ProtocolType           string `json:"protocolType"`
+	DisplayName            string `json:"displayName"`
+	Variant                string `json:"variant"`
+	Status                 string `json:"status"` // "Running" | "Stopped" | "Error"
 	SupportsNodePublishing bool   `json:"supportsNodePublishing"`
 }
 

@@ -47,8 +47,8 @@ type PLCService struct {
 	vsAccessor protocol.VariableStoreAccessor
 
 	// 複数サーバーインスタンス（protocolType → instance）
-	servers      map[protocol.ProtocolType]*serverInstance
-	serverSeq    int // AddServer 呼び出しごとに増加する登録順カウンター
+	servers   map[protocol.ProtocolType]*serverInstance
+	serverSeq int // AddServer 呼び出しごとに増加する登録順カウンター
 
 	// ホスト側 gRPC サーバー（OPC UA 等のプラグインから変数アクセスに使用）
 	hostGrpcServer *plugininfra.HostGrpcServer
@@ -59,6 +59,7 @@ type PLCService struct {
 	// スクリプト
 	scriptEngine *scripting.ScriptEngine
 	scripts      map[string]*script.Script
+	nextOrder    int // スクリプトの表示順を管理するカウンター
 
 	// モニタリング
 	monitoringItems map[string]*MonitoringItemDTO
@@ -161,10 +162,10 @@ func (s *PLCService) GetServerInstances() []ServerInstanceDTO {
 		}
 		caps := inst.factory.GetProtocolCapabilities()
 		result = append(result, ServerInstanceDTO{
-			ProtocolType:          string(inst.protocolType),
-			DisplayName:           inst.factory.DisplayName(),
-			Variant:               inst.variant,
-			Status:                status,
+			ProtocolType:           string(inst.protocolType),
+			DisplayName:            inst.factory.DisplayName(),
+			Variant:                inst.variant,
+			Status:                 status,
 			SupportsNodePublishing: caps.SupportsNodePublishing,
 		})
 	}
@@ -829,8 +830,9 @@ func (s *PLCService) CreateScript(name, code string, intervalMs int) (*ScriptDTO
 	defer s.mu.Unlock()
 
 	id := uuid.New().String()
-	sc := script.NewScript(id, name, code, time.Duration(intervalMs)*time.Millisecond)
+	sc := script.NewScript(id, name, code, time.Duration(intervalMs)*time.Millisecond, s.nextOrder)
 	s.scripts[id] = sc
+	s.nextOrder++
 
 	go s.emitScriptsChanged()
 
@@ -901,6 +903,11 @@ func (s *PLCService) GetScripts() []*ScriptDTO {
 		}
 		result = append(result, scriptToDTO(sc, isRunning, lastError, errorAtMs))
 	}
+
+	sort.Slice(result, func(i, j int) bool {
+		return result[i].Order < result[j].Order
+	})
+
 	return result
 }
 
@@ -1155,6 +1162,7 @@ func scriptToDTO(sc *script.Script, isRunning bool, lastError string, errorAtMs 
 		IsRunning:  isRunning,
 		LastError:  lastError,
 		ErrorAt:    errorAtMs,
+		Order:      sc.Order,
 	}
 }
 
@@ -1392,6 +1400,7 @@ func (s *PLCService) ImportProject(data *ProjectDataDTO) error {
 
 	// スクリプトを設定
 	if data.Scripts != nil {
+		s.nextOrder = 0
 		s.scripts = make(map[string]*script.Script)
 		for _, dto := range data.Scripts {
 			sc := script.NewScript(
@@ -1399,8 +1408,10 @@ func (s *PLCService) ImportProject(data *ProjectDataDTO) error {
 				dto.Name,
 				dto.Code,
 				time.Duration(dto.IntervalMs)*time.Millisecond,
+				s.nextOrder,
 			)
 			s.scripts[dto.ID] = sc
+			s.nextOrder++
 		}
 	}
 
@@ -2087,4 +2098,3 @@ func dataTypeDescription(dt variable.DataType) string {
 		return ""
 	}
 }
-

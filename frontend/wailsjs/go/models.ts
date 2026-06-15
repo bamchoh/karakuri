@@ -437,6 +437,7 @@ export namespace application {
 	    isRunning: boolean;
 	    lastError: string;
 	    errorAt: number;
+	    order: number;
 	
 	    static createFrom(source: any = {}) {
 	        return new ScriptDTO(source);
@@ -451,6 +452,7 @@ export namespace application {
 	        this.isRunning = source["isRunning"];
 	        this.lastError = source["lastError"];
 	        this.errorAt = source["errorAt"];
+	        this.order = source["order"];
 	    }
 	}
 	export class ServerConfigDTO {

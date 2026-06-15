@@ -11,16 +11,18 @@ type Script struct {
 	Code     string
 	Interval time.Duration
 	Enabled  bool
+	Order    int
 }
 
 // NewScript は新しいスクリプトを作成する
-func NewScript(id, name, code string, interval time.Duration) *Script {
+func NewScript(id, name, code string, interval time.Duration, order int) *Script {
 	return &Script{
 		ID:       id,
 		Name:     name,
 		Code:     code,
 		Interval: interval,
 		Enabled:  false,
+		Order:    order,
 	}
 }
 

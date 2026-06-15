@@ -37,10 +37,30 @@ const count = plc.readVariable("Counter");
 plc.writeVariable("Counter", count + 1);
 `;
 
+function generateNewScriptName(scripts: application.ScriptDTO[]) {
+  const baseName = "新しいスクリプト";
+
+  const exists = scripts.some((s) => s.name === baseName);
+
+  if (!exists) {
+    return baseName;
+  }
+
+  let index = 1;
+
+  while (scripts.some((s) => s.name === `${baseName}${index}`)) {
+    index++;
+  }
+
+  return `${baseName}${index}`;
+}
+
 const ScriptEditPanel = ({
   selectedScript,
+  onDelete,
 }: {
   selectedScript: application.ScriptDTO | null;
+  onDelete: (id: string) => void;
 }) => {
   const [editName, setEditName] = useState(selectedScript?.name ?? "");
   const [editInterval, setEditInterval] = useState(1000);
@@ -54,13 +74,9 @@ const ScriptEditPanel = ({
     loadData();
   }, []);
 
-  const handleSave = async () => {
+  const handleSave = async (selectedScriptId: string) => {
     try {
-      if (selectedScript) {
-        await UpdateScript(selectedScript.id, editName, editCode, editInterval);
-      } else {
-        await CreateScript(editName, editCode, editInterval);
-      }
+      await UpdateScript(selectedScriptId, editName, editCode, editInterval);
     } catch (e) {}
   };
 
@@ -109,34 +125,37 @@ const ScriptEditPanel = ({
   };
 
   return (
-    <div className="panel">
+    <div className="script-panel">
       {/* error && <div className="error-message">{error}</div> */}
 
-      <div className="form-group">
-        <label>名前</label>
-        <input
-          type="text"
-          value={editName}
-          onChange={(e) => setEditName(e.target.value)}
-        />
+      <div className="editor-card">
+        <div className="editor-header-row">
+          <div className="form-group">
+            <label>名前</label>
+            <input
+              type="text"
+              value={editName}
+              onChange={(e) => setEditName(e.target.value)}
+            />
+          </div>
+
+          <div className="form-group">
+            <label>実行周期</label>
+            <select
+              value={editInterval}
+              onChange={(e) => setEditInterval(parseInt(e.target.value))}
+            >
+              {presets.map((p) => (
+                <option key={p.ms} value={p.ms}>
+                  {p.label}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
       </div>
 
-      <div className="form-group">
-        <label>実行周期</label>
-        <select
-          value={editInterval}
-          onChange={(e) => setEditInterval(parseInt(e.target.value))}
-        >
-          {presets.map((p) => (
-            <option key={p.ms} value={p.ms}>
-              {p.label}
-            </option>
-          ))}
-        </select>
-      </div>
-
-      <div className="form-group">
-        <label>コード</label>
+      <div className="editor-body">
         <textarea
           value={editCode}
           onChange={(e) => setEditCode(e.target.value)}
@@ -152,18 +171,15 @@ const ScriptEditPanel = ({
         </div>
       )}
 
-      <div className="button-group">
-        <button onClick={handleTest} className="btn-secondary">
-          テスト実行
-        </button>
-        <button onClick={handleSave} className="btn-primary">
+      <div className="editor-footer">
+        <button
+          onClick={() => handleSave(selectedScript?.id ?? "")}
+          className="btn-primary"
+        >
           保存
         </button>
-        <button onClick={handleCancel} className="btn-secondary">
-          キャンセル
-        </button>
         <button
-          onClick={() => handleDelete(selectedScript?.id ?? "")}
+          onClick={() => onDelete(selectedScript?.id ?? "")}
           className="btn-danger"
           disabled={selectedScript?.isRunning}
         >
@@ -179,7 +195,6 @@ export function ScriptPanel() {
   const [presets, setPresets] = useState<application.IntervalPresetDTO[]>([]);
   const [selectedScript, setSelectedScript] =
     useState<application.ScriptDTO | null>(null);
-  const [isEditing, setIsEditing] = useState(false);
   const [editName, setEditName] = useState("");
   const [editCode, setEditCode] = useState("");
   const [editInterval, setEditInterval] = useState(1000);
@@ -227,6 +242,12 @@ export function ScriptPanel() {
     return off;
   }, []);
 
+  useEffect(() => {
+    if (selectedScript && !scripts.some((s) => s.id === selectedScript.id)) {
+      setSelectedScript(scripts[0] ?? null);
+    }
+  }, [scripts, selectedScript]);
+
   const loadData = async () => {
     await Promise.all([loadScripts(), loadPresets(), loadConsoleLogs()]);
   };
@@ -267,35 +288,27 @@ export function ScriptPanel() {
     }
   };
 
-  const handleNew = () => {
-    setSelectedScript(null);
-    setIsEditing(true);
-    setEditName("新しいスクリプト");
-    setEditCode(DEFAULT_CODE);
-    setEditInterval(1000);
+  const handleNew = async () => {
+    const name = generateNewScriptName(scripts);
+    const code = DEFAULT_CODE;
+    const interval = 1000;
+
+    await CreateScript(name, code, interval);
+
     setError(null);
     setTestOutput(null);
+
+    await loadScripts();
   };
 
-  const handleEdit = (script: application.ScriptDTO) => {
-    setSelectedScript(script);
-    setIsEditing(true);
-    setEditName(script.name);
-    setEditCode(script.code);
-    setEditInterval(script.intervalMs);
-    setError(null);
-    setTestOutput(null);
-  };
-
-  const handleSave = async () => {
+  const handleSave = async (name: string, code: string, interval: number) => {
     try {
       setError(null);
       if (selectedScript) {
-        await UpdateScript(selectedScript.id, editName, editCode, editInterval);
+        await UpdateScript(selectedScript.id, name, code, interval);
       } else {
-        await CreateScript(editName, editCode, editInterval);
+        await CreateScript(name, code, interval);
       }
-      setIsEditing(false);
       setSelectedScript(null);
       await loadScripts();
     } catch (e) {
@@ -307,6 +320,15 @@ export function ScriptPanel() {
     if (confirm("このスクリプトを削除しますか？")) {
       try {
         await DeleteScript(id);
+
+        const index = scripts.findIndex((s) => s.id === id);
+
+        const newScripts = scripts.filter((s) => s.id !== id);
+
+        if (selectedScript?.id === id) {
+          setSelectedScript(newScripts[index] ?? newScripts[index - 1] ?? null);
+        }
+
         await loadScripts();
       } catch (e) {
         setError(String(e));
@@ -336,93 +358,12 @@ export function ScriptPanel() {
     }
   };
 
-  const handleTest = async () => {
-    try {
-      setError(null);
-      const result = await RunScriptOnce(editCode);
-      setTestOutput(
-        result !== undefined ? JSON.stringify(result, null, 2) : "(no output)",
-      );
-    } catch (e) {
-      setError(String(e));
-      setTestOutput(null);
-    }
-  };
-
-  const handleCancel = () => {
-    setIsEditing(false);
-    setSelectedScript(null);
-    setError(null);
-    setTestOutput(null);
-  };
-
   const handleSelectTab = (scriptId: string) => {
+    console.log("Selecting script tab:", scriptId);
     if (scriptId === selectedScript?.id) return;
     const foundScript = scripts.find((s) => s.id === scriptId);
     setSelectedScript(foundScript ?? null); // undefined なら null にする
   };
-
-  if (isEditing) {
-    return (
-      <div className="panel">
-        <h2>{selectedScript ? "スクリプト編集" : "新しいスクリプト"}</h2>
-
-        {error && <div className="error-message">{error}</div>}
-
-        <div className="form-group">
-          <label>名前</label>
-          <input
-            type="text"
-            value={editName}
-            onChange={(e) => setEditName(e.target.value)}
-          />
-        </div>
-
-        <div className="form-group">
-          <label>実行周期</label>
-          <select
-            value={editInterval}
-            onChange={(e) => setEditInterval(parseInt(e.target.value))}
-          >
-            {presets.map((p) => (
-              <option key={p.ms} value={p.ms}>
-                {p.label}
-              </option>
-            ))}
-          </select>
-        </div>
-
-        <div className="form-group">
-          <label>コード</label>
-          <textarea
-            value={editCode}
-            onChange={(e) => setEditCode(e.target.value)}
-            className="code-editor"
-            spellCheck={false}
-          />
-        </div>
-
-        {testOutput && (
-          <div className="test-output">
-            <label>テスト結果:</label>
-            <pre>{testOutput}</pre>
-          </div>
-        )}
-
-        <div className="button-group">
-          <button onClick={handleTest} className="btn-secondary">
-            テスト実行
-          </button>
-          <button onClick={handleSave} className="btn-primary">
-            保存
-          </button>
-          <button onClick={handleCancel} className="btn-secondary">
-            キャンセル
-          </button>
-        </div>
-      </div>
-    );
-  }
 
   return (
     <div
@@ -489,15 +430,16 @@ export function ScriptPanel() {
             );
           })}
         </Panel>
-        <Panel className="server-tab-content">
+        <Panel className="script-tab-content">
           <Group orientation="vertical">
-            <Panel>
+            <Panel className="script-editor-panel">
               {scripts.length === 0 ? (
                 <p className="empty-message">スクリプトがありません</p>
               ) : selectedScript ? (
                 <ScriptEditPanel
                   key={selectedScript.id}
                   selectedScript={selectedScript}
+                  onDelete={handleDelete}
                 />
               ) : (
                 <p className="empty-message">スクリプトが選択されていません</p>
