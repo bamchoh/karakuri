@@ -149,7 +149,12 @@ export function RegisterPanel({
     [],
   );
   const [selectedArea, setSelectedArea] = useState<string>("");
+
+  // レジスタ表示の状態
+  const [startAddressText, setStartAddressText] = useState("0");
   const [startAddress, setStartAddress] = useState(0);
+  const [isEditingAddress, setIsEditingAddress] = useState(false);
+
   const [values, setValues] = useState<(boolean | number)[]>([]);
   const [displayFormat, setDisplayFormat] = useState<DisplayFormat>("decimal");
   const [bitWidth, setBitWidth] = useState<BitWidth>(16);
@@ -235,6 +240,23 @@ export function RegisterPanel({
   const isBitType = currentArea?.isBit ?? false;
   const isByteAddr = currentArea?.byteAddressing ?? false;
   const isModbusArea = currentArea?.oneOrigin ?? false;
+  const maxStartAddress = currentArea
+    ? Math.max(0, currentArea.size - PAGE_SIZE)
+    : 0;
+
+  const remaining = currentArea
+    ? Math.max(0, currentArea.size - startAddress)
+    : 0;
+
+  const readCount = Math.min(PAGE_SIZE, remaining);
+
+  useEffect(() => {
+    if (!isEditingAddress) {
+      setStartAddressText(
+        String(isModbusArea ? startAddress + 1 : startAddress),
+      );
+    }
+  }, [startAddress, isModbusArea, isEditingAddress]);
 
   // ワードアドレスを表示用アドレスに変換する（バイトアドレスは*2、Modbusは1オリジン）
   const toDisplayAddr = (wordAddr: number) => {
@@ -253,21 +275,27 @@ export function RegisterPanel({
           selectedProtocol,
           selectedArea,
           startAddress,
-          PAGE_SIZE,
+          readCount,
         );
       } else {
         data = await ReadWords(
           selectedProtocol,
           selectedArea,
           startAddress,
-          PAGE_SIZE,
+          readCount,
         );
       }
       setValues(data || []);
     } catch (e) {
       console.error("Failed to load registers:", e);
     }
-  }, [selectedProtocol, selectedArea, startAddress, isBitType]);
+  }, [
+    selectedProtocol,
+    selectedArea,
+    startAddress,
+    isBitType,
+    currentArea?.size,
+  ]);
 
   useEffect(() => {
     loadRegisters();
@@ -571,6 +599,17 @@ export function RegisterPanel({
     return rows;
   };
 
+  const handleBitWrite = async (value: boolean) => {
+    try {
+      await WriteBit(selectedProtocol, selectedArea, editingAddress, value);
+
+      await loadRegisters();
+      handleDialogClose();
+    } catch (e) {
+      console.error("Failed to set bit:", e);
+    }
+  };
+
   return (
     <div className="panel">
       <h2>レジスタ</h2>
@@ -642,14 +681,24 @@ export function RegisterPanel({
             <div className="form-group">
               <label>開始アドレス</label>
               <input
-                type="number"
-                min={isModbusArea ? "1" : "0"}
-                max="65535"
-                value={isModbusArea ? startAddress + 1 : startAddress}
+                value={startAddressText}
                 onChange={(e) => {
-                  const v = parseInt(e.target.value) || (isModbusArea ? 1 : 0);
-                  setStartAddress(isModbusArea ? Math.max(0, v - 1) : v);
+                  setStartAddressText(e.target.value);
                 }}
+                onBlur={() => {
+                  const v = parseInt(startAddressText);
+
+                  if (!isNaN(v)) {
+                    setStartAddress(
+                      isModbusArea ? Math.max(0, v - 1) : Math.max(0, v),
+                    );
+                  }
+
+                  setStartAddressText(
+                    String(isModbusArea ? startAddress + 1 : startAddress),
+                  );
+                }}
+                onFocus={(e) => e.target.select()}
               />
             </div>
 
@@ -767,6 +816,7 @@ export function RegisterPanel({
             <button
               onClick={() => setStartAddress(startAddress + PAGE_SIZE)}
               className="btn-secondary"
+              disabled={startAddress >= maxStartAddress}
             >
               次へ
             </button>
@@ -776,7 +826,7 @@ export function RegisterPanel({
           {isDialogOpen && (
             <FocusTrap onConfirm={handleSave}>
               <div className="dialog">
-                <h3>レジスタ書き込み</h3>
+                <h3>書き込み</h3>
 
                 <div className="dialog-content">
                   <div className="dialog-row">
@@ -785,7 +835,6 @@ export function RegisterPanel({
                       {toDisplayAddr(editingAddress)}
                     </span>
                   </div>
-
                   <div className="dialog-row">
                     <label>現在の値:</label>
                     <span className="dialog-value">
@@ -795,7 +844,6 @@ export function RegisterPanel({
                       )}
                     </span>
                   </div>
-
                   {!isBitType && (
                     <div className="dialog-row">
                       <label>入力形式:</label>
@@ -815,28 +863,51 @@ export function RegisterPanel({
                       </select>
                     </div>
                   )}
+                  {isBitType ? (
+                    <div className="dialog-row">
+                      <label>新しい値:</label>
 
-                  <div className="dialog-row">
-                    <label>新しい値:</label>
-                    <input
-                      ref={dialogInputRef}
-                      type="text"
-                      value={editValue}
-                      onChange={(e) => setEditValue(e.target.value)}
-                      onKeyDown={handleDialogKeyDown}
-                      className="dialog-input"
-                      placeholder={isBitType ? "0, 1, ON, OFF" : ""}
-                    />
-                  </div>
+                      <div className="bit-buttons">
+                        <button
+                          className="btn-primary"
+                          onClick={() => handleBitWrite(true)}
+                          style={{ marginRight: "8px" }}
+                        >
+                          ON
+                        </button>
+
+                        <button
+                          className="btn-secondary"
+                          onClick={() => handleBitWrite(false)}
+                        >
+                          OFF
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="dialog-row">
+                      <label>新しい値:</label>
+                      <input
+                        ref={dialogInputRef}
+                        type="text"
+                        value={editValue}
+                        onChange={(e) => setEditValue(e.target.value)}
+                        onKeyDown={handleDialogKeyDown}
+                        className="dialog-input"
+                      />
+                    </div>
+                  )}{" "}
                 </div>
 
                 <div className="dialog-buttons">
                   <button onClick={handleDialogClose} className="btn-secondary">
                     キャンセル
                   </button>
-                  <button onClick={handleSave} className="btn-primary">
-                    書き込み
-                  </button>
+                  {!isBitType && (
+                    <button onClick={handleSave} className="btn-primary">
+                      書き込み
+                    </button>
+                  )}
                 </div>
               </div>
             </FocusTrap>
