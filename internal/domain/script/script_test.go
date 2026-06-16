@@ -6,7 +6,7 @@ import (
 )
 
 func TestNewScript(t *testing.T) {
-	s := NewScript("id-1", "test script", "console.log('hello')", 1*time.Second)
+	s := NewScript("id-1", "test script", "console.log('hello')", 1*time.Second, 0)
 
 	if s == nil {
 		t.Fatal("NewScript returned nil")

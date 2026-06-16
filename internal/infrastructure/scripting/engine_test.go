@@ -205,7 +205,7 @@ func TestScriptEngine_StartStopScript(t *testing.T) {
 	s := script.NewScript("test-1", "counter", `
 		var val = plc.readVariable("Counter");
 		plc.writeVariable("Counter", val + 1);
-	`, 50*time.Millisecond)
+	`, 50*time.Millisecond, 0)
 
 	// スクリプト開始
 	err = engine.StartScript(s)
@@ -252,8 +252,8 @@ func TestScriptEngine_StopAll(t *testing.T) {
 	engine, _ := newTestEngine()
 
 	// 複数のスクリプトを開始
-	s1 := script.NewScript("test-1", "script1", `1+1`, 100*time.Millisecond)
-	s2 := script.NewScript("test-2", "script2", `2+2`, 100*time.Millisecond)
+	s1 := script.NewScript("test-1", "script1", `1+1`, 100*time.Millisecond, 0)
+	s2 := script.NewScript("test-2", "script2", `2+2`, 100*time.Millisecond, 0)
 
 	_ = engine.StartScript(s1)
 	_ = engine.StartScript(s2)
@@ -281,7 +281,7 @@ func TestScriptEngine_GetRunningScripts(t *testing.T) {
 	}
 
 	// スクリプトを開始
-	s := script.NewScript("test-1", "script1", `1+1`, 100*time.Millisecond)
+	s := script.NewScript("test-1", "script1", `1+1`, 100*time.Millisecond, 0)
 	_ = engine.StartScript(s)
 
 	running := engine.GetRunningScripts()
@@ -305,8 +305,8 @@ func TestScriptEngine_StartScript_ReplaceRunning(t *testing.T) {
 
 	_, _ = vs.CreateVariable("Val", variable.TypeINT, int16(0))
 
-	s1 := script.NewScript("test-1", "script1", `plc.writeVariable("Val", 111)`, 50*time.Millisecond)
-	s2 := script.NewScript("test-1", "script1-updated", `plc.writeVariable("Val", 222)`, 50*time.Millisecond)
+	s1 := script.NewScript("test-1", "script1", `plc.writeVariable("Val", 111)`, 50*time.Millisecond, 0)
+	s2 := script.NewScript("test-1", "script1-updated", `plc.writeVariable("Val", 222)`, 50*time.Millisecond, 0)
 
 	// 最初のスクリプト開始
 	_ = engine.StartScript(s1)
@@ -333,7 +333,7 @@ func TestScriptEngine_StartScript_ReplaceRunning(t *testing.T) {
 func TestScriptEngine_StartScript_CompileError(t *testing.T) {
 	engine, _ := newTestEngine()
 
-	s := script.NewScript("test-1", "invalid", `invalid syntax {{{`, 100*time.Millisecond)
+	s := script.NewScript("test-1", "invalid", `invalid syntax {{{`, 100*time.Millisecond, 0)
 
 	err := engine.StartScript(s)
 	if err == nil {
@@ -350,7 +350,7 @@ func TestScriptEngine_IsRunning(t *testing.T) {
 	}
 
 	// スクリプトを開始
-	s := script.NewScript("test-1", "script1", `1+1`, 100*time.Millisecond)
+	s := script.NewScript("test-1", "script1", `1+1`, 100*time.Millisecond, 0)
 	_ = engine.StartScript(s)
 
 	if !engine.IsRunning("test-1") {
