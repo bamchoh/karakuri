@@ -527,10 +527,3 @@ func (h *DataStoreHandler) SetDisabledUnitIDs(ids []uint8) {
 
 // DataStore のインターフェースを満たすことを確認
 var _ protocol.DataStore = (*ModbusDataStore)(nil)
-
-func init() {
-	// 各 Modbus バリアントのファクトリーをデフォルトレジストリに登録
-	protocol.Register(NewModbusTCPServerFactory())
-	protocol.Register(NewModbusRTUServerFactory())
-	protocol.Register(NewModbusASCIIServerFactory())
-}
