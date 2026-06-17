@@ -5,12 +5,8 @@ import (
 
 	"modbus_simulator/internal/domain/datastore"
 	"modbus_simulator/internal/domain/protocol"
+	"modbus_simulator/internal/pluginruntime"
 )
-
-// DataChangeHook はデータ変更時に呼ばれるコールバック型
-// プラグインサーバーが SubscribeChanges ストリームで変更通知を送るために使用する。
-// isBit=true の場合は bitValues を、isBit=false の場合は values を参照する。
-type DataChangeHook func(area string, address uint32, values []uint16, isBit bool, bitValues []bool)
 
 // ModbusDataStore はModbusプロトコル用のデータストア
 type ModbusDataStore struct {
@@ -21,21 +17,21 @@ type ModbusDataStore struct {
 	inputRegs      []uint16
 
 	hookMu     sync.RWMutex
-	changeHook DataChangeHook
+	changeHook pluginruntime.DataChangeHook
 }
 
 // エリアID定数
 const (
-	AreaCoils           = "coils"
-	AreaDiscreteInputs  = "discreteInputs"
-	AreaHoldingRegs     = "holdingRegisters"
-	AreaInputRegs       = "inputRegisters"
+	AreaCoils          = "coils"
+	AreaDiscreteInputs = "discreteInputs"
+	AreaHoldingRegs    = "holdingRegisters"
+	AreaInputRegs      = "inputRegisters"
 )
 
 // SetChangeHook はデータ変更時に呼ばれるフックを設定する。
 // nil を渡すとフックを解除する。
 // フックは Modbus クライアントの書き込み時にのみ呼び出すこと（ホストからの書き込み時は呼び出さない）。
-func (s *ModbusDataStore) SetChangeHook(hook DataChangeHook) {
+func (s *ModbusDataStore) SetChangeHook(hook pluginruntime.DataChangeHook) {
 	s.hookMu.Lock()
 	s.changeHook = hook
 	s.hookMu.Unlock()

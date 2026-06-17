@@ -1,30 +1,25 @@
-package server
+package pluginruntime
 
 import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"sync"
-
-	"google.golang.org/grpc"
-
 	pb "modbus_simulator/pb/pluginpb"
 
 	"modbus_simulator/internal/domain/protocol"
-	"modbus_simulator/cmd/modbus-plugin/internal/modbus"
+	"sync"
+
+	"google.golang.org/grpc"
 )
 
-// PluginServer は Modbus プラグインの gRPC サーバー実装
-// PluginService と DataStoreService を同一の gRPC サーバーで提供する
-type PluginServer struct {
+type Server struct {
 	pb.UnimplementedPluginServiceServer
 	pb.UnimplementedDataStoreServiceServer
 
-	mu           sync.Mutex
-	protocolType string // "modbus-tcp", "modbus-rtu", "modbus-ascii"
-	factory      protocol.ServerFactory
-	store        *modbus.ModbusDataStore
-	server       protocol.ProtocolServer
+	mu      sync.Mutex
+	factory protocol.ServerFactory
+	store   protocol.DataStore
+	server  protocol.ProtocolServer
 
 	// SubscribeChanges ストリームの購読者チャンネル
 	subsMu      sync.RWMutex
@@ -34,36 +29,23 @@ type PluginServer struct {
 	hostWriting bool
 }
 
-// NewPluginServer は PluginServer を作成する。
-// protocolType は "modbus-tcp", "modbus-rtu", "modbus-ascii" のいずれかを指定する。
-func NewPluginServer(protocolType string) *PluginServer {
-	var factory protocol.ServerFactory
-	switch protocolType {
-	case "modbus-rtu":
-		factory = modbus.NewModbusRTUServerFactory()
-	case "modbus-ascii":
-		factory = modbus.NewModbusASCIIServerFactory()
-	default:
-		factory = modbus.NewModbusTCPServerFactory()
-	}
-	return &PluginServer{
-		protocolType: protocolType,
-		factory:      factory,
-		store:        modbus.NewModbusDataStore(65536, 65536, 65536, 65536),
+func newServer(factory protocol.ServerFactory) *Server {
+	return &Server{
+		factory: factory,
 	}
 }
 
 // Register は gRPC サーバーにサービスを登録する
-func (s *PluginServer) Register(srv *grpc.Server) {
+func (s *Server) Register(srv *grpc.Server) {
 	pb.RegisterPluginServiceServer(srv, s)
 	pb.RegisterDataStoreServiceServer(srv, s)
 }
 
 // ===== PluginService =====
 
-func (s *PluginServer) GetMetadata(ctx context.Context, _ *pb.Empty) (*pb.PluginMetadata, error) {
+func (s *Server) GetMetadata(ctx context.Context, _ *pb.Empty) (*pb.PluginMetadata, error) {
 	return &pb.PluginMetadata{
-		ProtocolType: s.protocolType,
+		ProtocolType: string(s.factory.ProtocolType()),
 		DisplayName:  s.factory.DisplayName(),
 		Capabilities: &pb.ProtocolCapabilities{
 			SupportsUnitId:         true,
@@ -74,12 +56,12 @@ func (s *PluginServer) GetMetadata(ctx context.Context, _ *pb.Empty) (*pb.Plugin
 	}, nil
 }
 
-func (s *PluginServer) GetConfigVariants(ctx context.Context, _ *pb.Empty) (*pb.GetConfigVariantsResponse, error) {
+func (s *Server) GetConfigVariants(ctx context.Context, _ *pb.Empty) (*pb.GetConfigVariantsResponse, error) {
 	// バリアントなし（プロトコルタイプが固定されているため）
 	return &pb.GetConfigVariantsResponse{Variants: nil}, nil
 }
 
-func (s *PluginServer) GetConfigFields(ctx context.Context, req *pb.GetConfigFieldsRequest) (*pb.GetConfigFieldsResponse, error) {
+func (s *Server) GetConfigFields(ctx context.Context, req *pb.GetConfigFieldsRequest) (*pb.GetConfigFieldsResponse, error) {
 	factory := s.factory
 	fields := factory.GetConfigFields(req.VariantId)
 	pbFields := make([]*pb.ConfigField, len(fields))
@@ -116,7 +98,7 @@ func (s *PluginServer) GetConfigFields(ctx context.Context, req *pb.GetConfigFie
 	return &pb.GetConfigFieldsResponse{Fields: pbFields}, nil
 }
 
-func (s *PluginServer) GetDefaultConfig(ctx context.Context, req *pb.GetDefaultConfigRequest) (*pb.ConfigDataResponse, error) {
+func (s *Server) GetDefaultConfig(ctx context.Context, req *pb.GetDefaultConfigRequest) (*pb.ConfigDataResponse, error) {
 	factory := s.factory
 	config := factory.CreateConfigFromVariant(req.VariantId)
 	settingsMap := factory.ConfigToMap(config)
@@ -130,7 +112,7 @@ func (s *PluginServer) GetDefaultConfig(ctx context.Context, req *pb.GetDefaultC
 	}, nil
 }
 
-func (s *PluginServer) MapToConfig(ctx context.Context, req *pb.MapToConfigRequest) (*pb.MapToConfigResponse, error) {
+func (s *Server) MapToConfig(ctx context.Context, req *pb.MapToConfigRequest) (*pb.MapToConfigResponse, error) {
 	factory := s.factory
 	var settings map[string]interface{}
 	if err := json.Unmarshal([]byte(req.SettingsJson), &settings); err != nil {
@@ -151,7 +133,7 @@ func (s *PluginServer) MapToConfig(ctx context.Context, req *pb.MapToConfigReque
 	}, nil
 }
 
-func (s *PluginServer) ConfigToMap(ctx context.Context, req *pb.ConfigToMapRequest) (*pb.ConfigToMapResponse, error) {
+func (s *Server) ConfigToMap(ctx context.Context, req *pb.ConfigToMapRequest) (*pb.ConfigToMapResponse, error) {
 	factory := s.factory
 	var settings map[string]interface{}
 	if err := json.Unmarshal([]byte(req.SettingsJson), &settings); err != nil {
@@ -169,7 +151,7 @@ func (s *PluginServer) ConfigToMap(ctx context.Context, req *pb.ConfigToMapReque
 	return &pb.ConfigToMapResponse{SettingsJson: string(b)}, nil
 }
 
-func (s *PluginServer) CreateAndStart(ctx context.Context, req *pb.CreateAndStartRequest) (*pb.Empty, error) {
+func (s *Server) CreateAndStart(ctx context.Context, req *pb.CreateAndStartRequest) (*pb.Empty, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -197,14 +179,12 @@ func (s *PluginServer) CreateAndStart(ctx context.Context, req *pb.CreateAndStar
 
 	// DataStore を作成
 	innerStore := factory.CreateDataStore()
-	modbusStore, ok := innerStore.(*modbus.ModbusDataStore)
-	if !ok {
-		return nil, fmt.Errorf("DataStore の型が不正: %T", innerStore)
-	}
-	s.store = modbusStore
+	s.store = innerStore
 
-	// 変更フックを設定（Modbus クライアントの書き込みを SubscribeChanges ストリームに転送）
-	s.store.SetChangeHook(s.onDataChange)
+	if changeHookStore, ok := innerStore.(ChangeHookDataStore); ok {
+		// 変更フックを設定（Modbus クライアントの書き込みを SubscribeChanges ストリームに転送）
+		changeHookStore.SetChangeHook(s.onDataChange)
+	}
 
 	// サーバーを作成・起動
 	srv, err := factory.CreateServer(config, innerStore)
@@ -221,7 +201,7 @@ func (s *PluginServer) CreateAndStart(ctx context.Context, req *pb.CreateAndStar
 	return &pb.Empty{}, nil
 }
 
-func (s *PluginServer) Stop(ctx context.Context, _ *pb.Empty) (*pb.Empty, error) {
+func (s *Server) Stop(ctx context.Context, _ *pb.Empty) (*pb.Empty, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.server != nil {
@@ -230,7 +210,7 @@ func (s *PluginServer) Stop(ctx context.Context, _ *pb.Empty) (*pb.Empty, error)
 	return &pb.Empty{}, nil
 }
 
-func (s *PluginServer) GetStatus(ctx context.Context, _ *pb.Empty) (*pb.StatusResponse, error) {
+func (s *Server) GetStatus(ctx context.Context, _ *pb.Empty) (*pb.StatusResponse, error) {
 	s.mu.Lock()
 	srv := s.server
 	s.mu.Unlock()
@@ -248,7 +228,7 @@ func (s *PluginServer) GetStatus(ctx context.Context, _ *pb.Empty) (*pb.StatusRe
 	}
 }
 
-func (s *PluginServer) UpdateConfig(ctx context.Context, req *pb.UpdateConfigRequest) (*pb.Empty, error) {
+func (s *Server) UpdateConfig(ctx context.Context, req *pb.UpdateConfigRequest) (*pb.Empty, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -270,14 +250,14 @@ func (s *PluginServer) UpdateConfig(ctx context.Context, req *pb.UpdateConfigReq
 	return &pb.Empty{}, nil
 }
 
-func (s *PluginServer) OnNodePublishingUpdated(ctx context.Context, _ *pb.Empty) (*pb.Empty, error) {
+func (s *Server) OnNodePublishingUpdated(ctx context.Context, _ *pb.Empty) (*pb.Empty, error) {
 	// Modbus は NodePublishing をサポートしないため何もしない
 	return &pb.Empty{}, nil
 }
 
 // UnitID サポート
 
-func (s *PluginServer) GetUnitIDSettings(ctx context.Context, _ *pb.Empty) (*pb.UnitIDSettingsResponse, error) {
+func (s *Server) GetUnitIDSettings(ctx context.Context, _ *pb.Empty) (*pb.UnitIDSettingsResponse, error) {
 	s.mu.Lock()
 	srv := s.server
 	s.mu.Unlock()
@@ -298,7 +278,7 @@ func (s *PluginServer) GetUnitIDSettings(ctx context.Context, _ *pb.Empty) (*pb.
 	return &pb.UnitIDSettingsResponse{}, nil
 }
 
-func (s *PluginServer) SetUnitIDEnabled(ctx context.Context, req *pb.SetUnitIDEnabledRequest) (*pb.Empty, error) {
+func (s *Server) SetUnitIDEnabled(ctx context.Context, req *pb.SetUnitIDEnabledRequest) (*pb.Empty, error) {
 	s.mu.Lock()
 	srv := s.server
 	s.mu.Unlock()
@@ -314,7 +294,7 @@ func (s *PluginServer) SetUnitIDEnabled(ctx context.Context, req *pb.SetUnitIDEn
 	return &pb.Empty{}, nil
 }
 
-func (s *PluginServer) SetDisabledUnitIDs(ctx context.Context, req *pb.SetDisabledUnitIDsRequest) (*pb.Empty, error) {
+func (s *Server) SetDisabledUnitIDs(ctx context.Context, req *pb.SetDisabledUnitIDsRequest) (*pb.Empty, error) {
 	s.mu.Lock()
 	srv := s.server
 	s.mu.Unlock()
@@ -336,7 +316,7 @@ func (s *PluginServer) SetDisabledUnitIDs(ctx context.Context, req *pb.SetDisabl
 
 // ===== DataStoreService =====
 
-func (s *PluginServer) GetAreas(ctx context.Context, _ *pb.Empty) (*pb.GetAreasResponse, error) {
+func (s *Server) GetAreas(ctx context.Context, _ *pb.Empty) (*pb.GetAreasResponse, error) {
 	if s.store == nil {
 		return &pb.GetAreasResponse{}, nil
 	}
@@ -356,7 +336,7 @@ func (s *PluginServer) GetAreas(ctx context.Context, _ *pb.Empty) (*pb.GetAreasR
 	return &pb.GetAreasResponse{Areas: pbAreas}, nil
 }
 
-func (s *PluginServer) ReadBit(ctx context.Context, req *pb.ReadBitRequest) (*pb.ReadBitResponse, error) {
+func (s *Server) ReadBit(ctx context.Context, req *pb.ReadBitRequest) (*pb.ReadBitResponse, error) {
 	if s.store == nil {
 		return nil, fmt.Errorf("DataStore 未初期化")
 	}
@@ -367,7 +347,7 @@ func (s *PluginServer) ReadBit(ctx context.Context, req *pb.ReadBitRequest) (*pb
 	return &pb.ReadBitResponse{Value: v}, nil
 }
 
-func (s *PluginServer) WriteBit(ctx context.Context, req *pb.WriteBitRequest) (*pb.Empty, error) {
+func (s *Server) WriteBit(ctx context.Context, req *pb.WriteBitRequest) (*pb.Empty, error) {
 	if s.store == nil {
 		return nil, fmt.Errorf("DataStore 未初期化")
 	}
@@ -378,7 +358,7 @@ func (s *PluginServer) WriteBit(ctx context.Context, req *pb.WriteBitRequest) (*
 	return &pb.Empty{}, err
 }
 
-func (s *PluginServer) ReadBits(ctx context.Context, req *pb.ReadBitsRequest) (*pb.ReadBitsResponse, error) {
+func (s *Server) ReadBits(ctx context.Context, req *pb.ReadBitsRequest) (*pb.ReadBitsResponse, error) {
 	if s.store == nil {
 		return nil, fmt.Errorf("DataStore 未初期化")
 	}
@@ -389,7 +369,7 @@ func (s *PluginServer) ReadBits(ctx context.Context, req *pb.ReadBitsRequest) (*
 	return &pb.ReadBitsResponse{Values: vals}, nil
 }
 
-func (s *PluginServer) WriteBits(ctx context.Context, req *pb.WriteBitsRequest) (*pb.Empty, error) {
+func (s *Server) WriteBits(ctx context.Context, req *pb.WriteBitsRequest) (*pb.Empty, error) {
 	if s.store == nil {
 		return nil, fmt.Errorf("DataStore 未初期化")
 	}
@@ -399,7 +379,7 @@ func (s *PluginServer) WriteBits(ctx context.Context, req *pb.WriteBitsRequest) 
 	return &pb.Empty{}, err
 }
 
-func (s *PluginServer) ReadWord(ctx context.Context, req *pb.ReadWordRequest) (*pb.ReadWordResponse, error) {
+func (s *Server) ReadWord(ctx context.Context, req *pb.ReadWordRequest) (*pb.ReadWordResponse, error) {
 	if s.store == nil {
 		return nil, fmt.Errorf("DataStore 未初期化")
 	}
@@ -410,7 +390,7 @@ func (s *PluginServer) ReadWord(ctx context.Context, req *pb.ReadWordRequest) (*
 	return &pb.ReadWordResponse{Value: uint32(v)}, nil
 }
 
-func (s *PluginServer) WriteWord(ctx context.Context, req *pb.WriteWordRequest) (*pb.Empty, error) {
+func (s *Server) WriteWord(ctx context.Context, req *pb.WriteWordRequest) (*pb.Empty, error) {
 	if s.store == nil {
 		return nil, fmt.Errorf("DataStore 未初期化")
 	}
@@ -420,7 +400,7 @@ func (s *PluginServer) WriteWord(ctx context.Context, req *pb.WriteWordRequest) 
 	return &pb.Empty{}, err
 }
 
-func (s *PluginServer) ReadWords(ctx context.Context, req *pb.ReadWordsRequest) (*pb.ReadWordsResponse, error) {
+func (s *Server) ReadWords(ctx context.Context, req *pb.ReadWordsRequest) (*pb.ReadWordsResponse, error) {
 	if s.store == nil {
 		return nil, fmt.Errorf("DataStore 未初期化")
 	}
@@ -435,7 +415,7 @@ func (s *PluginServer) ReadWords(ctx context.Context, req *pb.ReadWordsRequest) 
 	return &pb.ReadWordsResponse{Values: uint32Vals}, nil
 }
 
-func (s *PluginServer) WriteWords(ctx context.Context, req *pb.WriteWordsRequest) (*pb.Empty, error) {
+func (s *Server) WriteWords(ctx context.Context, req *pb.WriteWordsRequest) (*pb.Empty, error) {
 	if s.store == nil {
 		return nil, fmt.Errorf("DataStore 未初期化")
 	}
@@ -449,7 +429,7 @@ func (s *PluginServer) WriteWords(ctx context.Context, req *pb.WriteWordsRequest
 	return &pb.Empty{}, err
 }
 
-func (s *PluginServer) Snapshot(ctx context.Context, _ *pb.Empty) (*pb.SnapshotResponse, error) {
+func (s *Server) Snapshot(ctx context.Context, _ *pb.Empty) (*pb.SnapshotResponse, error) {
 	if s.store == nil {
 		return &pb.SnapshotResponse{}, nil
 	}
@@ -461,7 +441,7 @@ func (s *PluginServer) Snapshot(ctx context.Context, _ *pb.Empty) (*pb.SnapshotR
 	return &pb.SnapshotResponse{SnapshotJson: b}, nil
 }
 
-func (s *PluginServer) Restore(ctx context.Context, req *pb.RestoreRequest) (*pb.Empty, error) {
+func (s *Server) Restore(ctx context.Context, req *pb.RestoreRequest) (*pb.Empty, error) {
 	if s.store == nil {
 		return &pb.Empty{}, nil
 	}
@@ -473,7 +453,7 @@ func (s *PluginServer) Restore(ctx context.Context, req *pb.RestoreRequest) (*pb
 	return &pb.Empty{}, nil
 }
 
-func (s *PluginServer) ClearAll(ctx context.Context, _ *pb.Empty) (*pb.Empty, error) {
+func (s *Server) ClearAll(ctx context.Context, _ *pb.Empty) (*pb.Empty, error) {
 	if s.store == nil {
 		return &pb.Empty{}, nil
 	}
@@ -482,7 +462,7 @@ func (s *PluginServer) ClearAll(ctx context.Context, _ *pb.Empty) (*pb.Empty, er
 }
 
 // SubscribeChanges は Modbus クライアントが書き込んだ変更をストリームで送信する
-func (s *PluginServer) SubscribeChanges(_ *pb.Empty, stream pb.DataStoreService_SubscribeChangesServer) error {
+func (s *Server) SubscribeChanges(_ *pb.Empty, stream pb.DataStoreService_SubscribeChangesServer) error {
 	ch := make(chan *pb.DataChange, 64)
 
 	s.subsMu.Lock()
@@ -517,7 +497,7 @@ func (s *PluginServer) SubscribeChanges(_ *pb.Empty, stream pb.DataStoreService_
 }
 
 // onDataChange は ModbusDataStore の変更フックから呼ばれる
-func (s *PluginServer) onDataChange(area string, address uint32, values []uint16, isBit bool, bitValues []bool) {
+func (s *Server) onDataChange(area string, address uint32, values []uint16, isBit bool, bitValues []bool) {
 	// ホストからの書き込み中は通知しない（循環防止）
 	if s.isHostWriting() {
 		return
@@ -552,16 +532,15 @@ func (s *PluginServer) onDataChange(area string, address uint32, values []uint16
 	}
 }
 
-func (s *PluginServer) setHostWriting(v bool) {
+func (s *Server) setHostWriting(v bool) {
 	s.mu.Lock()
 	s.hostWriting = v
 	s.mu.Unlock()
 }
 
-func (s *PluginServer) isHostWriting() bool {
+func (s *Server) isHostWriting() bool {
 	s.mu.Lock()
 	v := s.hostWriting
 	s.mu.Unlock()
 	return v
 }
-

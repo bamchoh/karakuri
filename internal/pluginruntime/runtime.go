@@ -3,6 +3,7 @@ package pluginruntime
 import (
 	"errors"
 	"fmt"
+	"modbus_simulator/internal/domain/protocol"
 	"net"
 	"os"
 	"os/signal"
@@ -11,11 +12,13 @@ import (
 	"google.golang.org/grpc"
 )
 
-type Plugin interface {
-	Register(*grpc.Server)
+func RunFactory(factory protocol.ServerFactory) error {
+	plugin := newServer(factory)
+
+	return run(plugin)
 }
 
-func Run(plugin Plugin) error {
+func run(plugin plugin) error {
 	lis, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		return fmt.Errorf("listen: %w", err)

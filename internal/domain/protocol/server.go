@@ -69,7 +69,7 @@ type ConfigVariant struct {
 	DisplayName string `json:"displayName"`
 }
 
-// ServerFactory はプロトコルサーバーを作成するファクトリーインターフェース
+// ServerFactory はプロトコルサーバーを作成するファクトリーインターフェース(プラグイン作者が実装すること)
 type ServerFactory interface {
 	// ProtocolType はファクトリーが作成するプロトコルの種類を返す
 	ProtocolType() ProtocolType
