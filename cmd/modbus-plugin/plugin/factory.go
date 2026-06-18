@@ -8,12 +8,12 @@ import (
 func ResolveFactory(protocolType string) protocol.ServerFactory {
 	switch protocolType {
 	case "modbus-rtu":
-		return modbus.NewModbusRTUServerFactory()
+		return &modbus.RTUFactory{}
 
 	case "modbus-ascii":
-		return modbus.NewModbusASCIIServerFactory()
+		return &modbus.ASCIIFactory{}
 
 	default:
-		return modbus.NewModbusTCPServerFactory()
+		return &modbus.TCPFactory{}
 	}
 }

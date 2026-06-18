@@ -11,56 +11,10 @@ import (
 // ErrUnitIdDisabled はUnitIDが無効化されている場合のエラー
 var ErrUnitIdDisabled = errors.New("unit ID is disabled")
 
-// ModbusServerFactory はModbusサーバーのファクトリー
-type ModbusServerFactory struct {
-	fixedVariant ModbusVariant
-}
-
-// NewModbusTCPServerFactory は Modbus TCP ファクトリーを作成する
-func NewModbusTCPServerFactory() *ModbusServerFactory {
-	return &ModbusServerFactory{fixedVariant: VariantTCP}
-}
-
-// NewModbusRTUServerFactory は Modbus RTU ファクトリーを作成する
-func NewModbusRTUServerFactory() *ModbusServerFactory {
-	return &ModbusServerFactory{fixedVariant: VariantRTU}
-}
-
-// NewModbusASCIIServerFactory は Modbus ASCII ファクトリーを作成する
-func NewModbusASCIIServerFactory() *ModbusServerFactory {
-	return &ModbusServerFactory{fixedVariant: VariantASCII}
-}
-
-// ProtocolType はファクトリーが作成するプロトコルの種類を返す
-func (f *ModbusServerFactory) ProtocolType() protocol.ProtocolType {
-	switch f.fixedVariant {
-	case VariantTCP:
-		return protocol.ProtocolModbusTCP
-	case VariantRTU:
-		return protocol.ProtocolModbusRTU
-	case VariantASCII:
-		return protocol.ProtocolModbusASCII
-	default:
-		return protocol.ProtocolModbusTCP
-	}
-}
-
-// DisplayName はプロトコルの表示名を返す
-func (f *ModbusServerFactory) DisplayName() string {
-	switch f.fixedVariant {
-	case VariantTCP:
-		return "Modbus TCP"
-	case VariantRTU:
-		return "Modbus RTU"
-	case VariantASCII:
-		return "Modbus ASCII"
-	default:
-		return "Modbus TCP"
-	}
-}
+type BaseFactory struct{}
 
 // CreateServer はサーバーを作成する
-func (f *ModbusServerFactory) CreateServer(config protocol.ProtocolConfig, store protocol.DataStore) (protocol.ProtocolServer, error) {
+func (f *BaseFactory) CreateServer(config protocol.ProtocolConfig, store protocol.DataStore) (protocol.ProtocolServer, error) {
 	modbusConfig, ok := config.(*ModbusConfig)
 	if !ok {
 		return nil, fmt.Errorf("invalid config type: expected ModbusConfig")
@@ -70,98 +24,12 @@ func (f *ModbusServerFactory) CreateServer(config protocol.ProtocolConfig, store
 }
 
 // CreateDataStore はプロトコル用のデータストアを作成する
-func (f *ModbusServerFactory) CreateDataStore() protocol.DataStore {
+func (f *BaseFactory) CreateDataStore() protocol.DataStore {
 	return NewModbusDataStore(65536, 65536, 65536, 65536)
 }
 
-// DefaultConfig はデフォルト設定を返す
-func (f *ModbusServerFactory) DefaultConfig() protocol.ProtocolConfig {
-	return f.CreateConfigFromVariant("")
-}
-
-// ConfigVariants は利用可能な設定バリアントを返す（バリアントは固定なので1エントリのみ）
-func (f *ModbusServerFactory) ConfigVariants() []protocol.ConfigVariant {
-	return []protocol.ConfigVariant{
-		{ID: string(f.fixedVariant), DisplayName: f.DisplayName()},
-	}
-}
-
-// CreateConfigFromVariant は設定を作成する（fixedVariant を使用）
-func (f *ModbusServerFactory) CreateConfigFromVariant(_ string) protocol.ProtocolConfig {
-	switch f.fixedVariant {
-	case VariantTCP:
-		return DefaultTCPConfig()
-	case VariantRTU:
-		return DefaultRTUConfig()
-	case VariantASCII:
-		return DefaultASCIIConfig()
-	default:
-		return DefaultTCPConfig()
-	}
-}
-
-// GetConfigFields は設定フィールドを返す（fixedVariant を使用）
-func (f *ModbusServerFactory) GetConfigFields(_ string) []protocol.ConfigField {
-	switch f.fixedVariant {
-	case VariantTCP:
-		return []protocol.ConfigField{
-			{Name: "tcpAddress", Label: "アドレス", Description: "待ち受けるネットワークアドレス。0.0.0.0 で全インターフェースに対応します。", Type: "text", Required: true, Default: "0.0.0.0"},
-			{Name: "tcpPort", Label: "ポート", Description: "Modbus TCP の待ち受けポート番号。標準ポートは 502 です。", Type: "number", Required: true, Default: 502, Min: intPtr(1), Max: intPtr(65535)},
-		}
-	case VariantRTU:
-		return []protocol.ConfigField{
-			{Name: "serialPort", Label: "シリアルポート", Description: "通信に使用するシリアルポート（例: COM1、COM3）。", Type: "serialport", Required: true, Default: "COM1", Category: "基本設定"},
-			{Name: "baudRate", Label: "ボーレート", Description: "シリアル通信の速度（bps）。接続先デバイスと一致させてください。", Type: "select", Required: true, Default: 115200, Category: "基本設定", Options: []protocol.FieldOption{
-				{Value: "9600", Label: "9600"},
-				{Value: "19200", Label: "19200"},
-				{Value: "38400", Label: "38400"},
-				{Value: "57600", Label: "57600"},
-				{Value: "115200", Label: "115200"},
-			}},
-			{Name: "dataBits", Label: "データビット", Description: "1フレームあたりのデータビット数。Modbus RTU は通常 8 ビットです。", Type: "select", Required: true, Default: 8, Category: "フレーム設定", Options: []protocol.FieldOption{
-				{Value: "7", Label: "7"},
-				{Value: "8", Label: "8"},
-			}},
-			{Name: "stopBits", Label: "ストップビット", Description: "フレーム末尾のストップビット数。", Type: "select", Required: true, Default: 1, Category: "フレーム設定", Options: []protocol.FieldOption{
-				{Value: "1", Label: "1"},
-				{Value: "2", Label: "2"},
-			}},
-			{Name: "parity", Label: "パリティ", Description: "エラー検出用のパリティビット。None（N）、Even（E）、Odd（O）から選択します。", Type: "select", Required: true, Default: "N", Category: "フレーム設定", Options: []protocol.FieldOption{
-				{Value: "N", Label: "None"},
-				{Value: "E", Label: "Even"},
-				{Value: "O", Label: "Odd"},
-			}},
-		}
-	case VariantASCII:
-		return []protocol.ConfigField{
-			{Name: "serialPort", Label: "シリアルポート", Description: "通信に使用するシリアルポート（例: COM1、COM3）。", Type: "serialport", Required: true, Default: "COM1", Category: "基本設定"},
-			{Name: "baudRate", Label: "ボーレート", Description: "シリアル通信の速度（bps）。接続先デバイスと一致させてください。", Type: "select", Required: true, Default: 9600, Category: "基本設定", Options: []protocol.FieldOption{
-				{Value: "9600", Label: "9600"},
-				{Value: "19200", Label: "19200"},
-				{Value: "38400", Label: "38400"},
-				{Value: "57600", Label: "57600"},
-				{Value: "115200", Label: "115200"},
-			}},
-			{Name: "dataBits", Label: "データビット", Description: "1フレームあたりのデータビット数。Modbus ASCII は通常 7 ビットです。", Type: "select", Required: true, Default: 7, Category: "フレーム設定", Options: []protocol.FieldOption{
-				{Value: "7", Label: "7"},
-				{Value: "8", Label: "8"},
-			}},
-			{Name: "stopBits", Label: "ストップビット", Description: "フレーム末尾のストップビット数。", Type: "select", Required: true, Default: 1, Category: "フレーム設定", Options: []protocol.FieldOption{
-				{Value: "1", Label: "1"},
-				{Value: "2", Label: "2"},
-			}},
-			{Name: "parity", Label: "パリティ", Description: "エラー検出用のパリティビット。None（N）、Even（E）、Odd（O）から選択します。", Type: "select", Required: true, Default: "E", Category: "フレーム設定", Options: []protocol.FieldOption{
-				{Value: "N", Label: "None"},
-				{Value: "E", Label: "Even"},
-				{Value: "O", Label: "Odd"},
-			}},
-		}
-	}
-	return nil
-}
-
 // GetProtocolCapabilities はプロトコルの機能情報を返す
-func (f *ModbusServerFactory) GetProtocolCapabilities() protocol.ProtocolCapabilities {
+func (f *BaseFactory) GetProtocolCapabilities() protocol.ProtocolCapabilities {
 	return protocol.ProtocolCapabilities{
 		SupportsUnitID: true,
 		UnitIDMin:      1,
@@ -169,63 +37,272 @@ func (f *ModbusServerFactory) GetProtocolCapabilities() protocol.ProtocolCapabil
 	}
 }
 
+type TCPFactory struct {
+	BaseFactory
+}
+
+// ProtocolType はファクトリーが作成するプロトコルの種類を返す
+func (f *TCPFactory) ProtocolType() protocol.ProtocolType {
+	return protocol.ProtocolModbusTCP
+}
+
+// DisplayName はプロトコルの表示名を返す
+func (f *TCPFactory) DisplayName() string {
+	return "Modbus TCP"
+}
+
+// CreateConfigFromVariant は設定を作成する（fixedVariant を使用）
+func (f *TCPFactory) CreateConfigFromVariant(_ string) protocol.ProtocolConfig {
+	return DefaultTCPConfig()
+}
+
+// DefaultConfig はデフォルト設定を返す
+func (f *TCPFactory) DefaultConfig() protocol.ProtocolConfig {
+	return f.CreateConfigFromVariant("")
+}
+
+// ConfigVariants は利用可能な設定バリアントを返す（バリアントは固定なので1エントリのみ）
+func (f *TCPFactory) ConfigVariants() []protocol.ConfigVariant {
+	return []protocol.ConfigVariant{
+		{ID: string(VariantTCP), DisplayName: f.DisplayName()},
+	}
+}
+
+// GetConfigFields は設定フィールドを返す（fixedVariant を使用）
+func (f *TCPFactory) GetConfigFields(_ string) []protocol.ConfigField {
+	return []protocol.ConfigField{
+		{Name: "tcpAddress", Label: "アドレス", Description: "待ち受けるネットワークアドレス。0.0.0.0 で全インターフェースに対応します。", Type: "text", Required: true, Default: "0.0.0.0"},
+		{Name: "tcpPort", Label: "ポート", Description: "Modbus TCP の待ち受けポート番号。標準ポートは 502 です。", Type: "number", Required: true, Default: 502, Min: intPtr(1), Max: intPtr(65535)},
+	}
+}
+
 // ConfigToMap は設定をmapに変換する
-func (f *ModbusServerFactory) ConfigToMap(config protocol.ProtocolConfig) map[string]interface{} {
+func (f *TCPFactory) ConfigToMap(config protocol.ProtocolConfig) map[string]interface{} {
 	mc, ok := config.(*ModbusConfig)
 	if !ok {
 		return nil
 	}
 	result := make(map[string]interface{})
-	switch mc.variant {
-	case VariantTCP:
-		result["tcpAddress"] = mc.TCPAddress
-		result["tcpPort"] = mc.TCPPort
-	case VariantRTU, VariantASCII:
-		result["serialPort"] = mc.SerialPort
-		result["baudRate"] = mc.BaudRate
-		result["dataBits"] = mc.DataBits
-		result["stopBits"] = mc.StopBits
-		result["parity"] = mc.Parity
-	}
+	result["tcpAddress"] = mc.TCPAddress
+	result["tcpPort"] = mc.TCPPort
 	return result
 }
 
 // MapToConfig はmapから設定を作成する（fixedVariant を使用）
-func (f *ModbusServerFactory) MapToConfig(_ string, settings map[string]interface{}) (protocol.ProtocolConfig, error) {
+func (f *TCPFactory) MapToConfig(_ string, settings map[string]interface{}) (protocol.ProtocolConfig, error) {
 	config := f.CreateConfigFromVariant("").(*ModbusConfig)
 
-	switch f.fixedVariant {
-	case VariantTCP:
-		if v, ok := settings["tcpAddress"].(string); ok {
-			config.TCPAddress = v
-		}
-		if v, ok := settings["tcpPort"].(float64); ok {
-			config.TCPPort = int(v)
-		} else if v, ok := settings["tcpPort"].(int); ok {
-			config.TCPPort = v
-		}
-	case VariantRTU, VariantASCII:
-		if v, ok := settings["serialPort"].(string); ok {
-			config.SerialPort = v
-		}
-		if v, ok := settings["baudRate"].(float64); ok {
-			config.BaudRate = int(v)
-		} else if v, ok := settings["baudRate"].(int); ok {
-			config.BaudRate = v
-		}
-		if v, ok := settings["dataBits"].(float64); ok {
-			config.DataBits = int(v)
-		} else if v, ok := settings["dataBits"].(int); ok {
-			config.DataBits = v
-		}
-		if v, ok := settings["stopBits"].(float64); ok {
-			config.StopBits = int(v)
-		} else if v, ok := settings["stopBits"].(int); ok {
-			config.StopBits = v
-		}
-		if v, ok := settings["parity"].(string); ok {
-			config.Parity = v
-		}
+	if v, ok := settings["tcpAddress"].(string); ok {
+		config.TCPAddress = v
+	}
+	if v, ok := settings["tcpPort"].(float64); ok {
+		config.TCPPort = int(v)
+	} else if v, ok := settings["tcpPort"].(int); ok {
+		config.TCPPort = v
+	}
+
+	return config, nil
+}
+
+type RTUFactory struct {
+	BaseFactory
+}
+
+// ProtocolType はファクトリーが作成するプロトコルの種類を返す
+func (f *RTUFactory) ProtocolType() protocol.ProtocolType {
+	return protocol.ProtocolModbusRTU
+}
+
+// DisplayName はプロトコルの表示名を返す
+func (f *RTUFactory) DisplayName() string {
+	return "Modbus RTU"
+}
+
+// CreateConfigFromVariant は設定を作成する（fixedVariant を使用）
+func (f *RTUFactory) CreateConfigFromVariant(_ string) protocol.ProtocolConfig {
+	return DefaultRTUConfig()
+}
+
+// DefaultConfig はデフォルト設定を返す
+func (f *RTUFactory) DefaultConfig() protocol.ProtocolConfig {
+	return f.CreateConfigFromVariant("")
+}
+
+// ConfigVariants は利用可能な設定バリアントを返す（バリアントは固定なので1エントリのみ）
+func (f *RTUFactory) ConfigVariants() []protocol.ConfigVariant {
+	return []protocol.ConfigVariant{
+		{ID: string(VariantRTU), DisplayName: f.DisplayName()},
+	}
+}
+
+// GetConfigFields は設定フィールドを返す（fixedVariant を使用）
+func (f *RTUFactory) GetConfigFields(_ string) []protocol.ConfigField {
+	return []protocol.ConfigField{
+		{Name: "serialPort", Label: "シリアルポート", Description: "通信に使用するシリアルポート（例: COM1、COM3）。", Type: "serialport", Required: true, Default: "COM1", Category: "基本設定"},
+		{Name: "baudRate", Label: "ボーレート", Description: "シリアル通信の速度（bps）。接続先デバイスと一致させてください。", Type: "select", Required: true, Default: 115200, Category: "基本設定", Options: []protocol.FieldOption{
+			{Value: "9600", Label: "9600"},
+			{Value: "19200", Label: "19200"},
+			{Value: "38400", Label: "38400"},
+			{Value: "57600", Label: "57600"},
+			{Value: "115200", Label: "115200"},
+		}},
+		{Name: "dataBits", Label: "データビット", Description: "1フレームあたりのデータビット数。Modbus RTU は通常 8 ビットです。", Type: "select", Required: true, Default: 8, Category: "フレーム設定", Options: []protocol.FieldOption{
+			{Value: "7", Label: "7"},
+			{Value: "8", Label: "8"},
+		}},
+		{Name: "stopBits", Label: "ストップビット", Description: "フレーム末尾のストップビット数。", Type: "select", Required: true, Default: 1, Category: "フレーム設定", Options: []protocol.FieldOption{
+			{Value: "1", Label: "1"},
+			{Value: "2", Label: "2"},
+		}},
+		{Name: "parity", Label: "パリティ", Description: "エラー検出用のパリティビット。None（N）、Even（E）、Odd（O）から選択します。", Type: "select", Required: true, Default: "N", Category: "フレーム設定", Options: []protocol.FieldOption{
+			{Value: "N", Label: "None"},
+			{Value: "E", Label: "Even"},
+			{Value: "O", Label: "Odd"},
+		}},
+	}
+}
+
+// ConfigToMap は設定をmapに変換する
+func (f *RTUFactory) ConfigToMap(config protocol.ProtocolConfig) map[string]interface{} {
+	mc, ok := config.(*ModbusConfig)
+	if !ok {
+		return nil
+	}
+	result := make(map[string]interface{})
+	result["serialPort"] = mc.SerialPort
+	result["baudRate"] = mc.BaudRate
+	result["dataBits"] = mc.DataBits
+	result["stopBits"] = mc.StopBits
+	result["parity"] = mc.Parity
+	return result
+}
+
+// MapToConfig はmapから設定を作成する（fixedVariant を使用）
+func (f *RTUFactory) MapToConfig(_ string, settings map[string]interface{}) (protocol.ProtocolConfig, error) {
+	config := f.CreateConfigFromVariant("").(*ModbusConfig)
+
+	if v, ok := settings["serialPort"].(string); ok {
+		config.SerialPort = v
+	}
+	if v, ok := settings["baudRate"].(float64); ok {
+		config.BaudRate = int(v)
+	} else if v, ok := settings["baudRate"].(int); ok {
+		config.BaudRate = v
+	}
+	if v, ok := settings["dataBits"].(float64); ok {
+		config.DataBits = int(v)
+	} else if v, ok := settings["dataBits"].(int); ok {
+		config.DataBits = v
+	}
+	if v, ok := settings["stopBits"].(float64); ok {
+		config.StopBits = int(v)
+	} else if v, ok := settings["stopBits"].(int); ok {
+		config.StopBits = v
+	}
+	if v, ok := settings["parity"].(string); ok {
+		config.Parity = v
+	}
+
+	return config, nil
+}
+
+type ASCIIFactory struct {
+	BaseFactory
+}
+
+// ProtocolType はファクトリーが作成するプロトコルの種類を返す
+func (f *ASCIIFactory) ProtocolType() protocol.ProtocolType {
+	return protocol.ProtocolModbusASCII
+}
+
+// DisplayName はプロトコルの表示名を返す
+func (f *ASCIIFactory) DisplayName() string {
+	return "Modbus ASCII"
+}
+
+// CreateConfigFromVariant は設定を作成する（fixedVariant を使用）
+func (f *ASCIIFactory) CreateConfigFromVariant(_ string) protocol.ProtocolConfig {
+	return DefaultASCIIConfig()
+}
+
+// DefaultConfig はデフォルト設定を返す
+func (f *ASCIIFactory) DefaultConfig() protocol.ProtocolConfig {
+	return f.CreateConfigFromVariant("")
+}
+
+// ConfigVariants は利用可能な設定バリアントを返す（バリアントは固定なので1エントリのみ）
+func (f *ASCIIFactory) ConfigVariants() []protocol.ConfigVariant {
+	return []protocol.ConfigVariant{
+		{ID: string(VariantASCII), DisplayName: f.DisplayName()},
+	}
+}
+
+// GetConfigFields は設定フィールドを返す（fixedVariant を使用）
+func (f *ASCIIFactory) GetConfigFields(_ string) []protocol.ConfigField {
+	return []protocol.ConfigField{
+		{Name: "serialPort", Label: "シリアルポート", Description: "通信に使用するシリアルポート（例: COM1、COM3）。", Type: "serialport", Required: true, Default: "COM1", Category: "基本設定"},
+		{Name: "baudRate", Label: "ボーレート", Description: "シリアル通信の速度（bps）。接続先デバイスと一致させてください。", Type: "select", Required: true, Default: 115200, Category: "基本設定", Options: []protocol.FieldOption{
+			{Value: "9600", Label: "9600"},
+			{Value: "19200", Label: "19200"},
+			{Value: "38400", Label: "38400"},
+			{Value: "57600", Label: "57600"},
+			{Value: "115200", Label: "115200"},
+		}},
+		{Name: "dataBits", Label: "データビット", Description: "1フレームあたりのデータビット数。Modbus RTU は通常 8 ビットです。", Type: "select", Required: true, Default: 8, Category: "フレーム設定", Options: []protocol.FieldOption{
+			{Value: "7", Label: "7"},
+			{Value: "8", Label: "8"},
+		}},
+		{Name: "stopBits", Label: "ストップビット", Description: "フレーム末尾のストップビット数。", Type: "select", Required: true, Default: 1, Category: "フレーム設定", Options: []protocol.FieldOption{
+			{Value: "1", Label: "1"},
+			{Value: "2", Label: "2"},
+		}},
+		{Name: "parity", Label: "パリティ", Description: "エラー検出用のパリティビット。None（N）、Even（E）、Odd（O）から選択します。", Type: "select", Required: true, Default: "N", Category: "フレーム設定", Options: []protocol.FieldOption{
+			{Value: "N", Label: "None"},
+			{Value: "E", Label: "Even"},
+			{Value: "O", Label: "Odd"},
+		}},
+	}
+}
+
+// ConfigToMap は設定をmapに変換する
+func (f *ASCIIFactory) ConfigToMap(config protocol.ProtocolConfig) map[string]interface{} {
+	mc, ok := config.(*ModbusConfig)
+	if !ok {
+		return nil
+	}
+	result := make(map[string]interface{})
+	result["serialPort"] = mc.SerialPort
+	result["baudRate"] = mc.BaudRate
+	result["dataBits"] = mc.DataBits
+	result["stopBits"] = mc.StopBits
+	result["parity"] = mc.Parity
+	return result
+}
+
+// MapToConfig はmapから設定を作成する（fixedVariant を使用）
+func (f *ASCIIFactory) MapToConfig(_ string, settings map[string]interface{}) (protocol.ProtocolConfig, error) {
+	config := f.CreateConfigFromVariant("").(*ModbusConfig)
+
+	if v, ok := settings["serialPort"].(string); ok {
+		config.SerialPort = v
+	}
+	if v, ok := settings["baudRate"].(float64); ok {
+		config.BaudRate = int(v)
+	} else if v, ok := settings["baudRate"].(int); ok {
+		config.BaudRate = v
+	}
+	if v, ok := settings["dataBits"].(float64); ok {
+		config.DataBits = int(v)
+	} else if v, ok := settings["dataBits"].(int); ok {
+		config.DataBits = v
+	}
+	if v, ok := settings["stopBits"].(float64); ok {
+		config.StopBits = int(v)
+	} else if v, ok := settings["stopBits"].(int); ok {
+		config.StopBits = v
+	}
+	if v, ok := settings["parity"].(string); ok {
+		config.Parity = v
 	}
 
 	return config, nil
@@ -379,15 +456,7 @@ func (s *ModbusServer) Start(ctx context.Context) error {
 	}
 
 	// 内部サーバーを作成
-	s.innerServer = NewServerWithHandler(s.config, s.handler)
-
-	// イベントエミッターとセッションマネージャーを設定
-	if s.eventEmitter != nil {
-		s.innerServer.SetEventEmitter(s.eventEmitter)
-	}
-	if s.sessionManager != nil {
-		s.innerServer.SetSessionManager(s.sessionManager)
-	}
+	s.innerServer = NewServerWithHandler(s.config, s.handler, s.eventEmitter, s.sessionManager)
 
 	if err := s.innerServer.Start(); err != nil {
 		s.status = protocol.StatusError
@@ -462,22 +531,6 @@ func (s *ModbusServer) GetDisabledUnitIDs() []uint8 {
 // SetDisabledUnitIDs は無効化するUnitIDのリストを設定する
 func (s *ModbusServer) SetDisabledUnitIDs(ids []uint8) {
 	s.handler.SetDisabledUnitIDs(ids)
-}
-
-// SetEventEmitter はイベントエミッターを設定する
-func (s *ModbusServer) SetEventEmitter(emitter protocol.CommunicationEventEmitter) {
-	s.eventEmitter = emitter
-	if s.innerServer != nil {
-		s.innerServer.SetEventEmitter(emitter)
-	}
-}
-
-// SetSessionManager はセッションマネージャーを設定する
-func (s *ModbusServer) SetSessionManager(manager *protocol.SessionManager) {
-	s.sessionManager = manager
-	if s.innerServer != nil {
-		s.innerServer.SetSessionManager(manager)
-	}
 }
 
 // DataStoreHandler はDataStoreを使用するModbusハンドラー
