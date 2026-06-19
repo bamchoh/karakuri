@@ -10,6 +10,26 @@
       "preLaunchTask": "build",
       "cwd": "${workspaceFolder}",
       "env": {}
+    },
+    {
+      "name": "modbus-tcp-plugin: Debug myproject",
+      "type": "go",
+      "request": "launch",
+      "mode": "exec",
+      "program": "${workspaceFolder}/build/bin/plugins/modbus-tcp-plugin/modbus-plugin.exe",
+      "args": ["--debug"],
+      "preLaunchTask": "build",
+      "cwd": "${workspaceFolder}",
+      "env": {}
+    },
+    {
+      "name": "modbus-tcp-plugin: Debug test",
+      "type": "go",
+      "request": "launch",
+      "mode": "test",
+      "program": "${workspaceRoot}/cmd/modbus-plugin/internal/modbus",
+      "env": {},
+      "showLog": true
     }
   ]
 }
