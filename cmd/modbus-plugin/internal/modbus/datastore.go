@@ -1,6 +1,7 @@
 package modbus
 
 import (
+	"fmt"
 	"sync"
 
 	"modbus_simulator/internal/domain/datastore"
@@ -100,48 +101,21 @@ func (s *ModbusDataStore) GetAreas() []protocol.MemoryArea {
 
 // ReadBit はビット値を読み込む
 func (s *ModbusDataStore) ReadBit(area string, address uint32) (bool, error) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-
-	switch area {
-	case AreaCoils:
-		if int(address) >= len(s.coils) {
-			return false, datastore.ErrAddressOutOfRange
-		}
-		return s.coils[address], nil
-	case AreaDiscreteInputs:
-		if int(address) >= len(s.discreteInputs) {
-			return false, datastore.ErrAddressOutOfRange
-		}
-		return s.discreteInputs[address], nil
-	default:
-		return false, datastore.ErrAreaNotFound
+	values, err := s.ReadBits(area, address, 1)
+	if err != nil {
+		return false, err
 	}
+
+	if len(values) != 1 {
+		return false, fmt.Errorf("expected 1 bit, got %d", len(values))
+	}
+
+	return values[0], nil
 }
 
 // WriteBit はビット値を書き込む
 func (s *ModbusDataStore) WriteBit(area string, address uint32, value bool) error {
-	s.mu.Lock()
-	switch area {
-	case AreaCoils:
-		if int(address) >= len(s.coils) {
-			s.mu.Unlock()
-			return datastore.ErrAddressOutOfRange
-		}
-		s.coils[address] = value
-	case AreaDiscreteInputs:
-		if int(address) >= len(s.discreteInputs) {
-			s.mu.Unlock()
-			return datastore.ErrAddressOutOfRange
-		}
-		s.discreteInputs[address] = value
-	default:
-		s.mu.Unlock()
-		return datastore.ErrAreaNotFound
-	}
-	s.mu.Unlock()
-	s.callChangeHook(area, address, nil, true, []bool{value})
-	return nil
+	return s.WriteBits(area, address, []bool{value})
 }
 
 // ReadBits は複数のビット値を読み込む
@@ -164,14 +138,21 @@ func (s *ModbusDataStore) ReadBits(area string, address uint32, count uint16) ([
 		result := make([]bool, count)
 		copy(result, s.discreteInputs[address:address+uint32(count)])
 		return result, nil
+
+	case AreaHoldingRegs:
+		return readRegisterBits(s.holdingRegs, address, count)
+
+	case AreaInputRegs:
+		return readRegisterBits(s.inputRegs, address, count)
+
 	default:
 		return nil, datastore.ErrAreaNotFound
 	}
 }
 
-// WriteBits は複数のビット値を書き込む
 func (s *ModbusDataStore) WriteBits(area string, address uint32, values []bool) error {
 	s.mu.Lock()
+
 	switch area {
 	case AreaCoils:
 		if int(address)+len(values) > len(s.coils) {
@@ -179,65 +160,69 @@ func (s *ModbusDataStore) WriteBits(area string, address uint32, values []bool) 
 			return datastore.ErrAddressOutOfRange
 		}
 		copy(s.coils[address:], values)
+
 	case AreaDiscreteInputs:
 		if int(address)+len(values) > len(s.discreteInputs) {
 			s.mu.Unlock()
 			return datastore.ErrAddressOutOfRange
 		}
 		copy(s.discreteInputs[address:], values)
+
+	case AreaHoldingRegs:
+		if err := checkRegisterBitRange(s.holdingRegs, address, len(values)); err != nil {
+			s.mu.Unlock()
+			return err
+		}
+
+		for i, bit := range values {
+			if err := setRegisterBit(s.holdingRegs, address+uint32(i), bit); err != nil {
+				s.mu.Unlock()
+				return err
+			}
+		}
+
+	case AreaInputRegs:
+		if err := checkRegisterBitRange(s.inputRegs, address, len(values)); err != nil {
+			s.mu.Unlock()
+			return err
+		}
+
+		for i, bit := range values {
+			if err := setRegisterBit(s.inputRegs, address+uint32(i), bit); err != nil {
+				s.mu.Unlock()
+				return err
+			}
+		}
+
 	default:
 		s.mu.Unlock()
 		return datastore.ErrAreaNotFound
 	}
+
 	s.mu.Unlock()
+
 	s.callChangeHook(area, address, nil, true, values)
+
 	return nil
 }
 
 // ReadWord はワード値を読み込む
 func (s *ModbusDataStore) ReadWord(area string, address uint32) (uint16, error) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-
-	switch area {
-	case AreaHoldingRegs:
-		if int(address) >= len(s.holdingRegs) {
-			return 0, datastore.ErrAddressOutOfRange
-		}
-		return s.holdingRegs[address], nil
-	case AreaInputRegs:
-		if int(address) >= len(s.inputRegs) {
-			return 0, datastore.ErrAddressOutOfRange
-		}
-		return s.inputRegs[address], nil
-	default:
-		return 0, datastore.ErrAreaNotFound
+	values, err := s.ReadWords(area, address, 1)
+	if err != nil {
+		return 0, err
 	}
+
+	if len(values) != 1 {
+		return 0, fmt.Errorf("expected 1 word, got %d", len(values))
+	}
+
+	return values[0], nil
 }
 
 // WriteWord はワード値を書き込む
 func (s *ModbusDataStore) WriteWord(area string, address uint32, value uint16) error {
-	s.mu.Lock()
-	switch area {
-	case AreaHoldingRegs:
-		if int(address) >= len(s.holdingRegs) {
-			s.mu.Unlock()
-			return datastore.ErrAddressOutOfRange
-		}
-		s.holdingRegs[address] = value
-	case AreaInputRegs:
-		if int(address) >= len(s.inputRegs) {
-			s.mu.Unlock()
-			return datastore.ErrAddressOutOfRange
-		}
-		s.inputRegs[address] = value
-	default:
-		s.mu.Unlock()
-		return datastore.ErrAreaNotFound
-	}
-	s.mu.Unlock()
-	s.callChangeHook(area, address, []uint16{value}, false, nil)
-	return nil
+	return s.WriteWords(area, address, []uint16{value})
 }
 
 // ReadWords は複数のワード値を読み込む
@@ -260,6 +245,21 @@ func (s *ModbusDataStore) ReadWords(area string, address uint32, count uint16) (
 		result := make([]uint16, count)
 		copy(result, s.inputRegs[address:address+uint32(count)])
 		return result, nil
+	case AreaCoils:
+		end := int(address) + int(count)*16
+		if end > len(s.coils) {
+			return nil, datastore.ErrAddressOutOfRange
+		}
+		result := packBitsToWords(s.coils[address:uint32(end)])
+		return result, nil
+	case AreaDiscreteInputs:
+		end := int(address) + int(count)*16
+
+		if end > len(s.discreteInputs) {
+			return nil, datastore.ErrAddressOutOfRange
+		}
+		result := packBitsToWords(s.discreteInputs[address:uint32(end)])
+		return result, nil
 	default:
 		return nil, datastore.ErrAreaNotFound
 	}
@@ -268,6 +268,9 @@ func (s *ModbusDataStore) ReadWords(area string, address uint32, count uint16) (
 // WriteWords は複数のワード値を書き込む
 func (s *ModbusDataStore) WriteWords(area string, address uint32, values []uint16) error {
 	s.mu.Lock()
+
+	var changeBits []bool
+
 	switch area {
 	case AreaHoldingRegs:
 		if int(address)+len(values) > len(s.holdingRegs) {
@@ -281,12 +284,36 @@ func (s *ModbusDataStore) WriteWords(area string, address uint32, values []uint1
 			return datastore.ErrAddressOutOfRange
 		}
 		copy(s.inputRegs[address:], values)
+
+	case AreaCoils:
+		if int(address)+len(values)*16 > len(s.coils) {
+			s.mu.Unlock()
+			return datastore.ErrAddressOutOfRange
+		}
+
+		changeBits = unpackWordsToBits(values)
+		copy(s.coils[address:], changeBits)
+	case AreaDiscreteInputs:
+		if int(address)+len(values)*16 > len(s.discreteInputs) {
+			s.mu.Unlock()
+			return datastore.ErrAddressOutOfRange
+		}
+
+		changeBits = unpackWordsToBits(values)
+		copy(s.discreteInputs[address:], changeBits)
 	default:
 		s.mu.Unlock()
 		return datastore.ErrAreaNotFound
 	}
 	s.mu.Unlock()
-	s.callChangeHook(area, address, values, false, nil)
+
+	switch area {
+	case AreaHoldingRegs, AreaInputRegs:
+		s.callChangeHook(area, address, values, false, nil)
+
+	case AreaCoils, AreaDiscreteInputs:
+		s.callChangeHook(area, address, nil, true, changeBits)
+	}
 	return nil
 }
 
@@ -382,154 +409,105 @@ func (s *ModbusDataStore) ClearAll() {
 	}
 }
 
-// === 旧RegisterStoreとの互換性のためのメソッド ===
+func unpackWordsToBits(words []uint16) []bool {
+	bits := make([]bool, 0, len(words)*16)
 
-// GetCoil はコイルの値を取得する
-func (s *ModbusDataStore) GetCoil(address uint16) (bool, error) {
-	return s.ReadBit(AreaCoils, uint32(address))
-}
-
-// SetCoil はコイルの値を設定する
-func (s *ModbusDataStore) SetCoil(address uint16, value bool) error {
-	return s.WriteBit(AreaCoils, uint32(address), value)
-}
-
-// GetCoils は複数のコイルの値を取得する
-func (s *ModbusDataStore) GetCoils(address uint16, count uint16) ([]bool, error) {
-	return s.ReadBits(AreaCoils, uint32(address), count)
-}
-
-// SetCoils は複数のコイルの値を設定する
-func (s *ModbusDataStore) SetCoils(address uint16, values []bool) error {
-	return s.WriteBits(AreaCoils, uint32(address), values)
-}
-
-// GetDiscreteInput はディスクリート入力の値を取得する
-func (s *ModbusDataStore) GetDiscreteInput(address uint16) (bool, error) {
-	return s.ReadBit(AreaDiscreteInputs, uint32(address))
-}
-
-// SetDiscreteInput はディスクリート入力の値を設定する
-func (s *ModbusDataStore) SetDiscreteInput(address uint16, value bool) error {
-	return s.WriteBit(AreaDiscreteInputs, uint32(address), value)
-}
-
-// GetDiscreteInputs は複数のディスクリート入力の値を取得する
-func (s *ModbusDataStore) GetDiscreteInputs(address uint16, count uint16) ([]bool, error) {
-	return s.ReadBits(AreaDiscreteInputs, uint32(address), count)
-}
-
-// GetHoldingRegister は保持レジスタの値を取得する
-func (s *ModbusDataStore) GetHoldingRegister(address uint16) (uint16, error) {
-	return s.ReadWord(AreaHoldingRegs, uint32(address))
-}
-
-// SetHoldingRegister は保持レジスタの値を設定する
-func (s *ModbusDataStore) SetHoldingRegister(address uint16, value uint16) error {
-	return s.WriteWord(AreaHoldingRegs, uint32(address), value)
-}
-
-// GetHoldingRegisters は複数の保持レジスタの値を取得する
-func (s *ModbusDataStore) GetHoldingRegisters(address uint16, count uint16) ([]uint16, error) {
-	return s.ReadWords(AreaHoldingRegs, uint32(address), count)
-}
-
-// SetHoldingRegisters は複数の保持レジスタの値を設定する
-func (s *ModbusDataStore) SetHoldingRegisters(address uint16, values []uint16) error {
-	return s.WriteWords(AreaHoldingRegs, uint32(address), values)
-}
-
-// GetInputRegister は入力レジスタの値を取得する
-func (s *ModbusDataStore) GetInputRegister(address uint16) (uint16, error) {
-	return s.ReadWord(AreaInputRegs, uint32(address))
-}
-
-// SetInputRegister は入力レジスタの値を設定する
-func (s *ModbusDataStore) SetInputRegister(address uint16, value uint16) error {
-	return s.WriteWord(AreaInputRegs, uint32(address), value)
-}
-
-// GetInputRegisters は複数の入力レジスタの値を取得する
-func (s *ModbusDataStore) GetInputRegisters(address uint16, count uint16) ([]uint16, error) {
-	return s.ReadWords(AreaInputRegs, uint32(address), count)
-}
-
-// GetAllCoils は全てのコイルを取得する
-func (s *ModbusDataStore) GetAllCoils() []bool {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	result := make([]bool, len(s.coils))
-	copy(result, s.coils)
-	return result
-}
-
-// GetAllDiscreteInputs は全てのディスクリート入力を取得する
-func (s *ModbusDataStore) GetAllDiscreteInputs() []bool {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	result := make([]bool, len(s.discreteInputs))
-	copy(result, s.discreteInputs)
-	return result
-}
-
-// GetAllHoldingRegisters は全ての保持レジスタを取得する
-func (s *ModbusDataStore) GetAllHoldingRegisters() []uint16 {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	result := make([]uint16, len(s.holdingRegs))
-	copy(result, s.holdingRegs)
-	return result
-}
-
-// GetAllInputRegisters は全ての入力レジスタを取得する
-func (s *ModbusDataStore) GetAllInputRegisters() []uint16 {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	result := make([]uint16, len(s.inputRegs))
-	copy(result, s.inputRegs)
-	return result
-}
-
-// SetAllCoils は全てのコイルを設定する
-func (s *ModbusDataStore) SetAllCoils(values []bool) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	count := len(values)
-	if count > len(s.coils) {
-		count = len(s.coils)
+	for _, word := range words {
+		bits = append(bits, unpackWordToBits(word)...)
 	}
-	copy(s.coils, values[:count])
+
+	return bits
 }
 
-// SetAllDiscreteInputs は全てのディスクリート入力を設定する
-func (s *ModbusDataStore) SetAllDiscreteInputs(values []bool) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	count := len(values)
-	if count > len(s.discreteInputs) {
-		count = len(s.discreteInputs)
+func unpackWordToBits(word uint16) []bool {
+	bits := make([]bool, 16)
+
+	for i := 0; i < 16; i++ {
+		bits[i] = (word & (1 << i)) != 0
 	}
-	copy(s.discreteInputs, values[:count])
+
+	return bits
 }
 
-// SetAllHoldingRegisters は全ての保持レジスタを設定する
-func (s *ModbusDataStore) SetAllHoldingRegisters(values []uint16) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	count := len(values)
-	if count > len(s.holdingRegs) {
-		count = len(s.holdingRegs)
+func packBitsToWords(bits []bool) []uint16 {
+	wordCount := (len(bits) + 15) / 16
+
+	words := make([]uint16, wordCount)
+
+	for i := 0; i < wordCount; i++ {
+		start := i * 16
+		end := start + 16
+
+		if end > len(bits) {
+			end = len(bits)
+		}
+
+		words[i] = packBitsToWord(bits[start:end])
 	}
-	copy(s.holdingRegs, values[:count])
+
+	return words
 }
 
-// SetAllInputRegisters は全ての入力レジスタを設定する
-func (s *ModbusDataStore) SetAllInputRegisters(values []uint16) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	count := len(values)
-	if count > len(s.inputRegs) {
-		count = len(s.inputRegs)
+func packBitsToWord(bits []bool) uint16 {
+	var word uint16
+
+	for i := 0; i < len(bits) && i < 16; i++ {
+		if bits[i] {
+			word |= 1 << i
+		}
 	}
-	copy(s.inputRegs, values[:count])
+
+	return word
+}
+
+func readRegisterBits(regs []uint16, address uint32, count uint16) ([]bool, error) {
+	result := make([]bool, count)
+
+	for i := uint16(0); i < count; i++ {
+		bit, err := getRegisterBit(regs, address+uint32(i))
+		if err != nil {
+			return nil, err
+		}
+
+		result[i] = bit
+	}
+
+	return result, nil
+}
+
+func getRegisterBit(regs []uint16, bitAddr uint32) (bool, error) {
+	wordIndex := bitAddr / 16
+	bitIndex := bitAddr % 16
+
+	if int(wordIndex) >= len(regs) {
+		return false, datastore.ErrAddressOutOfRange
+	}
+
+	return (regs[wordIndex] & (1 << bitIndex)) != 0, nil
+}
+
+func setRegisterBit(regs []uint16, bitAddr uint32, value bool) error {
+	wordIndex := bitAddr / 16
+	bitIndex := bitAddr % 16
+
+	if int(wordIndex) >= len(regs) {
+		return datastore.ErrAddressOutOfRange
+	}
+
+	mask := uint16(1 << bitIndex)
+
+	if value {
+		regs[wordIndex] |= mask
+	} else {
+		regs[wordIndex] &^= mask
+	}
+
+	return nil
+}
+
+func checkRegisterBitRange(regs []uint16, address uint32, count int) error {
+	if int(address)+count > len(regs)*16 {
+		return datastore.ErrAddressOutOfRange
+	}
+	return nil
 }

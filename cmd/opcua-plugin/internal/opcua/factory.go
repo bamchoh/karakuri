@@ -17,11 +17,6 @@ type OpcuaServerFactory struct {
 	accessor protocol.VariableStoreAccessor // AddServer 時に遅延注入
 }
 
-func init() {
-	// init() でアクセサーなしで登録し、後から PLCService.AddServer() で注入する
-	protocol.Register(&OpcuaServerFactory{})
-}
-
 // InjectVariableStore は VariableStoreInjector インターフェースの実装
 func (f *OpcuaServerFactory) InjectVariableStore(accessor protocol.VariableStoreAccessor) {
 	f.mu.Lock()

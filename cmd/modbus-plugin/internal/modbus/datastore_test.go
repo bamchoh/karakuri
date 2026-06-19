@@ -1,6 +1,7 @@
 package modbus
 
 import (
+	"reflect"
 	"testing"
 
 	"modbus_simulator/internal/domain/datastore"
@@ -49,49 +50,111 @@ func TestModbusDataStore_GetAreas(t *testing.T) {
 }
 
 func TestModbusDataStore_ReadWriteBit(t *testing.T) {
+	tests := []struct {
+		name    string
+		area    string
+		address uint32
+	}{
+		{
+			name:    "coil",
+			area:    AreaCoils,
+			address: 10,
+		},
+		{
+			name:    "discrete input",
+			area:    AreaDiscreteInputs,
+			address: 5,
+		},
+		{
+			name:    "holding register bit0",
+			area:    AreaHoldingRegs,
+			address: 0,
+		},
+		{
+			name:    "holding register bit15",
+			area:    AreaHoldingRegs,
+			address: 15,
+		},
+		{
+			name:    "holding register bit16",
+			area:    AreaHoldingRegs,
+			address: 16,
+		},
+		{
+			name:    "input register bit0",
+			area:    AreaInputRegs,
+			address: 0,
+		},
+		{
+			name:    "input register bit31",
+			area:    AreaInputRegs,
+			address: 31,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			store := NewModbusDataStore(100, 50, 200, 150)
+
+			if err := store.WriteBit(tt.area, tt.address, true); err != nil {
+				t.Fatalf("WriteBit failed: %v", err)
+			}
+
+			got, err := store.ReadBit(tt.area, tt.address)
+			if err != nil {
+				t.Fatalf("ReadBit failed: %v", err)
+			}
+
+			if !got {
+				t.Fatal("expected true, got false")
+			}
+		})
+	}
+}
+
+func TestHoldingRegisterBitsAreIndependent(t *testing.T) {
 	store := NewModbusDataStore(100, 50, 200, 150)
 
-	// コイルへの書き込みと読み取り
-	err := store.WriteBit(AreaCoils, 10, true)
-	if err != nil {
-		t.Fatalf("WriteBit failed: %v", err)
+	if err := store.WriteBit(AreaHoldingRegs, 0, true); err != nil {
+		t.Fatal(err)
 	}
 
-	val, err := store.ReadBit(AreaCoils, 10)
+	v, err := store.ReadWord(AreaHoldingRegs, 0)
 	if err != nil {
-		t.Fatalf("ReadBit failed: %v", err)
-	}
-	if !val {
-		t.Error("expected true, got false")
+		t.Fatal(err)
 	}
 
-	// ディスクリート入力への書き込みと読み取り
-	err = store.WriteBit(AreaDiscreteInputs, 5, true)
-	if err != nil {
-		t.Fatalf("WriteBit failed: %v", err)
-	}
-
-	val, err = store.ReadBit(AreaDiscreteInputs, 5)
-	if err != nil {
-		t.Fatalf("ReadBit failed: %v", err)
-	}
-	if !val {
-		t.Error("expected true, got false")
+	if v != 0x0001 {
+		t.Fatalf("expected 0x0001, got 0x%04x", v)
 	}
 }
 
 func TestModbusDataStore_ReadWriteBit_OutOfRange(t *testing.T) {
-	store := NewModbusDataStore(100, 50, 200, 150)
-
-	// 範囲外アクセス
-	_, err := store.ReadBit(AreaCoils, 100)
-	if err != datastore.ErrAddressOutOfRange {
-		t.Errorf("expected ErrAddressOutOfRange, got %v", err)
+	tests := []struct {
+		name    string
+		area    string
+		address uint32
+	}{
+		{"coil", AreaCoils, 100},
+		{"discrete", AreaDiscreteInputs, 50},
+		{"holding", AreaHoldingRegs, 200 * 16},
+		{"input", AreaInputRegs, 150 * 16},
 	}
 
-	err = store.WriteBit(AreaCoils, 100, true)
-	if err != datastore.ErrAddressOutOfRange {
-		t.Errorf("expected ErrAddressOutOfRange, got %v", err)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			store := NewModbusDataStore(100, 50, 200, 150)
+
+			_, err := store.ReadBit(tt.area, tt.address)
+			if err != datastore.ErrAddressOutOfRange {
+				t.Fatalf("expected ErrAddressOutOfRange, got %v", err)
+			}
+
+			err = store.WriteBit(tt.area, tt.address, true)
+			if err != datastore.ErrAddressOutOfRange {
+				t.Fatalf("expected ErrAddressOutOfRange, got %v", err)
+			}
+		})
 	}
 }
 
@@ -111,87 +174,477 @@ func TestModbusDataStore_ReadWriteBit_AreaNotFound(t *testing.T) {
 }
 
 func TestModbusDataStore_ReadWriteBits(t *testing.T) {
+	tests := []struct {
+		name    string
+		area    string
+		address uint32
+		values  []bool
+	}{
+		{
+			name:    "coils",
+			area:    AreaCoils,
+			address: 10,
+			values:  []bool{true, false, true, true, false},
+		},
+		{
+			name:    "discrete inputs",
+			area:    AreaDiscreteInputs,
+			address: 10,
+			values:  []bool{true, false, true, true, false},
+		},
+		{
+			name:    "holding regs",
+			area:    AreaHoldingRegs,
+			address: 10,
+			values:  []bool{true, false, true, true, false},
+		},
+		{
+			name:    "input regs",
+			area:    AreaInputRegs,
+			address: 10,
+			values:  []bool{true, false, true, true, false},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			store := NewModbusDataStore(100, 50, 200, 150)
+
+			err := store.WriteBits(tt.area, tt.address, tt.values)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			got, err := store.ReadBits(tt.area, tt.address, uint16(len(tt.values)))
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			if !reflect.DeepEqual(got, tt.values) {
+				t.Fatalf("expected %v, got %v", tt.values, got)
+			}
+		})
+	}
+}
+
+func TestModbusDataStore_RegisterBitBoundary(t *testing.T) {
 	store := NewModbusDataStore(100, 50, 200, 150)
 
-	// 複数ビットの書き込み
-	values := []bool{true, false, true, true, false}
-	err := store.WriteBits(AreaCoils, 10, values)
+	err := store.WriteBits(
+		AreaHoldingRegs,
+		15,
+		[]bool{true, true},
+	)
 	if err != nil {
-		t.Fatalf("WriteBits failed: %v", err)
+		t.Fatal(err)
 	}
 
-	// 複数ビットの読み取り
-	got, err := store.ReadBits(AreaCoils, 10, 5)
+	v0, err := store.ReadWord(AreaHoldingRegs, 0)
 	if err != nil {
-		t.Fatalf("ReadBits failed: %v", err)
+		t.Fatal(err)
 	}
 
-	for i, v := range values {
-		if got[i] != v {
-			t.Errorf("bit %d: expected %v, got %v", i, v, got[i])
-		}
+	v1, err := store.ReadWord(AreaHoldingRegs, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if v0 != 0x8000 {
+		t.Fatalf("word0 expected 0x8000 got 0x%04x", v0)
+	}
+
+	if v1 != 0x0001 {
+		t.Fatalf("word1 expected 0x0001 got 0x%04x", v1)
+	}
+}
+
+func TestModbusDataStore_WriteWordThenReadBits(t *testing.T) {
+	store := NewModbusDataStore(100, 50, 200, 150)
+
+	err := store.WriteWord(AreaHoldingRegs, 0, 0xABCD)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	bits, err := store.ReadBits(AreaHoldingRegs, 0, 16)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if packBitsToWord(bits) != 0xABCD {
+		t.Fatalf(
+			"expected 0xABCD got 0x%04X",
+			packBitsToWord(bits),
+		)
+	}
+}
+
+func TestModbusDataStore_WriteBitsThenReadWord(t *testing.T) {
+	tests := []struct {
+		name     string
+		area     string
+		bits     []bool
+		expected uint16
+	}{
+		{
+			name: "holding register",
+			area: AreaHoldingRegs,
+			bits: []bool{
+				true, false, true, false,
+				true, false, true, false,
+				true, false, true, false,
+				true, false, true, false,
+			},
+			expected: 0x5555,
+		},
+		{
+			name: "input register",
+			area: AreaInputRegs,
+			bits: []bool{
+				false, true, false, true,
+				false, true, false, true,
+				false, true, false, true,
+				false, true, false, true,
+			},
+			expected: 0xAAAA,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			store := NewModbusDataStore(100, 100, 100, 100)
+
+			err := store.WriteBits(tt.area, 0, tt.bits)
+			if err != nil {
+				t.Fatalf("WriteBits failed: %v", err)
+			}
+
+			word, err := store.ReadWord(tt.area, 0)
+			if err != nil {
+				t.Fatalf("ReadWord failed: %v", err)
+			}
+
+			if word != tt.expected {
+				t.Fatalf(
+					"expected 0x%04X, got 0x%04X",
+					tt.expected,
+					word,
+				)
+			}
+		})
 	}
 }
 
 func TestModbusDataStore_ReadWriteBits_OutOfRange(t *testing.T) {
-	store := NewModbusDataStore(100, 50, 200, 150)
-
-	// 範囲外アクセス（終了アドレスが範囲外）
-	_, err := store.ReadBits(AreaCoils, 95, 10)
-	if err != datastore.ErrAddressOutOfRange {
-		t.Errorf("expected ErrAddressOutOfRange, got %v", err)
+	tests := []struct {
+		name    string
+		area    string
+		address uint32
+		count   uint16
+		values  []bool
+	}{
+		{
+			name:    "coils read out of range",
+			area:    AreaCoils,
+			address: 95,
+			count:   10,
+		},
+		{
+			name:    "coils write out of range",
+			area:    AreaCoils,
+			address: 95,
+			values:  []bool{true, true, true, true, true, true},
+		},
+		{
+			name:    "discrete inputs read out of range",
+			area:    AreaDiscreteInputs,
+			address: 145,
+			count:   10,
+		},
+		{
+			name:    "discrete inputs write out of range",
+			area:    AreaDiscreteInputs,
+			address: 145,
+			values:  []bool{true, true, true, true, true, true},
+		},
 	}
 
-	err = store.WriteBits(AreaCoils, 95, []bool{true, true, true, true, true, true})
-	if err != datastore.ErrAddressOutOfRange {
-		t.Errorf("expected ErrAddressOutOfRange, got %v", err)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			store := NewModbusDataStore(100, 50, 200, 150)
+
+			if tt.count > 0 {
+				_, err := store.ReadBits(tt.area, tt.address, tt.count)
+				if err != datastore.ErrAddressOutOfRange {
+					t.Fatalf("expected ErrAddressOutOfRange, got %v", err)
+				}
+			}
+
+			if tt.values != nil {
+				err := store.WriteBits(tt.area, tt.address, tt.values)
+				if err != datastore.ErrAddressOutOfRange {
+					t.Fatalf("expected ErrAddressOutOfRange, got %v", err)
+				}
+			}
+		})
+	}
+}
+
+func TestModbusDataStore_ReadWriteBits_Boundary(t *testing.T) {
+	tests := []struct {
+		name      string
+		area      string
+		address   uint32
+		count     uint16
+		shouldErr bool
+	}{
+		{
+			name:      "coils last valid bit",
+			area:      AreaCoils,
+			address:   199,
+			count:     1,
+			shouldErr: false,
+		},
+		{
+			name:      "coils first invalid bit",
+			area:      AreaCoils,
+			address:   200,
+			count:     1,
+			shouldErr: true,
+		},
+		{
+			name:      "coils exact end",
+			area:      AreaCoils,
+			address:   195,
+			count:     5,
+			shouldErr: false,
+		},
+		{
+			name:      "coils beyond end",
+			area:      AreaCoils,
+			address:   195,
+			count:     6,
+			shouldErr: true,
+		},
+		{
+			name:      "discrete inputs exact end",
+			area:      AreaDiscreteInputs,
+			address:   145,
+			count:     5,
+			shouldErr: false,
+		},
+		{
+			name:      "discrete inputs beyond end",
+			area:      AreaDiscreteInputs,
+			address:   145,
+			count:     6,
+			shouldErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			store := NewModbusDataStore(200, 150, 200, 150)
+
+			_, err := store.ReadBits(tt.area, tt.address, tt.count)
+
+			if tt.shouldErr {
+				if err != datastore.ErrAddressOutOfRange {
+					t.Fatalf("expected ErrAddressOutOfRange, got %v", err)
+				}
+			} else {
+				if err != nil {
+					t.Fatalf("unexpected error: %v", err)
+				}
+			}
+		})
 	}
 }
 
 func TestModbusDataStore_ReadWriteWord(t *testing.T) {
-	store := NewModbusDataStore(100, 50, 200, 150)
-
-	// 保持レジスタへの書き込みと読み取り
-	err := store.WriteWord(AreaHoldingRegs, 10, 0x1234)
-	if err != nil {
-		t.Fatalf("WriteWord failed: %v", err)
+	tests := []struct {
+		name    string
+		area    string
+		address uint32
+		value   uint16
+	}{
+		{
+			name:    "holding (any address)",
+			area:    AreaHoldingRegs,
+			address: 10,
+			value:   0x1234,
+		},
+		{
+			name:    "holding (max address)",
+			area:    AreaHoldingRegs,
+			address: 199,
+			value:   0xABCD,
+		},
+		{
+			name:    "input (any address)",
+			area:    AreaInputRegs,
+			address: 5,
+			value:   0xABCD,
+		},
+		{
+			name:    "input (max address)",
+			area:    AreaInputRegs,
+			address: 149,
+			value:   0x1234,
+		},
+		{
+			name:    "coil (any address)",
+			area:    AreaCoils,
+			address: 10,
+			value:   0x2345,
+		},
+		{
+			name:    "coil (max address)",
+			area:    AreaCoils,
+			address: 84,
+			value:   0xBCDE,
+		},
+		{
+			name:    "discrete input (any address)",
+			area:    AreaCoils,
+			address: 10,
+			value:   0x3456,
+		},
+		{
+			name:    "discrete input (max address)",
+			area:    AreaCoils,
+			address: 34,
+			value:   0xCDEF,
+		},
 	}
 
-	val, err := store.ReadWord(AreaHoldingRegs, 10)
-	if err != nil {
-		t.Fatalf("ReadWord failed: %v", err)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			store := NewModbusDataStore(100, 50, 200, 150)
+
+			err := store.WriteWord(tt.area, tt.address, tt.value)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			got, err := store.ReadWord(tt.area, tt.address)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			if got != tt.value {
+				t.Errorf("expected 0x%04x, got 0x%04x", tt.value, got)
+			}
+		})
 	}
-	if val != 0x1234 {
-		t.Errorf("expected 0x1234, got 0x%04x", val)
+}
+
+func TestModbusDataStore_ReadWriteWord_Areas_AreIndependent(t *testing.T) {
+	tests := []struct {
+		name          string
+		targetArea    string
+		affectedAreas []string
+		address       uint32
+		value         uint16
+	}{
+		{
+			name:          "holding registers are isolated",
+			targetArea:    AreaHoldingRegs,
+			affectedAreas: []string{AreaInputRegs, AreaCoils, AreaDiscreteInputs},
+			address:       0,
+			value:         0x1234,
+		},
+		{
+			name:          "input registers are isolated",
+			targetArea:    AreaInputRegs,
+			affectedAreas: []string{AreaHoldingRegs, AreaCoils, AreaDiscreteInputs},
+			address:       0,
+			value:         0x1234,
+		},
+		{
+			name:          "coils are isolated",
+			targetArea:    AreaCoils,
+			affectedAreas: []string{AreaInputRegs, AreaHoldingRegs, AreaDiscreteInputs},
+			address:       0,
+			value:         0x1234,
+		},
+		{
+			name:          "descrete inputs are isolated",
+			targetArea:    AreaDiscreteInputs,
+			affectedAreas: []string{AreaInputRegs, AreaCoils, AreaHoldingRegs},
+			address:       0,
+			value:         0x1234,
+		},
 	}
 
-	// 入力レジスタへの書き込みと読み取り
-	err = store.WriteWord(AreaInputRegs, 5, 0xABCD)
-	if err != nil {
-		t.Fatalf("WriteWord failed: %v", err)
-	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			store := NewModbusDataStore(100, 50, 200, 150)
 
-	val, err = store.ReadWord(AreaInputRegs, 5)
-	if err != nil {
-		t.Fatalf("ReadWord failed: %v", err)
-	}
-	if val != 0xABCD {
-		t.Errorf("expected 0xABCD, got 0x%04x", val)
+			store.WriteWord(tt.targetArea, tt.address, tt.value)
+
+			for _, affectedArea := range tt.affectedAreas {
+				if val, _ := store.ReadWord(affectedArea, 0); val != 0 {
+					t.Fatalf(
+						"write to %s affected %s",
+						tt.targetArea,
+						affectedArea,
+					)
+				}
+			}
+		})
 	}
 }
 
 func TestModbusDataStore_ReadWriteWord_OutOfRange(t *testing.T) {
-	store := NewModbusDataStore(100, 50, 200, 150)
-
-	// 範囲外アクセス
-	_, err := store.ReadWord(AreaHoldingRegs, 200)
-	if err != datastore.ErrAddressOutOfRange {
-		t.Errorf("expected ErrAddressOutOfRange, got %v", err)
+	tests := []struct {
+		name    string
+		area    string
+		address uint32
+		value   uint16
+	}{
+		{
+			name:    "holding registers",
+			area:    AreaHoldingRegs,
+			address: 200,
+			value:   0x1234,
+		},
+		{
+			name:    "input registers",
+			area:    AreaInputRegs,
+			address: 150,
+			value:   0x1234,
+		},
+		{
+			name:    "coils",
+			area:    AreaCoils,
+			address: 85,
+			value:   0x1234,
+		},
+		{
+			name:    "descrete",
+			area:    AreaDiscreteInputs,
+			address: 35,
+			value:   0x1234,
+		},
 	}
 
-	err = store.WriteWord(AreaHoldingRegs, 200, 0x1234)
-	if err != datastore.ErrAddressOutOfRange {
-		t.Errorf("expected ErrAddressOutOfRange, got %v", err)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+
+			store := NewModbusDataStore(100, 50, 200, 150)
+
+			// 範囲外アクセス
+			_, err := store.ReadWord(tt.area, tt.address)
+			if err != datastore.ErrAddressOutOfRange {
+				t.Errorf("expected ErrAddressOutOfRange, got %v", err)
+			}
+
+			err = store.WriteWord(tt.area, tt.address, tt.value)
+			if err != datastore.ErrAddressOutOfRange {
+				t.Errorf("expected ErrAddressOutOfRange, got %v", err)
+			}
+		})
 	}
 }
 
@@ -211,40 +664,150 @@ func TestModbusDataStore_ReadWriteWord_AreaNotFound(t *testing.T) {
 }
 
 func TestModbusDataStore_ReadWriteWords(t *testing.T) {
-	store := NewModbusDataStore(100, 50, 200, 150)
-
-	// 複数ワードの書き込み
-	values := []uint16{0x1111, 0x2222, 0x3333, 0x4444, 0x5555}
-	err := store.WriteWords(AreaHoldingRegs, 10, values)
-	if err != nil {
-		t.Fatalf("WriteWords failed: %v", err)
+	tests := []struct {
+		name    string
+		area    string
+		address uint32
+		count   uint16
+		values  []uint16
+	}{
+		{
+			name:    "holding registers (any address)",
+			area:    AreaHoldingRegs,
+			address: 10,
+			count:   5,
+			values:  []uint16{0x1111, 0x2222, 0x3333, 0x4444, 0x5555},
+		},
+		{
+			name:    "holding registers (max address)",
+			area:    AreaHoldingRegs,
+			address: 195,
+			count:   5,
+			values:  []uint16{0x1111, 0x2222, 0x3333, 0x4444, 0x5555},
+		},
+		{
+			name:    "input registers (any address)",
+			area:    AreaInputRegs,
+			address: 20,
+			count:   5,
+			values:  []uint16{0x1111, 0x2222, 0x3333, 0x4444, 0x5555},
+		},
+		{
+			name:    "input registers (max address)",
+			area:    AreaInputRegs,
+			address: 145,
+			count:   5,
+			values:  []uint16{0x1111, 0x2222, 0x3333, 0x4444, 0x5555},
+		},
+		{
+			name:    "coils (any address)",
+			area:    AreaCoils,
+			address: 16,
+			count:   5,
+			values:  []uint16{0x1111, 0x2222, 0x3333, 0x4444, 0x5555},
+		},
+		{
+			name:    "coils (max address)",
+			area:    AreaCoils,
+			address: 20,
+			count:   5,
+			values:  []uint16{0x1111, 0x2222, 0x3333, 0x4444, 0x5555},
+		},
+		{
+			name:    "descrete (any address)",
+			area:    AreaDiscreteInputs,
+			address: 0,
+			count:   2,
+			values:  []uint16{0x1111, 0x2222},
+		},
+		{
+			name:    "descrete (max address)",
+			area:    AreaDiscreteInputs,
+			address: 18,
+			count:   2,
+			values:  []uint16{0x1111, 0x2222},
+		},
 	}
 
-	// 複数ワードの読み取り
-	got, err := store.ReadWords(AreaHoldingRegs, 10, 5)
-	if err != nil {
-		t.Fatalf("ReadWords failed: %v", err)
-	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
 
-	for i, v := range values {
-		if got[i] != v {
-			t.Errorf("word %d: expected 0x%04x, got 0x%04x", i, v, got[i])
-		}
+			store := NewModbusDataStore(100, 50, 200, 150)
+
+			// 複数ワードの書き込み
+			err := store.WriteWords(tt.area, tt.address, tt.values)
+			if err != nil {
+				t.Fatalf("WriteWords failed: %v", err)
+			}
+
+			// 複数ワードの読み取り
+			got, err := store.ReadWords(tt.area, tt.address, tt.count)
+			if err != nil {
+				t.Fatalf("ReadWords failed: %v", err)
+			}
+
+			for i, v := range tt.values {
+				if got[i] != v {
+					t.Errorf("word %d: expected 0x%04x, got 0x%04x", i, v, got[i])
+				}
+			}
+		})
 	}
 }
 
 func TestModbusDataStore_ReadWriteWords_OutOfRange(t *testing.T) {
-	store := NewModbusDataStore(100, 50, 200, 150)
-
-	// 範囲外アクセス
-	_, err := store.ReadWords(AreaHoldingRegs, 195, 10)
-	if err != datastore.ErrAddressOutOfRange {
-		t.Errorf("expected ErrAddressOutOfRange, got %v", err)
+	tests := []struct {
+		name    string
+		area    string
+		address uint32
+		count   uint16
+		values  []uint16
+	}{
+		{
+			name:    "holding registers (max address)",
+			area:    AreaHoldingRegs,
+			address: 195,
+			count:   6,
+			values:  []uint16{0x1111, 0x2222, 0x3333, 0x4444, 0x5555, 0x6666},
+		},
+		{
+			name:    "input registers (max address)",
+			area:    AreaInputRegs,
+			address: 145,
+			count:   6,
+			values:  []uint16{0x1111, 0x2222, 0x3333, 0x4444, 0x5555, 0x6666},
+		},
+		{
+			name:    "coils (max address)",
+			area:    AreaCoils,
+			address: 20,
+			count:   6,
+			values:  []uint16{0x1111, 0x2222, 0x3333, 0x4444, 0x5555, 0x6666},
+		},
+		{
+			name:    "descrete (max address)",
+			area:    AreaDiscreteInputs,
+			address: 18,
+			count:   3,
+			values:  []uint16{0x1111, 0x2222, 0x3333},
+		},
 	}
 
-	err = store.WriteWords(AreaHoldingRegs, 195, []uint16{1, 2, 3, 4, 5, 6})
-	if err != datastore.ErrAddressOutOfRange {
-		t.Errorf("expected ErrAddressOutOfRange, got %v", err)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			store := NewModbusDataStore(100, 50, 200, 150)
+
+			// 範囲外アクセス
+			_, err := store.ReadWords(tt.area, tt.address, tt.count)
+			if err != datastore.ErrAddressOutOfRange {
+				t.Errorf("expected ErrAddressOutOfRange, got %v", err)
+			}
+
+			err = store.WriteWords(tt.area, tt.address, tt.values)
+			if err != datastore.ErrAddressOutOfRange {
+				t.Errorf("expected ErrAddressOutOfRange, got %v", err)
+			}
+		})
 	}
 }
 
@@ -364,94 +927,5 @@ func TestModbusDataStore_ClearAll(t *testing.T) {
 	word, _ = store.ReadWord(AreaInputRegs, 0)
 	if word != 0 {
 		t.Errorf("expected 0, got 0x%04x after clear", word)
-	}
-}
-
-func TestModbusDataStore_LegacyMethods(t *testing.T) {
-	store := NewModbusDataStore(100, 50, 200, 150)
-
-	// コイルのレガシーメソッド
-	err := store.SetCoil(10, true)
-	if err != nil {
-		t.Fatalf("SetCoil failed: %v", err)
-	}
-
-	val, err := store.GetCoil(10)
-	if err != nil {
-		t.Fatalf("GetCoil failed: %v", err)
-	}
-	if !val {
-		t.Error("expected true, got false")
-	}
-
-	// 保持レジスタのレガシーメソッド
-	err = store.SetHoldingRegister(20, 0x1234)
-	if err != nil {
-		t.Fatalf("SetHoldingRegister failed: %v", err)
-	}
-
-	word, err := store.GetHoldingRegister(20)
-	if err != nil {
-		t.Fatalf("GetHoldingRegister failed: %v", err)
-	}
-	if word != 0x1234 {
-		t.Errorf("expected 0x1234, got 0x%04x", word)
-	}
-}
-
-func TestModbusDataStore_GetAll(t *testing.T) {
-	store := NewModbusDataStore(10, 10, 10, 10)
-
-	// データを設定
-	_ = store.SetCoil(0, true)
-	_ = store.SetCoil(2, true)
-	_ = store.SetHoldingRegister(1, 0x1234)
-
-	// 全データ取得
-	coils := store.GetAllCoils()
-	if len(coils) != 10 {
-		t.Errorf("expected 10 coils, got %d", len(coils))
-	}
-	if !coils[0] || coils[1] || !coils[2] {
-		t.Error("coil values mismatch")
-	}
-
-	holdingRegs := store.GetAllHoldingRegisters()
-	if len(holdingRegs) != 10 {
-		t.Errorf("expected 10 holding registers, got %d", len(holdingRegs))
-	}
-	if holdingRegs[1] != 0x1234 {
-		t.Errorf("expected 0x1234, got 0x%04x", holdingRegs[1])
-	}
-}
-
-func TestModbusDataStore_SetAll(t *testing.T) {
-	store := NewModbusDataStore(10, 10, 10, 10)
-
-	// 全コイルを設定
-	coils := []bool{true, false, true, false, true}
-	store.SetAllCoils(coils)
-
-	// 確認
-	for i, expected := range coils {
-		val, _ := store.GetCoil(uint16(i))
-		if val != expected {
-			t.Errorf("coil[%d]: expected %v, got %v", i, expected, val)
-		}
-	}
-
-	// サイズより大きいデータを設定（切り詰められるべき）
-	largeCoils := make([]bool, 20)
-	for i := range largeCoils {
-		largeCoils[i] = true
-	}
-	store.SetAllCoils(largeCoils)
-
-	// 確認（10個まで設定されているはず）
-	for i := 0; i < 10; i++ {
-		val, _ := store.GetCoil(uint16(i))
-		if !val {
-			t.Errorf("coil[%d]: expected true", i)
-		}
 	}
 }
