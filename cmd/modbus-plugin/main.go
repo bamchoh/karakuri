@@ -11,6 +11,7 @@ import (
 
 func main() {
 	protocolType := flag.String("protocol-type", "modbus-tcp", "プロトコルタイプ (modbus-tcp, modbus-rtu, modbus-ascii)")
+	debug := flag.Bool("debug", false, "デバッグモード")
 	_ = flag.String("host-grpc-addr", "", "ホスト側 gRPC サーバーアドレス（Modbus プラグインでは未使用）")
 	flag.Parse()
 
@@ -18,7 +19,7 @@ func main() {
 
 	factory := plugin.ResolveFactory(*protocolType)
 
-	if err := pluginruntime.RunFactory(factory); err != nil {
+	if err := pluginruntime.RunFactory(factory, *debug); err != nil {
 		fmt.Fprintf(os.Stderr, "[ERROR] プラグインランタイムエラー: %v\n", err)
 		os.Exit(1)
 	}

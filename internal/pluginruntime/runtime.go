@@ -12,14 +12,21 @@ import (
 	"google.golang.org/grpc"
 )
 
-func RunFactory(factory protocol.ServerFactory) error {
+func RunFactory(factory protocol.ServerFactory, debug bool) error {
 	plugin := newServer(factory)
 
-	return run(plugin)
+	addr := "127.0.0.1:"
+	if debug {
+		addr += "50001"
+	} else {
+		addr += "0"
+	}
+
+	return run(plugin, addr)
 }
 
-func run(plugin plugin) error {
-	lis, err := net.Listen("tcp", "127.0.0.1:0")
+func run(plugin plugin, addr string) error {
+	lis, err := net.Listen("tcp", addr)
 	if err != nil {
 		return fmt.Errorf("listen: %w", err)
 	}
