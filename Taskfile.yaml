@@ -7,7 +7,7 @@ tasks:
   proto:
     desc: proto ファイルから Go コードを生成する
     cmds:
-      - rm -f pb/pluginpb/*.pb.go
+      - powershell -Command "Remove-Item 'pb/pluginpb/*.pb.go' -Force -ErrorAction SilentlyContinue"
       - >
         protoc -I proto
         --go_out=pb/pluginpb --go_opt=paths=source_relative
@@ -20,6 +20,7 @@ tasks:
   plugins:
     desc: プラグインバイナリをビルドする（サブフォルダ + plugin.json を生成）
     cmds:
+      - powershell -Command "mkdir -p {{.PLUGINS_DIR}}"
       - powershell -Command "Remove-Item -Path {{.PLUGINS_DIR}}/* -Recurse -Force"
       # Modbus プラグインを一度ビルドして TCP/RTU/ASCII の3ディレクトリにコピー
       - powershell -Command "mkdir -p {{.PLUGINS_DIR}}/modbus-tcp-plugin"
