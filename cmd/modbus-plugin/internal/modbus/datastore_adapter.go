@@ -1,8 +1,8 @@
 package modbus
 
 import (
-	"modbus_simulator/internal/domain/protocol"
 	"modbus_simulator/cmd/modbus-plugin/internal/modbus/rtu"
+	"modbus_simulator/internal/domain/protocol"
 
 	"github.com/simonvetter/modbus"
 )
@@ -46,6 +46,15 @@ func (h *DataStoreRequestHandler) HandleCoils(req *modbus.CoilsRequest) ([]bool,
 	if !h.handler.IsUnitIdEnabled(req.UnitId) {
 		return nil, modbus.ErrIllegalFunction
 	}
+
+	if req.IsWrite {
+		// 書き込みリクエスト (Function Code 6, 16)
+		if err := h.handler.store.WriteBits(AreaHoldingRegs, uint32(req.Addr), req.Args); err != nil {
+			return nil, modbus.ErrIllegalDataAddress
+		}
+		return req.Args, nil
+	}
+
 	return h.handler.store.ReadBits(AreaCoils, uint32(req.Addr), req.Quantity)
 }
 
