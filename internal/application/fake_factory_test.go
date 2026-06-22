@@ -198,8 +198,9 @@ func newFakeModbusFactory(protocolType protocol.ProtocolType, variantID, display
 	}
 }
 
+func (f *fakeServerFactory) Version() string                     { return "1.0.0" }
 func (f *fakeServerFactory) ProtocolType() protocol.ProtocolType { return f.protocolType }
-func (f *fakeServerFactory) DisplayName() string                  { return f.displayName }
+func (f *fakeServerFactory) DisplayName() string                 { return f.displayName }
 
 func (f *fakeServerFactory) CreateServer(config protocol.ProtocolConfig, _ protocol.DataStore) (protocol.ProtocolServer, error) {
 	return &fakeServer{cfg: config}, nil

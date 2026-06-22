@@ -8,10 +8,16 @@ import (
 	"modbus_simulator/internal/domain/protocol"
 )
 
+const VERSION = "1.0.0"
+
 // ErrUnitIdDisabled はUnitIDが無効化されている場合のエラー
 var ErrUnitIdDisabled = errors.New("unit ID is disabled")
 
 type BaseFactory struct{}
+
+func (f *BaseFactory) Version() string {
+	return VERSION
+}
 
 // CreateServer はサーバーを作成する
 func (f *BaseFactory) CreateServer(config protocol.ProtocolConfig, store protocol.DataStore) (protocol.ProtocolServer, error) {

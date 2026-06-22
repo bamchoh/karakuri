@@ -18,31 +18,26 @@ tasks:
         proto/variable_accessor_service.proto
 
   plugins:
-    desc: プラグインバイナリをビルドする（サブフォルダ + plugin.json を生成）
+    desc: プラグインをビルド
     cmds:
-      - powershell -Command "mkdir -p {{.PLUGINS_DIR}}"
-      - powershell -Command "Remove-Item -Path {{.PLUGINS_DIR}}/* -Recurse -Force"
-      # Modbus プラグインを一度ビルドして TCP/RTU/ASCII の3ディレクトリにコピー
-      - powershell -Command "mkdir -p {{.PLUGINS_DIR}}/modbus-tcp-plugin"
-      - go build -o {{.PLUGINS_DIR}}/modbus-tcp-plugin/modbus-plugin.exe ./cmd/modbus-plugin
-      - |
-        printf '{\n  "name": "Modbus TCP Plugin",\n  "entrypoint": "modbus-plugin.exe",\n  "version": "0.0.1",\n  "protocol_type": "modbus-tcp",\n  "display_name": "Modbus TCP",\n  "variants": [],\n  "capabilities": {\n    "supports_unit_id": true,\n    "unit_id_min": 1,\n    "unit_id_max": 247,\n    "supports_node_publishing": false\n  }\n}\n' > {{.PLUGINS_DIR}}/modbus-tcp-plugin/plugin.json
-      - powershell -Command "mkdir -p {{.PLUGINS_DIR}}/modbus-rtu-plugin"
-      - powershell -Command "Copy-Item -Path {{.PLUGINS_DIR}}/modbus-tcp-plugin/modbus-plugin.exe -Destination {{.PLUGINS_DIR}}/modbus-rtu-plugin/modbus-plugin.exe"
-      - |
-        printf '{\n  "name": "Modbus RTU Plugin",\n  "entrypoint": "modbus-plugin.exe",\n  "version": "0.0.1",\n  "protocol_type": "modbus-rtu",\n  "display_name": "Modbus RTU",\n  "variants": [],\n  "capabilities": {\n    "supports_unit_id": true,\n    "unit_id_min": 1,\n    "unit_id_max": 247,\n    "supports_node_publishing": false\n  }\n}\n' > {{.PLUGINS_DIR}}/modbus-rtu-plugin/plugin.json
-      - powershell -Command "mkdir -p {{.PLUGINS_DIR}}/modbus-ascii-plugin"
-      - powershell -Command "Copy-Item -Path {{.PLUGINS_DIR}}/modbus-tcp-plugin/modbus-plugin.exe -Destination {{.PLUGINS_DIR}}/modbus-ascii-plugin/modbus-plugin.exe"
-      - |
-        printf '{\n  "name": "Modbus ASCII Plugin",\n  "entrypoint": "modbus-plugin.exe",\n  "version": "0.0.1",\n  "protocol_type": "modbus-ascii",\n  "display_name": "Modbus ASCII",\n  "variants": [],\n  "capabilities": {\n    "supports_unit_id": true,\n    "unit_id_min": 1,\n    "unit_id_max": 247,\n    "supports_node_publishing": false\n  }\n}\n' > {{.PLUGINS_DIR}}/modbus-ascii-plugin/plugin.json
-      # OPC UA プラグイン
-      - powershell -Command "mkdir -p {{.PLUGINS_DIR}}/opcua-plugin"
-      - go build -o {{.PLUGINS_DIR}}/opcua-plugin/opcua-plugin.exe ./cmd/opcua-plugin
-      - |
-        printf '{\n  "name": "OPC UA Plugin",\n  "entrypoint": "opcua-plugin.exe",\n  "version": "0.0.1",\n  "protocol_type": "opcua",\n  "display_name": "OPC UA",\n  "variants": [],\n  "capabilities": {\n    "supports_node_publishing": true\n  }\n}\n' > {{.PLUGINS_DIR}}/opcua-plugin/plugin.json
-      # build/bin/plugins/ が存在すると古いバイナリが優先されるため削除する
-      - powershell -Command "if (Test-Path build/bin/plugins) { Remove-Item -Path build/bin/plugins -Recurse -Force -ErrorAction SilentlyContinue }"
-      - powershell -Command "Copy-Item -Path {{.PLUGINS_DIR}} -Destination build/bin/plugins -Recurse"
+      - powershell -Command "New-Item -ItemType Directory -Path '{{.PLUGINS_DIR}}' -Force | Out-Null"
+
+      - powershell -Command "if (Test-Path '{{.PLUGINS_DIR}}/*') { Remove-Item '{{.PLUGINS_DIR}}/*' -Recurse -Force }"
+
+      - go build -o {{.PLUGINS_DIR}}/modbus-plugin.exe ./cmd/modbus-plugin
+
+      - for:
+          - modbus-tcp
+          - modbus-rtu
+          - modbus-ascii
+        cmd: |
+          powershell -Command "New-Item -ItemType Directory -Path '{{.PLUGINS_DIR}}/{{.ITEM}}-plugin' -Force | Out-Null"
+          powershell -Command "Copy-Item '{{.PLUGINS_DIR}}/modbus-plugin.exe' '{{.PLUGINS_DIR}}/{{.ITEM}}-plugin/modbus-plugin.exe'"
+          go run ./cmd/modbus-plugin/plugin-manifest -protocol-type {{.ITEM}} > {{.PLUGINS_DIR}}/{{.ITEM}}-plugin/plugin.json
+
+      - powershell -Command "if (Test-Path build/bin/plugins) { Remove-Item build/bin/plugins -Recurse -Force }"
+
+      - powershell -Command "Copy-Item '{{.PLUGINS_DIR}}' build/bin/plugins -Recurse"
 
   dev:
     desc: プラグインをビルドしてから wails dev を起動する

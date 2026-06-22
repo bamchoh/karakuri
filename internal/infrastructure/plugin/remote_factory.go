@@ -38,6 +38,8 @@ func NewLazyRemoteServerFactory(entry *PluginManifestEntry, manager *PluginProce
 
 // ---- マニフェストから返すメソッド（gRPC 不要） ----
 
+func (f *LazyRemoteServerFactory) Version() string { return "1.0.0" }
+
 func (f *LazyRemoteServerFactory) ProtocolType() protocol.ProtocolType {
 	return protocol.ProtocolType(f.manifest.ProtocolType)
 }

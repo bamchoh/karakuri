@@ -71,6 +71,8 @@ type ConfigVariant struct {
 
 // ServerFactory はプロトコルサーバーを作成するファクトリーインターフェース(プラグイン作者が実装すること)
 type ServerFactory interface {
+	// Version はファクトリーのバージョンを表す
+	Version() string
 	// ProtocolType はファクトリーが作成するプロトコルの種類を返す
 	ProtocolType() ProtocolType
 	// DisplayName はプロトコルの表示名を返す
