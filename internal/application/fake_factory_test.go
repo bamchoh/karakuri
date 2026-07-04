@@ -4,7 +4,7 @@ import (
 	"context"
 	"sync"
 
-	"modbus_simulator/internal/domain/protocol"
+	"karakuri/internal/domain/protocol"
 )
 
 // ===== fakeConfig =====

@@ -4,9 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	pb "modbus_simulator/pb/pluginpb"
+	pb "karakuri/pb/pluginpb"
 
-	"modbus_simulator/internal/domain/protocol"
+	"karakuri/internal/domain/protocol"
 	"sync"
 
 	"google.golang.org/grpc"

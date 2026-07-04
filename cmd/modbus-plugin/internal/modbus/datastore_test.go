@@ -4,7 +4,7 @@ import (
 	"reflect"
 	"testing"
 
-	"modbus_simulator/internal/domain/datastore"
+	"karakuri/internal/domain/datastore"
 )
 
 func TestNewModbusDataStore(t *testing.T) {

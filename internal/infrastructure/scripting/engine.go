@@ -8,8 +8,8 @@ import (
 	"sync"
 	"time"
 
-	"modbus_simulator/internal/domain/script"
-	"modbus_simulator/internal/domain/variable"
+	"karakuri/internal/domain/script"
+	"karakuri/internal/domain/variable"
 
 	"github.com/dop251/goja"
 )

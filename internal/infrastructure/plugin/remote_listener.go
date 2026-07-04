@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"sync"
 
-	"modbus_simulator/internal/domain/variable"
+	"karakuri/internal/domain/variable"
 )
 
 // RemoteVariableChangeListener は VariableStore の変更を監視してプラグインの DataStore に同期する。

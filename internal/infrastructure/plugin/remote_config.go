@@ -4,7 +4,7 @@ import (
 	"context"
 	"encoding/json"
 
-	"modbus_simulator/internal/domain/protocol"
+	"karakuri/internal/domain/protocol"
 )
 
 // remoteProtocolConfig は gRPC 越しに管理されるプロトコル設定

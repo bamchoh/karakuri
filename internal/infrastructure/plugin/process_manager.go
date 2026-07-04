@@ -17,7 +17,7 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 
-	pb "modbus_simulator/pb/pluginpb"
+	pb "karakuri/pb/pluginpb"
 )
 
 // ManifestCapabilities は plugin.json のプロトコル機能情報を表す

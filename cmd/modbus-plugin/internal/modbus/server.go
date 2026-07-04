@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"sync"
 
-	"modbus_simulator/internal/domain/protocol"
-	"modbus_simulator/internal/domain/server"
+	"karakuri/internal/domain/protocol"
+	"karakuri/internal/domain/server"
 )
 
 type Transport interface {

@@ -2,7 +2,7 @@ package modbus
 
 import (
 	"fmt"
-	"modbus_simulator/internal/domain/protocol"
+	"karakuri/internal/domain/protocol"
 
 	"github.com/simonvetter/modbus"
 )

@@ -9,9 +9,9 @@ import (
 
 	"google.golang.org/grpc"
 
-	pb "modbus_simulator/pb/pluginpb"
+	pb "karakuri/pb/pluginpb"
 
-	"modbus_simulator/internal/domain/protocol"
+	"karakuri/internal/domain/protocol"
 )
 
 // LazyRemoteServerFactory は plugin.json から読み込んだマニフェストをもとに

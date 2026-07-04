@@ -3,8 +3,8 @@ package adapter
 import (
 	"sync"
 
-	"modbus_simulator/internal/domain/protocol"
-	"modbus_simulator/internal/domain/variable"
+	"karakuri/internal/domain/protocol"
+	"karakuri/internal/domain/variable"
 )
 
 // VariableBackedDataStore はVariableStoreと連動するDataStoreアダプター

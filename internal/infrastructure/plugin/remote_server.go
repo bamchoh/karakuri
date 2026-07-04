@@ -7,9 +7,9 @@ import (
 
 	"google.golang.org/grpc"
 
-	pb "modbus_simulator/pb/pluginpb"
+	pb "karakuri/pb/pluginpb"
 
-	"modbus_simulator/internal/domain/protocol"
+	"karakuri/internal/domain/protocol"
 )
 
 // RemoteProtocolServer は gRPC クライアントを通じてプラグインプロセスの ProtocolServer を実装する

@@ -10,12 +10,12 @@ import (
 	"sync"
 	"time"
 
-	"modbus_simulator/internal/domain/protocol"
-	"modbus_simulator/internal/domain/script"
-	"modbus_simulator/internal/domain/variable"
-	"modbus_simulator/internal/infrastructure/adapter"
-	plugininfra "modbus_simulator/internal/infrastructure/plugin"
-	"modbus_simulator/internal/infrastructure/scripting"
+	"karakuri/internal/domain/protocol"
+	"karakuri/internal/domain/script"
+	"karakuri/internal/domain/variable"
+	"karakuri/internal/infrastructure/adapter"
+	plugininfra "karakuri/internal/infrastructure/plugin"
+	"karakuri/internal/infrastructure/scripting"
 
 	"github.com/google/uuid"
 )

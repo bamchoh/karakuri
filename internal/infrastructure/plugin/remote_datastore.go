@@ -5,9 +5,9 @@ import (
 	"encoding/json"
 	"fmt"
 
-	pb "modbus_simulator/pb/pluginpb"
+	pb "karakuri/pb/pluginpb"
 
-	"modbus_simulator/internal/domain/protocol"
+	"karakuri/internal/domain/protocol"
 )
 
 // RemoteDataStore は gRPC クライアントを通じてプラグインプロセスの DataStore を実装する

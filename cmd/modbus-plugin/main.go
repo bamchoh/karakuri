@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"os"
 
-	"modbus_simulator/cmd/modbus-plugin/plugin"
-	"modbus_simulator/internal/pluginruntime"
+	"karakuri/cmd/modbus-plugin/plugin"
+	"karakuri/internal/pluginruntime"
 )
 
 func main() {

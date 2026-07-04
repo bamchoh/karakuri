@@ -5,8 +5,8 @@ import (
 	"testing"
 	"time"
 
-	"modbus_simulator/internal/domain/protocol"
-	"modbus_simulator/internal/domain/variable"
+	"karakuri/internal/domain/protocol"
+	"karakuri/internal/domain/variable"
 )
 
 // =====================================================================
@@ -114,9 +114,9 @@ func (d *testDataStore) WriteWords(area string, addr uint32, vals []uint16) erro
 	return nil
 }
 
-func (d *testDataStore) Snapshot() map[string]interface{}        { return map[string]interface{}{} }
-func (d *testDataStore) Restore(_ map[string]interface{}) error  { return nil }
-func (d *testDataStore) ClearAll()                               {}
+func (d *testDataStore) Snapshot() map[string]interface{}       { return map[string]interface{}{} }
+func (d *testDataStore) Restore(_ map[string]interface{}) error { return nil }
+func (d *testDataStore) ClearAll()                              {}
 
 // =====================================================================
 // テストセットアップヘルパー

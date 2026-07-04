@@ -4,9 +4,9 @@ import (
 	"fmt"
 	"sync"
 
-	"modbus_simulator/internal/domain/datastore"
-	"modbus_simulator/internal/domain/protocol"
-	"modbus_simulator/internal/pluginruntime"
+	"karakuri/internal/domain/datastore"
+	"karakuri/internal/domain/protocol"
+	"karakuri/internal/pluginruntime"
 )
 
 // ModbusDataStore はModbusプロトコル用のデータストア

@@ -4,8 +4,8 @@ import (
 	"testing"
 	"time"
 
-	"modbus_simulator/internal/domain/script"
-	"modbus_simulator/internal/domain/variable"
+	"karakuri/internal/domain/script"
+	"karakuri/internal/domain/variable"
 )
 
 func newTestEngine() (*ScriptEngine, *variable.VariableStore) {

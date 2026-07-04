@@ -5,7 +5,7 @@ import (
 	"errors"
 	"fmt"
 
-	"modbus_simulator/internal/domain/protocol"
+	"karakuri/internal/domain/protocol"
 )
 
 const VERSION = "1.0.0"

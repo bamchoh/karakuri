@@ -1,11 +1,10 @@
-module modbus_simulator
+module karakuri
 
 go 1.24.0
 
 require (
 	github.com/dop251/goja v0.0.0-20260106131823-651366fbe6e3
 	github.com/google/uuid v1.6.0
-	github.com/gopcua/opcua v0.8.0
 	github.com/simonvetter/modbus v1.6.4
 	github.com/ugorji/go/codec v1.3.1
 	github.com/wailsapp/wails/v2 v2.11.0

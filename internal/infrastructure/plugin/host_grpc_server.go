@@ -9,10 +9,10 @@ import (
 	"github.com/ugorji/go/codec"
 	"google.golang.org/grpc"
 
-	pb "modbus_simulator/pb/pluginpb"
+	pb "karakuri/pb/pluginpb"
 
-	"modbus_simulator/internal/domain/protocol"
-	"modbus_simulator/internal/domain/variable"
+	"karakuri/internal/domain/protocol"
+	"karakuri/internal/domain/variable"
 )
 
 var msgpackHandle = func() *codec.MsgpackHandle {

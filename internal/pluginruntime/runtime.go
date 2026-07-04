@@ -3,7 +3,7 @@ package pluginruntime
 import (
 	"errors"
 	"fmt"
-	"modbus_simulator/internal/domain/protocol"
+	"karakuri/internal/domain/protocol"
 	"net"
 	"os"
 	"os/signal"

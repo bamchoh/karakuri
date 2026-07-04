@@ -9,7 +9,7 @@ import (
 	"strconv"
 	"time"
 
-	"modbus_simulator/internal/application"
+	"karakuri/internal/application"
 )
 
 // Server はREST HTTP APIサーバー

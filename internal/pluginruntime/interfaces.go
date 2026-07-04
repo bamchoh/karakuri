@@ -1,7 +1,7 @@
 package pluginruntime
 
 import (
-	"modbus_simulator/internal/domain/protocol"
+	"karakuri/internal/domain/protocol"
 
 	"google.golang.org/grpc"
 )

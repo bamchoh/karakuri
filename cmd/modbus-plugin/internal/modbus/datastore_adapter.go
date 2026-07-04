@@ -1,8 +1,8 @@
 package modbus
 
 import (
-	"modbus_simulator/cmd/modbus-plugin/internal/modbus/rtu"
-	"modbus_simulator/internal/domain/protocol"
+	"karakuri/cmd/modbus-plugin/internal/modbus/rtu"
+	"karakuri/internal/domain/protocol"
 
 	"github.com/simonvetter/modbus"
 )

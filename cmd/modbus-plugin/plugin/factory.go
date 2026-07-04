@@ -1,8 +1,8 @@
 package plugin
 
 import (
-	"modbus_simulator/cmd/modbus-plugin/internal/modbus"
-	"modbus_simulator/internal/domain/protocol"
+	"karakuri/cmd/modbus-plugin/internal/modbus"
+	"karakuri/internal/domain/protocol"
 )
 
 func ResolveFactory(protocolType string) protocol.ServerFactory {
