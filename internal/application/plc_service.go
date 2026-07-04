@@ -282,10 +282,17 @@ func (s *PLCService) RemoveServer(protocolType string) error {
 		return fmt.Errorf("server not found for protocol: %s", protocolType)
 	}
 
-	// 実行中なら停止
-	if inst.server != nil && inst.server.Status() == protocol.StatusRunning {
+	type pluginStopper interface{ StopProcess() }
+	type pluginCrashChecker interface{ IsProcessCrashed() bool }
+
+	if inst.server != nil {
 		if err := inst.server.Stop(); err != nil {
-			return fmt.Errorf("failed to stop server: %w", err)
+			if checker, ok := inst.factory.(pluginCrashChecker); ok && checker.IsProcessCrashed() {
+				// プラグインプロセスがクラッシュしている場合、gRPC Stop は失敗する可能性がある。
+				// その場合でも後続のプロセスクリーンアップを続行する。
+			} else {
+				return fmt.Errorf("failed to stop server: %w", err)
+			}
 		}
 	}
 
@@ -302,8 +309,6 @@ func (s *PLCService) RemoveServer(protocolType string) error {
 		ds.Detach()
 	}
 
-	// プラグインプロセスを停止（LazyRemoteServerFactory の場合）
-	type pluginStopper interface{ StopProcess() }
 	if stopper, ok := inst.factory.(pluginStopper); ok {
 		stopper.StopProcess()
 	}
@@ -435,13 +440,24 @@ func (s *PLCService) StopServer(protocolType string) error {
 	if err != nil {
 		return err
 	}
-	if inst.server != nil {
-		if err := inst.server.Stop(); err != nil {
-			return err
+	if inst.server == nil {
+		return nil
+	}
+
+	type pluginStopper interface{ StopProcess() }
+	type pluginCrashChecker interface{ IsProcessCrashed() bool }
+	if checker, ok := inst.factory.(pluginCrashChecker); ok && checker.IsProcessCrashed() {
+		if stopper, ok2 := inst.factory.(pluginStopper); ok2 {
+			stopper.StopProcess()
 		}
 		go s.emitServerChanged()
 		return nil
 	}
+
+	if err := inst.server.Stop(); err != nil {
+		return err
+	}
+	go s.emitServerChanged()
 	return nil
 }
 

@@ -138,6 +138,12 @@ func (f *LazyRemoteServerFactory) ForceReconnect() error {
 	return f.EnsureStarted()
 }
 
+func (f *LazyRemoteServerFactory) IsProcessCrashed() bool {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.proc != nil && f.proc.IsCrashed()
+}
+
 // ---- gRPC を使うメソッド ----
 
 func (f *LazyRemoteServerFactory) DefaultConfig() protocol.ProtocolConfig {
