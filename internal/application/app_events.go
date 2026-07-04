@@ -5,7 +5,7 @@ import (
 	"sync"
 	"time"
 
-	"modbus_simulator/internal/domain/variable"
+	"karakuri/internal/domain/variable"
 
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 )
