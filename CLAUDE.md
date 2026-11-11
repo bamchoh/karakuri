@@ -134,7 +134,13 @@ internal/
 │   ├── script/       # スクリプトエンティティ
 │   └── variable/     # 変数・構造体型・NodePublishing
 ├── application/      # アプリケーション層
-│   ├── plc_service.go  # メインサービス（プロトコル非依存、モニタリング管理含む）
+│   ├── plc_service.go            # メインサービス本体（構造体・初期化・プラグイン登録・サーバーの追加/削除・終了処理・イベント）
+│   ├── plc_service_servers.go    # サーバーの起動/停止・設定・プロトコルスキーマ・ノードアドレス・UnitID
+│   ├── plc_service_memory.go     # 汎用メモリ操作
+│   ├── plc_service_scripts.go    # スクリプト管理・コンソールログ
+│   ├── plc_service_project.go    # プロジェクト Export/Import
+│   ├── plc_service_monitoring.go # モニタリング項目と設定ファイル
+│   ├── plc_service_variables.go  # 変数・マッピング・ノード公開設定・構造体型
 │   └── dto.go          # DTO定義（ProtocolSchemaDTO, MonitoringItemDTO等）
 └── infrastructure/   # インフラ層（ホスト側インフラ。プロトコル固有実装は含まない）
     ├── plugin/       # プラグインインフラ（ホスト側）
@@ -157,7 +163,7 @@ internal/
 
 ### 主要コンポーネント
 
-- **PLCService** (`internal/application/plc_service.go`): メインサービス。プロトコル非依存で、複数のサーバーインスタンスを同時管理
+- **PLCService** (`internal/application/plc_service*.go`、機能ごとにファイルを分割): メインサービス。プロトコル非依存で、複数のサーバーインスタンスを同時管理
   - `servers map[protocol.ProtocolType]*serverInstance` で各プロトコルのサーバーを保持
   - 各プロトコルタイプは最大1インスタンス（プロトコルタイプをサーバー識別子として利用）
   - Modbus プラグインの ProtocolType は `"modbus"`（TCP/RTU/ASCII はバリアントとして管理）
