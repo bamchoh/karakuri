@@ -10,7 +10,7 @@ import (
 // DataStoreRequestHandler はDataStoreHandlerをsimonvetter/modbusのRequestHandlerに適合させるアダプター
 type DataStoreRequestHandler struct {
 	handler        *DataStoreHandler
-	sessionManager *protocol.SessionManager
+	sessionManager *SessionManager
 	eventEmitter   protocol.CommunicationEventEmitter
 }
 
@@ -20,7 +20,7 @@ func NewDataStoreRequestHandler(handler *DataStoreHandler) *DataStoreRequestHand
 }
 
 // SetSessionManager はセッションマネージャーを設定する
-func (h *DataStoreRequestHandler) SetSessionManager(manager *protocol.SessionManager) {
+func (h *DataStoreRequestHandler) SetSessionManager(manager *SessionManager) {
 	h.sessionManager = manager
 }
 

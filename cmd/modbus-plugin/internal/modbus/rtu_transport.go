@@ -12,10 +12,10 @@ type RTUTransport struct {
 	config         *ModbusConfig
 	handler        *DataStoreHandler
 	eventEmitter   protocol.CommunicationEventEmitter
-	sessionManager *protocol.SessionManager
+	sessionManager *SessionManager
 }
 
-func newRTUTransport(config *ModbusConfig, handler *DataStoreHandler, eventEmitter protocol.CommunicationEventEmitter, sessionManager *protocol.SessionManager) *RTUTransport {
+func newRTUTransport(config *ModbusConfig, handler *DataStoreHandler, eventEmitter protocol.CommunicationEventEmitter, sessionManager *SessionManager) *RTUTransport {
 	return &RTUTransport{
 		config:         config,
 		handler:        handler,

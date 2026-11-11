@@ -13,10 +13,10 @@ type TCPTransport struct {
 	config         *ModbusConfig
 	handler        *DataStoreHandler
 	eventEmitter   protocol.CommunicationEventEmitter
-	sessionManager *protocol.SessionManager
+	sessionManager *SessionManager
 }
 
-func newTCPTransport(config *ModbusConfig, handler *DataStoreHandler, eventEmitter protocol.CommunicationEventEmitter, sessionManager *protocol.SessionManager) *TCPTransport {
+func newTCPTransport(config *ModbusConfig, handler *DataStoreHandler, eventEmitter protocol.CommunicationEventEmitter, sessionManager *SessionManager) *TCPTransport {
 	return &TCPTransport{
 		config:         config,
 		handler:        handler,

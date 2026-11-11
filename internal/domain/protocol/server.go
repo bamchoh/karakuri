@@ -195,6 +195,14 @@ type NodePublishingAware interface {
 	OnNodePublishingUpdated()
 }
 
+// UnitIDConfigurable は UnitID ごとの応答有効・無効を設定できる ProtocolServer 用インターフェース。
+// ProtocolCapabilities.SupportsUnitID: true のプロトコルで利用される。
+type UnitIDConfigurable interface {
+	GetDisabledUnitIDs() []uint8
+	SetUnitIdEnabled(unitId uint8, enabled bool)
+	SetDisabledUnitIDs(ids []uint8)
+}
+
 // NodeAddressResolver は公開変数のノードアドレス（OPC UA なら NodeID 文字列）を返す ProtocolServer 用インターフェース。
 // アドレスの書式はプロトコルが決める。サーバー停止中でも設定から計算できる範囲で返す。
 type NodeAddressResolver interface {
