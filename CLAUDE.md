@@ -508,10 +508,10 @@ JavaScript（goja）でPLC動作を記述。
 
 #### OPC UA ライブラリ
 
-- **bamchoh/uastack v0.1.0**（`github.com/bamchoh/uastack/server`）
+- **bamchoh/uastack v0.1.1**（`github.com/bamchoh/uastack/server`）
 - セキュリティなし・匿名認証のみ（証明書は作られない。`PKIDir` はプラグイン exe と同じフォルダの `pki`）
 - `Start()` で `net.Listen` してから `server.Serve(ln)` をゴルーチンで実行（ポート使用中を Start のエラーで返すため）
-- `Stop()` では `server.Close()` の後に自前のリスナーも閉じる（v0.1.0 は Serve がリスナーを登録する前に Close されると Accept で待ち続けるため）
+- `Stop()` は `server.Close()` を呼んで `Serve` の終了を待つ（v0.1.1 以降は Serve の開始前に Close しても Serve が終了する）
 - `server.Server` は Close 後に再利用できないため、Start のたびに作り直す
 
 ### REST HTTP API 実装
