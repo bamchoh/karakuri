@@ -148,6 +148,7 @@ internal/
     │   └── remote_listener.go         # RemoteVariableChangeListener（変数→DataStore gRPC 同期）
     ├── httpapi/      # REST HTTP APIサーバー実装
     │   └── server.go       # HTTPAPIServer（net/http ServeMux使用）
+    ├── appconfig/    # 設定フォルダの決定（旧フォルダからの移行を含む）
     ├── adapter/      # アダプター層
     │   ├── variable_datastore.go       # VariableBackedDataStore（変数↔DataStore双方向同期）
     │   └── variable_store_accessor.go  # VariableStoreAccessor 実装（OPC UA用）
@@ -427,9 +428,12 @@ JavaScript（goja）でPLC動作を記述。
 ### 設定ファイル
 
 アプリケーションの設定は以下の場所に保存されます：
-- **モニタリング設定**: `%APPDATA%\PLCSimulator\monitoring_config.json`
+- 設定フォルダは `appconfig.Dir()` / `appconfig.Path(name)`（`internal/infrastructure/appconfig`）で決める。フォルダ名を直接書かない
+  - 設定フォルダがまだなく旧名のフォルダ（`%APPDATA%\PLCSimulator`）がある場合は、初回だけ直下のファイルをコピーして引き継ぐ（旧フォルダは残す）
+  - 環境変数 `KARAKURI_CONFIG_DIR` で保存先を差し替えられる。`internal/application` のテストは `TestMain` で一時フォルダに差し替え、実際の設定を書き換えない
+- **モニタリング設定**: `%APPDATA%\Karakuri\monitoring_config.json`
   - 登録したモニタリング項目（プロトコルタイプ、メモリエリア、アドレス、ビット幅、エンディアン、表示形式）
-- **HTTP API 設定**: `%APPDATA%\PLCSimulator\httpapi_config.json`
+- **HTTP API 設定**: `%APPDATA%\Karakuri\httpapi_config.json`
   - `{"port": 8765}` 形式で保存。UI または `SetHTTPAPIPort()` で変更すると自動更新
 
 ## 新プロトコル追加手順
@@ -587,7 +591,7 @@ JavaScript（goja）でPLC動作を記述。
 #### ポート管理
 
 - デフォルトポート: `8765`（`app.go` の `defaultHTTPAPIPort` 定数）
-- 設定ファイル: `%APPDATA%\PLCSimulator\httpapi_config.json`（`{"port": 8765}` 形式）
+- 設定ファイル: `%APPDATA%\Karakuri\httpapi_config.json`（`{"port": 8765}` 形式）
 - `loadHTTPAPIPort()` / `saveHTTPAPIPort(port)` ヘルパー関数（`app.go` 内）
 - `App.httpAPIPort` フィールドで現在のポートを保持
 

@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"path/filepath"
 	"sort"
 	"sync"
 	"time"
@@ -15,6 +14,7 @@ import (
 	"karakuri/internal/domain/script"
 	"karakuri/internal/domain/variable"
 	"karakuri/internal/infrastructure/adapter"
+	"karakuri/internal/infrastructure/appconfig"
 	plugininfra "karakuri/internal/infrastructure/plugin"
 	"karakuri/internal/infrastructure/scripting"
 
@@ -1678,17 +1678,7 @@ func (s *PLCService) ClearMonitoringItems() {
 
 // getMonitoringConfigPath はモニタリング設定ファイルのパスを返す
 func getMonitoringConfigPath() (string, error) {
-	configDir, err := os.UserConfigDir()
-	if err != nil {
-		return "", err
-	}
-
-	dir := filepath.Join(configDir, "PLCSimulator")
-	if err := os.MkdirAll(dir, 0755); err != nil {
-		return "", err
-	}
-
-	return filepath.Join(dir, "monitoring_config.json"), nil
+	return appconfig.Path("monitoring_config.json")
 }
 
 // SaveMonitoringConfig はモニタリング設定をファイルに保存する
