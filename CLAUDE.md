@@ -230,6 +230,9 @@ internal/
   - `NodePublishingAware`: `OnNodePublishingUpdated()` でノード公開設定変更通知を受け付ける
   - `NodeAddressResolver`: `NodeAddresses(variables)`（`NodeVariable{ID, Name}` のスライス）で公開変数のノードアドレス（OPC UA なら NodeID 文字列）と、公開できない場合の理由（`NodeAddress.Error`）を返す。書式と判定はプロトコルが決める
   - `ProtocolCapabilities.SupportsNodePublishing: true` のプロトコルで利用される
+- **UnitIDConfigurable** (`internal/domain/protocol/server.go`): UnitID ごとの応答有効・無効を設定できる ProtocolServer 用インターフェース（`GetDisabledUnitIDs` / `SetUnitIdEnabled` / `SetDisabledUnitIDs`）
+  - `ProtocolCapabilities.SupportsUnitID: true` のプロトコルで利用される。ホストと pluginruntime はこの型で判定する（個別のローカル定義は持たない）
+  - UnitID ごとのセッション追跡（`SessionManager`）は Modbus 固有のため `cmd/modbus-plugin/internal/modbus/session.go` にある
 - **ScriptEngine** (`internal/infrastructure/scripting/engine.go`): gojaベースのJavaScript実行エンジン
   - `plc`オブジェクトでDataStoreおよびVariableStoreにアクセス可能
   - スクリプトコードをIIFE `(function(){...})();` でラップして、const/let再宣言エラーを回避

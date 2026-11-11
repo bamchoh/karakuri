@@ -12,6 +12,8 @@ import (
 	"karakuri/internal/domain/protocol"
 )
 
+var _ protocol.UnitIDConfigurable = (*RemoteProtocolServer)(nil)
+
 // RemoteProtocolServer は gRPC クライアントを通じてプラグインプロセスの ProtocolServer を実装する
 type RemoteProtocolServer struct {
 	pluginClient pb.PluginServiceClient
@@ -109,7 +111,7 @@ func (s *RemoteProtocolServer) NodeAddresses(variables []protocol.NodeVariable) 
 	return result
 }
 
-// GetDisabledUnitIDs は UnitID duck-typing インターフェースを満たすためのメソッド
+// GetDisabledUnitIDs は無効化された UnitID を返す（UnitIDConfigurable）
 func (s *RemoteProtocolServer) GetDisabledUnitIDs() []uint8 {
 	resp, err := s.pluginClient.GetUnitIDSettings(backgroundCtx(), &pb.Empty{})
 	if err != nil {

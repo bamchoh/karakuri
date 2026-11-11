@@ -66,8 +66,7 @@ type PLCService struct {
 	monitoringItems map[string]*MonitoringItemDTO
 
 	// 通信イベント
-	eventEmitter   protocol.CommunicationEventEmitter
-	sessionManager *protocol.SessionManager
+	eventEmitter protocol.CommunicationEventEmitter
 
 	// アプリケーション状態イベント
 	appEmitter        AppStateEmitter
@@ -702,12 +701,8 @@ func (s *PLCService) GetUnitIDSettings(protocolType string) *UnitIDSettingsDTO {
 		return nil
 	}
 
-	type unitIDSupporter interface {
-		GetDisabledUnitIDs() []uint8
-	}
-
 	var disabledIDs []int
-	if us, ok := inst.server.(unitIDSupporter); ok {
+	if us, ok := inst.server.(protocol.UnitIDConfigurable); ok {
 		ids := us.GetDisabledUnitIDs()
 		disabledIDs = make([]int, len(ids))
 		for i, id := range ids {
@@ -732,11 +727,7 @@ func (s *PLCService) SetUnitIDEnabled(protocolType string, unitId int, enabled b
 		return err
 	}
 
-	type unitIDSupporter interface {
-		SetUnitIdEnabled(unitId uint8, enabled bool)
-	}
-
-	if us, ok := inst.server.(unitIDSupporter); ok {
+	if us, ok := inst.server.(protocol.UnitIDConfigurable); ok {
 		us.SetUnitIdEnabled(uint8(unitId), enabled)
 		return nil
 	}
@@ -754,11 +745,7 @@ func (s *PLCService) GetDisabledUnitIDs(protocolType string) []int {
 		return nil
 	}
 
-	type unitIDSupporter interface {
-		GetDisabledUnitIDs() []uint8
-	}
-
-	if us, ok := inst.server.(unitIDSupporter); ok {
+	if us, ok := inst.server.(protocol.UnitIDConfigurable); ok {
 		ids := us.GetDisabledUnitIDs()
 		result := make([]int, len(ids))
 		for i, id := range ids {
@@ -779,11 +766,7 @@ func (s *PLCService) SetDisabledUnitIDs(protocolType string, ids []int) error {
 		return err
 	}
 
-	type unitIDSupporter interface {
-		SetDisabledUnitIDs(ids []uint8)
-	}
-
-	if us, ok := inst.server.(unitIDSupporter); ok {
+	if us, ok := inst.server.(protocol.UnitIDConfigurable); ok {
 		uint8Ids := make([]uint8, len(ids))
 		for i, id := range ids {
 			uint8Ids[i] = uint8(id)
@@ -1100,9 +1083,6 @@ func (s *PLCService) Shutdown() {
 			inst.server.Stop()
 		}
 	}
-	if s.sessionManager != nil {
-		s.sessionManager.Stop()
-	}
 	if s.hostGrpcServer != nil {
 		s.hostGrpcServer.Stop()
 	}
@@ -1117,10 +1097,6 @@ func (s *PLCService) SetEventEmitter(emitter protocol.CommunicationEventEmitter)
 	defer s.mu.Unlock()
 
 	s.eventEmitter = emitter
-
-	// セッションマネージャーを作成
-	s.sessionManager = protocol.NewSessionManager(5*time.Second, emitter)
-	s.sessionManager.Start()
 
 	// 全サーバーにエミッターを設定
 	for _, inst := range s.servers {
@@ -1191,27 +1167,14 @@ func (s *PLCService) GetEventEmitter() protocol.CommunicationEventEmitter {
 	return s.eventEmitter
 }
 
-// GetSessionManager はセッションマネージャーを返す
-func (s *PLCService) GetSessionManager() *protocol.SessionManager {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	return s.sessionManager
-}
-
 // setEmitterToServerInstance はサーバーインスタンスにイベントエミッターを設定する（ロック済み前提）
 func (s *PLCService) setEmitterToServerInstance(inst *serverInstance) {
 	type eventAware interface {
 		SetEventEmitter(emitter protocol.CommunicationEventEmitter)
 	}
-	type sessionAware interface {
-		SetSessionManager(manager *protocol.SessionManager)
-	}
 
 	if ea, ok := inst.server.(eventAware); ok {
 		ea.SetEventEmitter(s.eventEmitter)
-	}
-	if sa, ok := inst.server.(sessionAware); ok {
-		sa.SetSessionManager(s.sessionManager)
 	}
 }
 
@@ -1259,10 +1222,7 @@ func (s *PLCService) ExportProject() *ProjectDataDTO {
 		var unitIDSettings *UnitIDSettingsDTO
 		caps := inst.factory.GetProtocolCapabilities()
 		if caps.SupportsUnitID {
-			type unitIDSupporter interface {
-				GetDisabledUnitIDs() []uint8
-			}
-			if us, ok := inst.server.(unitIDSupporter); ok {
+			if us, ok := inst.server.(protocol.UnitIDConfigurable); ok {
 				ids := us.GetDisabledUnitIDs()
 				disabledIDs := make([]int, len(ids))
 				for i, id := range ids {
@@ -1460,10 +1420,7 @@ func (s *PLCService) ImportProject(data *ProjectDataDTO) error {
 
 		// UnitID設定を復元
 		if snap.UnitIDSettings != nil {
-			type unitIDSupporter interface {
-				SetDisabledUnitIDs(ids []uint8)
-			}
-			if us, ok := inst.server.(unitIDSupporter); ok {
+			if us, ok := inst.server.(protocol.UnitIDConfigurable); ok {
 				uint8Ids := make([]uint8, len(snap.UnitIDSettings.DisabledIDs))
 				for i, id := range snap.UnitIDSettings.DisabledIDs {
 					uint8Ids[i] = uint8(id)

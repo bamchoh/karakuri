@@ -12,10 +12,10 @@ type ASCIITransport struct {
 	config         *ModbusConfig
 	handler        *DataStoreHandler
 	eventEmitter   protocol.CommunicationEventEmitter
-	sessionManager *protocol.SessionManager
+	sessionManager *SessionManager
 }
 
-func newASCIITransport(config *ModbusConfig, handler *DataStoreHandler, eventEmitter protocol.CommunicationEventEmitter, sessionManager *protocol.SessionManager) *ASCIITransport {
+func newASCIITransport(config *ModbusConfig, handler *DataStoreHandler, eventEmitter protocol.CommunicationEventEmitter, sessionManager *SessionManager) *ASCIITransport {
 	return &ASCIITransport{
 		config:         config,
 		handler:        handler,

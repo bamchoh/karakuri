@@ -335,11 +335,8 @@ func (s *Server) GetUnitIDSettings(ctx context.Context, _ *pb.Empty) (*pb.UnitID
 	srv := s.server
 	s.mu.Unlock()
 
-	type unitIDGetter interface {
-		GetDisabledUnitIDs() []uint8
-	}
 	if srv != nil {
-		if u, ok := srv.(unitIDGetter); ok {
+		if u, ok := srv.(protocol.UnitIDConfigurable); ok {
 			ids := u.GetDisabledUnitIDs()
 			int32IDs := make([]int32, len(ids))
 			for i, id := range ids {
@@ -356,11 +353,8 @@ func (s *Server) SetUnitIDEnabled(ctx context.Context, req *pb.SetUnitIDEnabledR
 	srv := s.server
 	s.mu.Unlock()
 
-	type unitIDSetter interface {
-		SetUnitIdEnabled(unitId uint8, enabled bool)
-	}
 	if srv != nil {
-		if u, ok := srv.(unitIDSetter); ok {
+		if u, ok := srv.(protocol.UnitIDConfigurable); ok {
 			u.SetUnitIdEnabled(uint8(req.UnitId), req.Enabled)
 		}
 	}
@@ -372,11 +366,8 @@ func (s *Server) SetDisabledUnitIDs(ctx context.Context, req *pb.SetDisabledUnit
 	srv := s.server
 	s.mu.Unlock()
 
-	type unitIDSetter interface {
-		SetDisabledUnitIDs(ids []uint8)
-	}
 	if srv != nil {
-		if u, ok := srv.(unitIDSetter); ok {
+		if u, ok := srv.(protocol.UnitIDConfigurable); ok {
 			ids := make([]uint8, len(req.Ids))
 			for i, id := range req.Ids {
 				ids[i] = uint8(id)

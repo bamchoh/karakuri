@@ -441,6 +441,8 @@ func DefaultASCIIConfig() *ModbusConfig {
 	}
 }
 
+var _ protocol.UnitIDConfigurable = (*ModbusServer)(nil)
+
 // ModbusServer はModbusプロトコルサーバー
 type ModbusServer struct {
 	config         *ModbusConfig
@@ -449,7 +451,7 @@ type ModbusServer struct {
 	innerServer    *Server
 	status         protocol.ServerStatus
 	eventEmitter   protocol.CommunicationEventEmitter
-	sessionManager *protocol.SessionManager
+	sessionManager *SessionManager
 }
 
 // NewModbusServer は新しいModbusServerを作成する
