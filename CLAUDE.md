@@ -67,6 +67,26 @@ build: {
 **理由**: LINT/ULINT の変数ビュー編集に JavaScript `BigInt` を使用しているため、Wails のデフォルトターゲット（safari13 を含む）ではビルドエラーになる。
 safari14 以上が BigInt リテラル（`n` サフィックス）をサポートする最低要件。
 
+### WebView2 ランタイムの指定（`KARAKURI_WEBVIEW2_PATH`）
+
+環境変数 `KARAKURI_WEBVIEW2_PATH` に WebView2 の Fixed Version ランタイムのフォルダ（`msedgewebview2.exe` があるフォルダ）を指定すると、インストール済みの Evergreen ランタイムの代わりにそれを使う（`main.go` の `windows.Options.WebviewBrowserPath`）。未設定なら従来どおり。
+
+```powershell
+# task dev / Karakuri.exe をこのランタイムで起動する
+$env:KARAKURI_WEBVIEW2_PATH = 'D:\tools\WebView2-156'
+task dev
+
+# エクスプローラーから起動する場合はユーザー環境変数に登録する
+setx KARAKURI_WEBVIEW2_PATH D:\tools\WebView2-156
+```
+
+**理由**: 2026-11 時点の開発 PC では、WebView2 / Edge 157.0.4341.46 のネットワークサービス（`network.mojom.NetworkService`）が起動直後に毎回クラッシュする（`msedge.dll`、例外 `0xc0000409`）。画面ファイルの応答が失われ、ウィンドウが真っ暗になる・CSS が当たらないなどの症状が不定期に出る。Fixed Version 156.0.4314.58 では再現しない。
+
+- 症状: ウィンドウは開くが中身が描画されない。ログに `WebVie2wProcess failed with kind 4`（ユーティリティプロセスの終了）が 2 回出る
+- 確認方法: Windows のイベントログ（Application, ID 1000）で `msedgewebview2.exe` / `msedge.exe` のクラッシュを確認する
+- Fixed Version ランタイムは https://developer.microsoft.com/microsoft-edge/webview2/ の「Fixed Version」から入手する
+- Wails v2 は WebView2 に任意のブラウザ引数を渡す手段がなく、`WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS` やレジストリのポリシーも反映されないため、ランタイムの差し替えで回避している
+
 ## Architecture
 
 Wails v2をベースに、フロントエンドはVite + React + TypeScript、バックエンドはGoで構成。
