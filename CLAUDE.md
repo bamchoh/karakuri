@@ -39,6 +39,9 @@ task proto
 # 全テスト実行
 task test
 
+# 画面の確認用テスト（Playwright）。先に task dev で開発サーバーを起動しておく
+task e2e
+
 # ビルド成果物を削除
 task clean
 
@@ -53,6 +56,15 @@ go build ./...
 ```
 
 タスクランナーは [go-task](https://taskfile.dev/) を使用。`Taskfile.yaml` に定義。
+
+### 画面の確認用テスト（Playwright）
+
+`frontend/e2e/` に、ブラウザで画面を操作して確認するテストがある。`task dev` が立てる開発用サーバー（`http://localhost:34115`）に接続するため、Go 側の API とプラグインを含めた動作を確認できる。手順と注意は `frontend/e2e/README.md` を参照。
+
+- 画面を変更したら、該当するテストを実行する（なければ追加する）。`shot()` で撮ったスクリーンショット（`frontend/e2e/.screenshots/`）で見た目も確認する
+- データの準備は `api(page, "メソッド名", ...)` で Go 側の API を直接呼び、確認したい操作だけを画面で行う
+- **テストはアプリのサーバーと変数をすべて削除する。** 開発サーバーは `KARAKURI_CONFIG_DIR` を一時フォルダに向けて起動する
+- Playwright のバージョンは固定（インストール済みの Chromium と対応させるため）
 
 ### フロントエンドビルドターゲット
 

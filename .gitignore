@@ -3,3 +3,5 @@ node_modules
 frontend/dist
 .claude/
 plugins/
+frontend/e2e/.results/
+frontend/e2e/.screenshots/
