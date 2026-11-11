@@ -210,11 +210,16 @@ func (p *plcNodes) addNodes(pv *publishedVar) {
 }
 
 func (p *plcNodes) addNode(varID string, n *plannedNode, access byte, value interface{}) error {
+	// ValueRank: -1 = スカラー、1 = 1 次元配列、n = n 次元の Matrix。
+	// ArrayDimensions は各次元の要素数（uastack は書き込み時にこれを上限として検査する）
 	rank := int32(-1)
 	var dims []uint32
-	if n.shape.array {
-		rank = 1
-		dims = []uint32{0} // 0 = 長さ制限なし（長さの検証はホストの VariableStore に任せる）
+	if n.shape.isArray() {
+		rank = int32(len(n.shape.dims))
+		dims = make([]uint32, len(n.shape.dims))
+		for i, d := range n.shape.dims {
+			dims[i] = uint32(d)
+		}
 	}
 	node := &server.Node{
 		ID:              n.nodeID,
