@@ -42,6 +42,8 @@ export function GetMemoryAreas(arg1:string):Promise<Array<application.MemoryArea
 
 export function GetMonitoringItems():Promise<Array<application.MonitoringItemDTO>>;
 
+export function GetNodeAddresses(arg1:string,arg2:Array<string>):Promise<Record<string, string>>;
+
 export function GetProtocolSchema(arg1:string):Promise<application.ProtocolSchemaDTO>;
 
 export function GetScript(arg1:string):Promise<application.ScriptDTO>;

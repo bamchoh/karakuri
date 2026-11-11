@@ -71,6 +71,7 @@ func (s *ModbusDataStore) GetAreas() []protocol.MemoryArea {
 			Size:        uint32(len(s.coils)),
 			ReadOnly:    false,
 			OneOrigin:   true,
+			ShortName:   "0",
 		},
 		{
 			ID:          AreaDiscreteInputs,
@@ -79,6 +80,7 @@ func (s *ModbusDataStore) GetAreas() []protocol.MemoryArea {
 			Size:        uint32(len(s.discreteInputs)),
 			ReadOnly:    false, // シミュレーターなので書き込み可能
 			OneOrigin:   true,
+			ShortName:   "1",
 		},
 		{
 			ID:          AreaHoldingRegs,
@@ -87,6 +89,7 @@ func (s *ModbusDataStore) GetAreas() []protocol.MemoryArea {
 			Size:        uint32(len(s.holdingRegs)),
 			ReadOnly:    false,
 			OneOrigin:   true,
+			ShortName:   "4",
 		},
 		{
 			ID:          AreaInputRegs,
@@ -95,6 +98,7 @@ func (s *ModbusDataStore) GetAreas() []protocol.MemoryArea {
 			Size:        uint32(len(s.inputRegs)),
 			ReadOnly:    false, // シミュレーターなので書き込み可能
 			OneOrigin:   true,
+			ShortName:   "3",
 		},
 	}
 }

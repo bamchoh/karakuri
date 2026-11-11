@@ -4,15 +4,9 @@ import (
 	"context"
 )
 
-// ProtocolType はプロトコルの種類を表す
+// ProtocolType はプロトコルの種類を表す。
+// 具体的な値（"modbus-tcp", "opcua" 等）は各プラグインが定義し、ホストは値の意味を持たない。
 type ProtocolType string
-
-const (
-	ProtocolModbusTCP   ProtocolType = "modbus-tcp"
-	ProtocolModbusRTU   ProtocolType = "modbus-rtu"
-	ProtocolModbusASCII ProtocolType = "modbus-ascii"
-	ProtocolOPCUA       ProtocolType = "opcua"
-)
 
 // ServerStatus はサーバーの状態を表す
 type ServerStatus int
@@ -124,6 +118,7 @@ type MemoryArea struct {
 	ReadOnly       bool   `json:"readOnly"`
 	ByteAddressing bool   `json:"byteAddressing"` // trueの場合、アドレスをバイトベースで表示
 	OneOrigin      bool   `json:"oneOrigin"`      // trueの場合、UIでのアドレス表示を1オリジンにする
+	ShortName      string `json:"shortName"`      // マッピング一覧などに表示する短い名前（空なら ID を使う）
 }
 
 // ConfigField は設定フィールドの定義
@@ -198,4 +193,11 @@ type VariableStoreInjector interface {
 // NodePublishingAware はノード公開設定変更通知を受け付ける ProtocolServer 用インターフェース
 type NodePublishingAware interface {
 	OnNodePublishingUpdated()
+}
+
+// NodeAddressResolver は公開変数のノードアドレス（OPC UA なら NodeID 文字列）を返す ProtocolServer 用インターフェース。
+// アドレスの書式はプロトコルが決める。サーバー停止中でも設定から計算できる範囲で返す。
+type NodeAddressResolver interface {
+	// NodeAddresses は変数 ID -> ノードアドレスを返す（アドレスを持たない変数は含めない）
+	NodeAddresses(variableIDs []string) map[string]string
 }

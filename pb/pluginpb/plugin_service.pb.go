@@ -1100,6 +1100,116 @@ func (x *UpdateConfigRequest) GetSettingsJson() string {
 	return ""
 }
 
+type GetNodeAddressesRequest struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	VariantId    string   `protobuf:"bytes,1,opt,name=variant_id,json=variantId,proto3" json:"variant_id,omitempty"`
+	SettingsJson string   `protobuf:"bytes,2,opt,name=settings_json,json=settingsJson,proto3" json:"settings_json,omitempty"`
+	VariableIds  []string `protobuf:"bytes,3,rep,name=variable_ids,json=variableIds,proto3" json:"variable_ids,omitempty"`
+}
+
+func (x *GetNodeAddressesRequest) Reset() {
+	*x = GetNodeAddressesRequest{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_plugin_service_proto_msgTypes[18]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *GetNodeAddressesRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetNodeAddressesRequest) ProtoMessage() {}
+
+func (x *GetNodeAddressesRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_plugin_service_proto_msgTypes[18]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetNodeAddressesRequest.ProtoReflect.Descriptor instead.
+func (*GetNodeAddressesRequest) Descriptor() ([]byte, []int) {
+	return file_plugin_service_proto_rawDescGZIP(), []int{18}
+}
+
+func (x *GetNodeAddressesRequest) GetVariantId() string {
+	if x != nil {
+		return x.VariantId
+	}
+	return ""
+}
+
+func (x *GetNodeAddressesRequest) GetSettingsJson() string {
+	if x != nil {
+		return x.SettingsJson
+	}
+	return ""
+}
+
+func (x *GetNodeAddressesRequest) GetVariableIds() []string {
+	if x != nil {
+		return x.VariableIds
+	}
+	return nil
+}
+
+type GetNodeAddressesResponse struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	Addresses map[string]string `protobuf:"bytes,1,rep,name=addresses,proto3" json:"addresses,omitempty" protobuf_key:"bytes,1,opt,name=key,proto3" protobuf_val:"bytes,2,opt,name=value,proto3"` // 変数 ID -> ノードアドレス
+}
+
+func (x *GetNodeAddressesResponse) Reset() {
+	*x = GetNodeAddressesResponse{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_plugin_service_proto_msgTypes[19]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *GetNodeAddressesResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetNodeAddressesResponse) ProtoMessage() {}
+
+func (x *GetNodeAddressesResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_plugin_service_proto_msgTypes[19]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetNodeAddressesResponse.ProtoReflect.Descriptor instead.
+func (*GetNodeAddressesResponse) Descriptor() ([]byte, []int) {
+	return file_plugin_service_proto_rawDescGZIP(), []int{19}
+}
+
+func (x *GetNodeAddressesResponse) GetAddresses() map[string]string {
+	if x != nil {
+		return x.Addresses
+	}
+	return nil
+}
+
 type UnitIDSettingsResponse struct {
 	state         protoimpl.MessageState
 	sizeCache     protoimpl.SizeCache
@@ -1113,7 +1223,7 @@ type UnitIDSettingsResponse struct {
 func (x *UnitIDSettingsResponse) Reset() {
 	*x = UnitIDSettingsResponse{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_plugin_service_proto_msgTypes[18]
+		mi := &file_plugin_service_proto_msgTypes[20]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -1126,7 +1236,7 @@ func (x *UnitIDSettingsResponse) String() string {
 func (*UnitIDSettingsResponse) ProtoMessage() {}
 
 func (x *UnitIDSettingsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_plugin_service_proto_msgTypes[18]
+	mi := &file_plugin_service_proto_msgTypes[20]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1139,7 +1249,7 @@ func (x *UnitIDSettingsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UnitIDSettingsResponse.ProtoReflect.Descriptor instead.
 func (*UnitIDSettingsResponse) Descriptor() ([]byte, []int) {
-	return file_plugin_service_proto_rawDescGZIP(), []int{18}
+	return file_plugin_service_proto_rawDescGZIP(), []int{20}
 }
 
 func (x *UnitIDSettingsResponse) GetMin() int32 {
@@ -1175,7 +1285,7 @@ type SetUnitIDEnabledRequest struct {
 func (x *SetUnitIDEnabledRequest) Reset() {
 	*x = SetUnitIDEnabledRequest{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_plugin_service_proto_msgTypes[19]
+		mi := &file_plugin_service_proto_msgTypes[21]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -1188,7 +1298,7 @@ func (x *SetUnitIDEnabledRequest) String() string {
 func (*SetUnitIDEnabledRequest) ProtoMessage() {}
 
 func (x *SetUnitIDEnabledRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_plugin_service_proto_msgTypes[19]
+	mi := &file_plugin_service_proto_msgTypes[21]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1201,7 +1311,7 @@ func (x *SetUnitIDEnabledRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetUnitIDEnabledRequest.ProtoReflect.Descriptor instead.
 func (*SetUnitIDEnabledRequest) Descriptor() ([]byte, []int) {
-	return file_plugin_service_proto_rawDescGZIP(), []int{19}
+	return file_plugin_service_proto_rawDescGZIP(), []int{21}
 }
 
 func (x *SetUnitIDEnabledRequest) GetUnitId() int32 {
@@ -1229,7 +1339,7 @@ type SetDisabledUnitIDsRequest struct {
 func (x *SetDisabledUnitIDsRequest) Reset() {
 	*x = SetDisabledUnitIDsRequest{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_plugin_service_proto_msgTypes[20]
+		mi := &file_plugin_service_proto_msgTypes[22]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -1242,7 +1352,7 @@ func (x *SetDisabledUnitIDsRequest) String() string {
 func (*SetDisabledUnitIDsRequest) ProtoMessage() {}
 
 func (x *SetDisabledUnitIDsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_plugin_service_proto_msgTypes[20]
+	mi := &file_plugin_service_proto_msgTypes[22]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1255,7 +1365,7 @@ func (x *SetDisabledUnitIDsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetDisabledUnitIDsRequest.ProtoReflect.Descriptor instead.
 func (*SetDisabledUnitIDsRequest) Descriptor() ([]byte, []int) {
-	return file_plugin_service_proto_rawDescGZIP(), []int{20}
+	return file_plugin_service_proto_rawDescGZIP(), []int{22}
 }
 
 func (x *SetDisabledUnitIDsRequest) GetIds() []int32 {
@@ -1393,6 +1503,25 @@ var file_plugin_service_proto_rawDesc = []byte{
 	0x09, 0x76, 0x61, 0x72, 0x69, 0x61, 0x6e, 0x74, 0x49, 0x64, 0x12, 0x23, 0x0a, 0x0d, 0x73, 0x65,
 	0x74, 0x74, 0x69, 0x6e, 0x67, 0x73, 0x5f, 0x6a, 0x73, 0x6f, 0x6e, 0x18, 0x02, 0x20, 0x01, 0x28,
 	0x09, 0x52, 0x0c, 0x73, 0x65, 0x74, 0x74, 0x69, 0x6e, 0x67, 0x73, 0x4a, 0x73, 0x6f, 0x6e, 0x22,
+	0x80, 0x01, 0x0a, 0x17, 0x47, 0x65, 0x74, 0x4e, 0x6f, 0x64, 0x65, 0x41, 0x64, 0x64, 0x72, 0x65,
+	0x73, 0x73, 0x65, 0x73, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x12, 0x1d, 0x0a, 0x0a, 0x76,
+	0x61, 0x72, 0x69, 0x61, 0x6e, 0x74, 0x5f, 0x69, 0x64, 0x18, 0x01, 0x20, 0x01, 0x28, 0x09, 0x52,
+	0x09, 0x76, 0x61, 0x72, 0x69, 0x61, 0x6e, 0x74, 0x49, 0x64, 0x12, 0x23, 0x0a, 0x0d, 0x73, 0x65,
+	0x74, 0x74, 0x69, 0x6e, 0x67, 0x73, 0x5f, 0x6a, 0x73, 0x6f, 0x6e, 0x18, 0x02, 0x20, 0x01, 0x28,
+	0x09, 0x52, 0x0c, 0x73, 0x65, 0x74, 0x74, 0x69, 0x6e, 0x67, 0x73, 0x4a, 0x73, 0x6f, 0x6e, 0x12,
+	0x21, 0x0a, 0x0c, 0x76, 0x61, 0x72, 0x69, 0x61, 0x62, 0x6c, 0x65, 0x5f, 0x69, 0x64, 0x73, 0x18,
+	0x03, 0x20, 0x03, 0x28, 0x09, 0x52, 0x0b, 0x76, 0x61, 0x72, 0x69, 0x61, 0x62, 0x6c, 0x65, 0x49,
+	0x64, 0x73, 0x22, 0xaa, 0x01, 0x0a, 0x18, 0x47, 0x65, 0x74, 0x4e, 0x6f, 0x64, 0x65, 0x41, 0x64,
+	0x64, 0x72, 0x65, 0x73, 0x73, 0x65, 0x73, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12,
+	0x50, 0x0a, 0x09, 0x61, 0x64, 0x64, 0x72, 0x65, 0x73, 0x73, 0x65, 0x73, 0x18, 0x01, 0x20, 0x03,
+	0x28, 0x0b, 0x32, 0x32, 0x2e, 0x70, 0x6c, 0x75, 0x67, 0x69, 0x6e, 0x2e, 0x76, 0x31, 0x2e, 0x47,
+	0x65, 0x74, 0x4e, 0x6f, 0x64, 0x65, 0x41, 0x64, 0x64, 0x72, 0x65, 0x73, 0x73, 0x65, 0x73, 0x52,
+	0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x2e, 0x41, 0x64, 0x64, 0x72, 0x65, 0x73, 0x73, 0x65,
+	0x73, 0x45, 0x6e, 0x74, 0x72, 0x79, 0x52, 0x09, 0x61, 0x64, 0x64, 0x72, 0x65, 0x73, 0x73, 0x65,
+	0x73, 0x1a, 0x3c, 0x0a, 0x0e, 0x41, 0x64, 0x64, 0x72, 0x65, 0x73, 0x73, 0x65, 0x73, 0x45, 0x6e,
+	0x74, 0x72, 0x79, 0x12, 0x10, 0x0a, 0x03, 0x6b, 0x65, 0x79, 0x18, 0x01, 0x20, 0x01, 0x28, 0x09,
+	0x52, 0x03, 0x6b, 0x65, 0x79, 0x12, 0x14, 0x0a, 0x05, 0x76, 0x61, 0x6c, 0x75, 0x65, 0x18, 0x02,
+	0x20, 0x01, 0x28, 0x09, 0x52, 0x05, 0x76, 0x61, 0x6c, 0x75, 0x65, 0x3a, 0x02, 0x38, 0x01, 0x22,
 	0x5f, 0x0a, 0x16, 0x55, 0x6e, 0x69, 0x74, 0x49, 0x44, 0x53, 0x65, 0x74, 0x74, 0x69, 0x6e, 0x67,
 	0x73, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12, 0x10, 0x0a, 0x03, 0x6d, 0x69, 0x6e,
 	0x18, 0x01, 0x20, 0x01, 0x28, 0x05, 0x52, 0x03, 0x6d, 0x69, 0x6e, 0x12, 0x10, 0x0a, 0x03, 0x6d,
@@ -1406,7 +1535,7 @@ var file_plugin_service_proto_rawDesc = []byte{
 	0x02, 0x20, 0x01, 0x28, 0x08, 0x52, 0x07, 0x65, 0x6e, 0x61, 0x62, 0x6c, 0x65, 0x64, 0x22, 0x2d,
 	0x0a, 0x19, 0x53, 0x65, 0x74, 0x44, 0x69, 0x73, 0x61, 0x62, 0x6c, 0x65, 0x64, 0x55, 0x6e, 0x69,
 	0x74, 0x49, 0x44, 0x73, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x12, 0x10, 0x0a, 0x03, 0x69,
-	0x64, 0x73, 0x18, 0x01, 0x20, 0x03, 0x28, 0x05, 0x52, 0x03, 0x69, 0x64, 0x73, 0x32, 0xf4, 0x07,
+	0x64, 0x73, 0x18, 0x01, 0x20, 0x03, 0x28, 0x05, 0x52, 0x03, 0x69, 0x64, 0x73, 0x32, 0xd1, 0x08,
 	0x0a, 0x0d, 0x50, 0x6c, 0x75, 0x67, 0x69, 0x6e, 0x53, 0x65, 0x72, 0x76, 0x69, 0x63, 0x65, 0x12,
 	0x3a, 0x0a, 0x0b, 0x47, 0x65, 0x74, 0x4d, 0x65, 0x74, 0x61, 0x64, 0x61, 0x74, 0x61, 0x12, 0x10,
 	0x2e, 0x70, 0x6c, 0x75, 0x67, 0x69, 0x6e, 0x2e, 0x76, 0x31, 0x2e, 0x45, 0x6d, 0x70, 0x74, 0x79,
@@ -1456,23 +1585,29 @@ var file_plugin_service_proto_rawDesc = []byte{
 	0x6c, 0x69, 0x73, 0x68, 0x69, 0x6e, 0x67, 0x55, 0x70, 0x64, 0x61, 0x74, 0x65, 0x64, 0x12, 0x10,
 	0x2e, 0x70, 0x6c, 0x75, 0x67, 0x69, 0x6e, 0x2e, 0x76, 0x31, 0x2e, 0x45, 0x6d, 0x70, 0x74, 0x79,
 	0x1a, 0x10, 0x2e, 0x70, 0x6c, 0x75, 0x67, 0x69, 0x6e, 0x2e, 0x76, 0x31, 0x2e, 0x45, 0x6d, 0x70,
-	0x74, 0x79, 0x12, 0x48, 0x0a, 0x11, 0x47, 0x65, 0x74, 0x55, 0x6e, 0x69, 0x74, 0x49, 0x44, 0x53,
-	0x65, 0x74, 0x74, 0x69, 0x6e, 0x67, 0x73, 0x12, 0x10, 0x2e, 0x70, 0x6c, 0x75, 0x67, 0x69, 0x6e,
-	0x2e, 0x76, 0x31, 0x2e, 0x45, 0x6d, 0x70, 0x74, 0x79, 0x1a, 0x21, 0x2e, 0x70, 0x6c, 0x75, 0x67,
-	0x69, 0x6e, 0x2e, 0x76, 0x31, 0x2e, 0x55, 0x6e, 0x69, 0x74, 0x49, 0x44, 0x53, 0x65, 0x74, 0x74,
-	0x69, 0x6e, 0x67, 0x73, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12, 0x48, 0x0a, 0x10,
-	0x53, 0x65, 0x74, 0x55, 0x6e, 0x69, 0x74, 0x49, 0x44, 0x45, 0x6e, 0x61, 0x62, 0x6c, 0x65, 0x64,
-	0x12, 0x22, 0x2e, 0x70, 0x6c, 0x75, 0x67, 0x69, 0x6e, 0x2e, 0x76, 0x31, 0x2e, 0x53, 0x65, 0x74,
-	0x55, 0x6e, 0x69, 0x74, 0x49, 0x44, 0x45, 0x6e, 0x61, 0x62, 0x6c, 0x65, 0x64, 0x52, 0x65, 0x71,
-	0x75, 0x65, 0x73, 0x74, 0x1a, 0x10, 0x2e, 0x70, 0x6c, 0x75, 0x67, 0x69, 0x6e, 0x2e, 0x76, 0x31,
-	0x2e, 0x45, 0x6d, 0x70, 0x74, 0x79, 0x12, 0x4c, 0x0a, 0x12, 0x53, 0x65, 0x74, 0x44, 0x69, 0x73,
-	0x61, 0x62, 0x6c, 0x65, 0x64, 0x55, 0x6e, 0x69, 0x74, 0x49, 0x44, 0x73, 0x12, 0x24, 0x2e, 0x70,
-	0x6c, 0x75, 0x67, 0x69, 0x6e, 0x2e, 0x76, 0x31, 0x2e, 0x53, 0x65, 0x74, 0x44, 0x69, 0x73, 0x61,
-	0x62, 0x6c, 0x65, 0x64, 0x55, 0x6e, 0x69, 0x74, 0x49, 0x44, 0x73, 0x52, 0x65, 0x71, 0x75, 0x65,
-	0x73, 0x74, 0x1a, 0x10, 0x2e, 0x70, 0x6c, 0x75, 0x67, 0x69, 0x6e, 0x2e, 0x76, 0x31, 0x2e, 0x45,
-	0x6d, 0x70, 0x74, 0x79, 0x42, 0x1e, 0x5a, 0x1c, 0x6d, 0x6f, 0x64, 0x62, 0x75, 0x73, 0x5f, 0x73,
-	0x69, 0x6d, 0x75, 0x6c, 0x61, 0x74, 0x6f, 0x72, 0x2f, 0x70, 0x62, 0x2f, 0x70, 0x6c, 0x75, 0x67,
-	0x69, 0x6e, 0x70, 0x62, 0x62, 0x06, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x33,
+	0x74, 0x79, 0x12, 0x5b, 0x0a, 0x10, 0x47, 0x65, 0x74, 0x4e, 0x6f, 0x64, 0x65, 0x41, 0x64, 0x64,
+	0x72, 0x65, 0x73, 0x73, 0x65, 0x73, 0x12, 0x22, 0x2e, 0x70, 0x6c, 0x75, 0x67, 0x69, 0x6e, 0x2e,
+	0x76, 0x31, 0x2e, 0x47, 0x65, 0x74, 0x4e, 0x6f, 0x64, 0x65, 0x41, 0x64, 0x64, 0x72, 0x65, 0x73,
+	0x73, 0x65, 0x73, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x1a, 0x23, 0x2e, 0x70, 0x6c, 0x75,
+	0x67, 0x69, 0x6e, 0x2e, 0x76, 0x31, 0x2e, 0x47, 0x65, 0x74, 0x4e, 0x6f, 0x64, 0x65, 0x41, 0x64,
+	0x64, 0x72, 0x65, 0x73, 0x73, 0x65, 0x73, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12,
+	0x48, 0x0a, 0x11, 0x47, 0x65, 0x74, 0x55, 0x6e, 0x69, 0x74, 0x49, 0x44, 0x53, 0x65, 0x74, 0x74,
+	0x69, 0x6e, 0x67, 0x73, 0x12, 0x10, 0x2e, 0x70, 0x6c, 0x75, 0x67, 0x69, 0x6e, 0x2e, 0x76, 0x31,
+	0x2e, 0x45, 0x6d, 0x70, 0x74, 0x79, 0x1a, 0x21, 0x2e, 0x70, 0x6c, 0x75, 0x67, 0x69, 0x6e, 0x2e,
+	0x76, 0x31, 0x2e, 0x55, 0x6e, 0x69, 0x74, 0x49, 0x44, 0x53, 0x65, 0x74, 0x74, 0x69, 0x6e, 0x67,
+	0x73, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12, 0x48, 0x0a, 0x10, 0x53, 0x65, 0x74,
+	0x55, 0x6e, 0x69, 0x74, 0x49, 0x44, 0x45, 0x6e, 0x61, 0x62, 0x6c, 0x65, 0x64, 0x12, 0x22, 0x2e,
+	0x70, 0x6c, 0x75, 0x67, 0x69, 0x6e, 0x2e, 0x76, 0x31, 0x2e, 0x53, 0x65, 0x74, 0x55, 0x6e, 0x69,
+	0x74, 0x49, 0x44, 0x45, 0x6e, 0x61, 0x62, 0x6c, 0x65, 0x64, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73,
+	0x74, 0x1a, 0x10, 0x2e, 0x70, 0x6c, 0x75, 0x67, 0x69, 0x6e, 0x2e, 0x76, 0x31, 0x2e, 0x45, 0x6d,
+	0x70, 0x74, 0x79, 0x12, 0x4c, 0x0a, 0x12, 0x53, 0x65, 0x74, 0x44, 0x69, 0x73, 0x61, 0x62, 0x6c,
+	0x65, 0x64, 0x55, 0x6e, 0x69, 0x74, 0x49, 0x44, 0x73, 0x12, 0x24, 0x2e, 0x70, 0x6c, 0x75, 0x67,
+	0x69, 0x6e, 0x2e, 0x76, 0x31, 0x2e, 0x53, 0x65, 0x74, 0x44, 0x69, 0x73, 0x61, 0x62, 0x6c, 0x65,
+	0x64, 0x55, 0x6e, 0x69, 0x74, 0x49, 0x44, 0x73, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x1a,
+	0x10, 0x2e, 0x70, 0x6c, 0x75, 0x67, 0x69, 0x6e, 0x2e, 0x76, 0x31, 0x2e, 0x45, 0x6d, 0x70, 0x74,
+	0x79, 0x42, 0x1e, 0x5a, 0x1c, 0x6d, 0x6f, 0x64, 0x62, 0x75, 0x73, 0x5f, 0x73, 0x69, 0x6d, 0x75,
+	0x6c, 0x61, 0x74, 0x6f, 0x72, 0x2f, 0x70, 0x62, 0x2f, 0x70, 0x6c, 0x75, 0x67, 0x69, 0x6e, 0x70,
+	0x62, 0x62, 0x06, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x33,
 }
 
 var (
@@ -1487,7 +1622,7 @@ func file_plugin_service_proto_rawDescGZIP() []byte {
 	return file_plugin_service_proto_rawDescData
 }
 
-var file_plugin_service_proto_msgTypes = make([]protoimpl.MessageInfo, 21)
+var file_plugin_service_proto_msgTypes = make([]protoimpl.MessageInfo, 24)
 var file_plugin_service_proto_goTypes = []interface{}{
 	(*PluginMetadata)(nil),            // 0: plugin.v1.PluginMetadata
 	(*ProtocolCapabilities)(nil),      // 1: plugin.v1.ProtocolCapabilities
@@ -1507,10 +1642,13 @@ var file_plugin_service_proto_goTypes = []interface{}{
 	(*CreateAndStartRequest)(nil),     // 15: plugin.v1.CreateAndStartRequest
 	(*StatusResponse)(nil),            // 16: plugin.v1.StatusResponse
 	(*UpdateConfigRequest)(nil),       // 17: plugin.v1.UpdateConfigRequest
-	(*UnitIDSettingsResponse)(nil),    // 18: plugin.v1.UnitIDSettingsResponse
-	(*SetUnitIDEnabledRequest)(nil),   // 19: plugin.v1.SetUnitIDEnabledRequest
-	(*SetDisabledUnitIDsRequest)(nil), // 20: plugin.v1.SetDisabledUnitIDsRequest
-	(*Empty)(nil),                     // 21: plugin.v1.Empty
+	(*GetNodeAddressesRequest)(nil),   // 18: plugin.v1.GetNodeAddressesRequest
+	(*GetNodeAddressesResponse)(nil),  // 19: plugin.v1.GetNodeAddressesResponse
+	(*UnitIDSettingsResponse)(nil),    // 20: plugin.v1.UnitIDSettingsResponse
+	(*SetUnitIDEnabledRequest)(nil),   // 21: plugin.v1.SetUnitIDEnabledRequest
+	(*SetDisabledUnitIDsRequest)(nil), // 22: plugin.v1.SetDisabledUnitIDsRequest
+	nil,                               // 23: plugin.v1.GetNodeAddressesResponse.AddressesEntry
+	(*Empty)(nil),                     // 24: plugin.v1.Empty
 }
 var file_plugin_service_proto_depIdxs = []int32{
 	1,  // 0: plugin.v1.PluginMetadata.capabilities:type_name -> plugin.v1.ProtocolCapabilities
@@ -1518,39 +1656,42 @@ var file_plugin_service_proto_depIdxs = []int32{
 	6,  // 2: plugin.v1.ConfigField.options:type_name -> plugin.v1.FieldOption
 	7,  // 3: plugin.v1.ConfigField.condition:type_name -> plugin.v1.FieldCondition
 	5,  // 4: plugin.v1.GetConfigFieldsResponse.fields:type_name -> plugin.v1.ConfigField
-	21, // 5: plugin.v1.PluginService.GetMetadata:input_type -> plugin.v1.Empty
-	21, // 6: plugin.v1.PluginService.GetConfigVariants:input_type -> plugin.v1.Empty
-	4,  // 7: plugin.v1.PluginService.GetConfigFields:input_type -> plugin.v1.GetConfigFieldsRequest
-	9,  // 8: plugin.v1.PluginService.GetDefaultConfig:input_type -> plugin.v1.GetDefaultConfigRequest
-	11, // 9: plugin.v1.PluginService.MapToConfig:input_type -> plugin.v1.MapToConfigRequest
-	13, // 10: plugin.v1.PluginService.ConfigToMap:input_type -> plugin.v1.ConfigToMapRequest
-	15, // 11: plugin.v1.PluginService.CreateAndStart:input_type -> plugin.v1.CreateAndStartRequest
-	21, // 12: plugin.v1.PluginService.Stop:input_type -> plugin.v1.Empty
-	21, // 13: plugin.v1.PluginService.GetStatus:input_type -> plugin.v1.Empty
-	17, // 14: plugin.v1.PluginService.UpdateConfig:input_type -> plugin.v1.UpdateConfigRequest
-	21, // 15: plugin.v1.PluginService.OnNodePublishingUpdated:input_type -> plugin.v1.Empty
-	21, // 16: plugin.v1.PluginService.GetUnitIDSettings:input_type -> plugin.v1.Empty
-	19, // 17: plugin.v1.PluginService.SetUnitIDEnabled:input_type -> plugin.v1.SetUnitIDEnabledRequest
-	20, // 18: plugin.v1.PluginService.SetDisabledUnitIDs:input_type -> plugin.v1.SetDisabledUnitIDsRequest
-	0,  // 19: plugin.v1.PluginService.GetMetadata:output_type -> plugin.v1.PluginMetadata
-	3,  // 20: plugin.v1.PluginService.GetConfigVariants:output_type -> plugin.v1.GetConfigVariantsResponse
-	8,  // 21: plugin.v1.PluginService.GetConfigFields:output_type -> plugin.v1.GetConfigFieldsResponse
-	10, // 22: plugin.v1.PluginService.GetDefaultConfig:output_type -> plugin.v1.ConfigDataResponse
-	12, // 23: plugin.v1.PluginService.MapToConfig:output_type -> plugin.v1.MapToConfigResponse
-	14, // 24: plugin.v1.PluginService.ConfigToMap:output_type -> plugin.v1.ConfigToMapResponse
-	21, // 25: plugin.v1.PluginService.CreateAndStart:output_type -> plugin.v1.Empty
-	21, // 26: plugin.v1.PluginService.Stop:output_type -> plugin.v1.Empty
-	16, // 27: plugin.v1.PluginService.GetStatus:output_type -> plugin.v1.StatusResponse
-	21, // 28: plugin.v1.PluginService.UpdateConfig:output_type -> plugin.v1.Empty
-	21, // 29: plugin.v1.PluginService.OnNodePublishingUpdated:output_type -> plugin.v1.Empty
-	18, // 30: plugin.v1.PluginService.GetUnitIDSettings:output_type -> plugin.v1.UnitIDSettingsResponse
-	21, // 31: plugin.v1.PluginService.SetUnitIDEnabled:output_type -> plugin.v1.Empty
-	21, // 32: plugin.v1.PluginService.SetDisabledUnitIDs:output_type -> plugin.v1.Empty
-	19, // [19:33] is the sub-list for method output_type
-	5,  // [5:19] is the sub-list for method input_type
-	5,  // [5:5] is the sub-list for extension type_name
-	5,  // [5:5] is the sub-list for extension extendee
-	0,  // [0:5] is the sub-list for field type_name
+	23, // 5: plugin.v1.GetNodeAddressesResponse.addresses:type_name -> plugin.v1.GetNodeAddressesResponse.AddressesEntry
+	24, // 6: plugin.v1.PluginService.GetMetadata:input_type -> plugin.v1.Empty
+	24, // 7: plugin.v1.PluginService.GetConfigVariants:input_type -> plugin.v1.Empty
+	4,  // 8: plugin.v1.PluginService.GetConfigFields:input_type -> plugin.v1.GetConfigFieldsRequest
+	9,  // 9: plugin.v1.PluginService.GetDefaultConfig:input_type -> plugin.v1.GetDefaultConfigRequest
+	11, // 10: plugin.v1.PluginService.MapToConfig:input_type -> plugin.v1.MapToConfigRequest
+	13, // 11: plugin.v1.PluginService.ConfigToMap:input_type -> plugin.v1.ConfigToMapRequest
+	15, // 12: plugin.v1.PluginService.CreateAndStart:input_type -> plugin.v1.CreateAndStartRequest
+	24, // 13: plugin.v1.PluginService.Stop:input_type -> plugin.v1.Empty
+	24, // 14: plugin.v1.PluginService.GetStatus:input_type -> plugin.v1.Empty
+	17, // 15: plugin.v1.PluginService.UpdateConfig:input_type -> plugin.v1.UpdateConfigRequest
+	24, // 16: plugin.v1.PluginService.OnNodePublishingUpdated:input_type -> plugin.v1.Empty
+	18, // 17: plugin.v1.PluginService.GetNodeAddresses:input_type -> plugin.v1.GetNodeAddressesRequest
+	24, // 18: plugin.v1.PluginService.GetUnitIDSettings:input_type -> plugin.v1.Empty
+	21, // 19: plugin.v1.PluginService.SetUnitIDEnabled:input_type -> plugin.v1.SetUnitIDEnabledRequest
+	22, // 20: plugin.v1.PluginService.SetDisabledUnitIDs:input_type -> plugin.v1.SetDisabledUnitIDsRequest
+	0,  // 21: plugin.v1.PluginService.GetMetadata:output_type -> plugin.v1.PluginMetadata
+	3,  // 22: plugin.v1.PluginService.GetConfigVariants:output_type -> plugin.v1.GetConfigVariantsResponse
+	8,  // 23: plugin.v1.PluginService.GetConfigFields:output_type -> plugin.v1.GetConfigFieldsResponse
+	10, // 24: plugin.v1.PluginService.GetDefaultConfig:output_type -> plugin.v1.ConfigDataResponse
+	12, // 25: plugin.v1.PluginService.MapToConfig:output_type -> plugin.v1.MapToConfigResponse
+	14, // 26: plugin.v1.PluginService.ConfigToMap:output_type -> plugin.v1.ConfigToMapResponse
+	24, // 27: plugin.v1.PluginService.CreateAndStart:output_type -> plugin.v1.Empty
+	24, // 28: plugin.v1.PluginService.Stop:output_type -> plugin.v1.Empty
+	16, // 29: plugin.v1.PluginService.GetStatus:output_type -> plugin.v1.StatusResponse
+	24, // 30: plugin.v1.PluginService.UpdateConfig:output_type -> plugin.v1.Empty
+	24, // 31: plugin.v1.PluginService.OnNodePublishingUpdated:output_type -> plugin.v1.Empty
+	19, // 32: plugin.v1.PluginService.GetNodeAddresses:output_type -> plugin.v1.GetNodeAddressesResponse
+	20, // 33: plugin.v1.PluginService.GetUnitIDSettings:output_type -> plugin.v1.UnitIDSettingsResponse
+	24, // 34: plugin.v1.PluginService.SetUnitIDEnabled:output_type -> plugin.v1.Empty
+	24, // 35: plugin.v1.PluginService.SetDisabledUnitIDs:output_type -> plugin.v1.Empty
+	21, // [21:36] is the sub-list for method output_type
+	6,  // [6:21] is the sub-list for method input_type
+	6,  // [6:6] is the sub-list for extension type_name
+	6,  // [6:6] is the sub-list for extension extendee
+	0,  // [0:6] is the sub-list for field type_name
 }
 
 func init() { file_plugin_service_proto_init() }
@@ -1777,7 +1918,7 @@ func file_plugin_service_proto_init() {
 			}
 		}
 		file_plugin_service_proto_msgTypes[18].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*UnitIDSettingsResponse); i {
+			switch v := v.(*GetNodeAddressesRequest); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -1789,7 +1930,7 @@ func file_plugin_service_proto_init() {
 			}
 		}
 		file_plugin_service_proto_msgTypes[19].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*SetUnitIDEnabledRequest); i {
+			switch v := v.(*GetNodeAddressesResponse); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -1801,6 +1942,30 @@ func file_plugin_service_proto_init() {
 			}
 		}
 		file_plugin_service_proto_msgTypes[20].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*UnitIDSettingsResponse); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_plugin_service_proto_msgTypes[21].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*SetUnitIDEnabledRequest); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_plugin_service_proto_msgTypes[22].Exporter = func(v interface{}, i int) interface{} {
 			switch v := v.(*SetDisabledUnitIDsRequest); i {
 			case 0:
 				return &v.state
@@ -1819,7 +1984,7 @@ func file_plugin_service_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: file_plugin_service_proto_rawDesc,
 			NumEnums:      0,
-			NumMessages:   21,
+			NumMessages:   24,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

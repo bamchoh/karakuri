@@ -41,6 +41,7 @@ message MemoryArea {
   bool read_only = 5;
   bool byte_addressing = 6;
   bool one_origin = 7;
+  string short_name = 8; // マッピング一覧などに表示する短い名前（空なら id を使う）
 }
 
 message GetAreasResponse {

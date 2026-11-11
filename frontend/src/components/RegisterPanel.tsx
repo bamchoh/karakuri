@@ -239,7 +239,7 @@ export function RegisterPanel({
   const currentArea = memoryAreas.find((a) => a.id === selectedArea);
   const isBitType = currentArea?.isBit ?? false;
   const isByteAddr = currentArea?.byteAddressing ?? false;
-  const isModbusArea = currentArea?.oneOrigin ?? false;
+  const isOneOriginArea = currentArea?.oneOrigin ?? false;
   const maxStartAddress = currentArea
     ? Math.max(0, currentArea.size - PAGE_SIZE)
     : 0;
@@ -253,15 +253,15 @@ export function RegisterPanel({
   useEffect(() => {
     if (!isEditingAddress) {
       setStartAddressText(
-        String(isModbusArea ? startAddress + 1 : startAddress),
+        String(isOneOriginArea ? startAddress + 1 : startAddress),
       );
     }
-  }, [startAddress, isModbusArea, isEditingAddress]);
+  }, [startAddress, isOneOriginArea, isEditingAddress]);
 
-  // ワードアドレスを表示用アドレスに変換する（バイトアドレスは*2、Modbusは1オリジン）
+  // ワードアドレスを表示用アドレスに変換する（バイトアドレスは*2、oneOrigin のエリアは+1）
   const toDisplayAddr = (wordAddr: number) => {
     if (isByteAddr) return wordAddr * 2;
-    if (isModbusArea) return wordAddr + 1;
+    if (isOneOriginArea) return wordAddr + 1;
     return wordAddr;
   };
 
@@ -690,12 +690,12 @@ export function RegisterPanel({
 
                   if (!isNaN(v)) {
                     setStartAddress(
-                      isModbusArea ? Math.max(0, v - 1) : Math.max(0, v),
+                      isOneOriginArea ? Math.max(0, v - 1) : Math.max(0, v),
                     );
                   }
 
                   setStartAddressText(
-                    String(isModbusArea ? startAddress + 1 : startAddress),
+                    String(isOneOriginArea ? startAddress + 1 : startAddress),
                   );
                 }}
                 onFocus={(e) => e.target.select()}

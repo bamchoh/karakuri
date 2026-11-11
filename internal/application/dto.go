@@ -86,6 +86,7 @@ type MemoryAreaDTO struct {
 	ReadOnly       bool   `json:"readOnly"`
 	ByteAddressing bool   `json:"byteAddressing"`
 	OneOrigin      bool   `json:"oneOrigin"`
+	ShortName      string `json:"shortName"`
 }
 
 // === UnitID設定DTO ===

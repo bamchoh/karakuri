@@ -54,7 +54,7 @@ export function AddMonitoringDialog({
   const formAreas = memoryAreasByProtocol[formProtocolType] || [];
   const selectedAreaIsBit =
     formAreas.find((a) => a.id === formArea)?.isBit ?? false;
-  const isModbusFormArea =
+  const isOneOriginFormArea =
     formAreas.find((a) => a.id === formArea)?.oneOrigin ?? false;
 
   useEffect(() => {
@@ -127,13 +127,13 @@ export function AddMonitoringDialog({
             <label>開始アドレス:</label>
             <input
               type="number"
-              min={isModbusFormArea ? "1" : "0"}
+              min={isOneOriginFormArea ? "1" : "0"}
               max="65535"
-              value={isModbusFormArea ? formAddress + 1 : formAddress}
+              value={isOneOriginFormArea ? formAddress + 1 : formAddress}
               onChange={(e) => {
                 const v =
-                  parseInt(e.target.value) || (isModbusFormArea ? 1 : 0);
-                setFormAddress(isModbusFormArea ? Math.max(0, v - 1) : v);
+                  parseInt(e.target.value) || (isOneOriginFormArea ? 1 : 0);
+                setFormAddress(isOneOriginFormArea ? Math.max(0, v - 1) : v);
               }}
             />
           </div>

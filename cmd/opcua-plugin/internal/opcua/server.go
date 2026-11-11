@@ -16,6 +16,7 @@ import (
 
 var _ protocol.ProtocolServer = (*Server)(nil)
 var _ protocol.NodePublishingAware = (*Server)(nil)
+var _ protocol.NodeAddressResolver = (*Server)(nil)
 
 // Server は uastack を使った OPC UA サーバー。
 // ホストの VariableStore で OPC UA 公開設定された変数を、設定のネームスペースのノードとして公開する。
@@ -141,7 +142,7 @@ func (s *Server) Status() protocol.ServerStatus {
 	return s.status
 }
 
-func (s *Server) ProtocolType() protocol.ProtocolType { return protocol.ProtocolOPCUA }
+func (s *Server) ProtocolType() protocol.ProtocolType { return ProtocolOPCUA }
 
 func (s *Server) Config() protocol.ProtocolConfig {
 	s.mu.Lock()
@@ -171,6 +172,25 @@ func (s *Server) OnNodePublishingUpdated() {
 	if nodes != nil {
 		nodes.rebuild()
 	}
+}
+
+// NodeAddresses は変数 ID ごとのルートノードの NodeID を返す（NodeAddressResolver）。
+// 起動中はアドレス空間に登録したネームスペースの番号（ns=N）を使う。
+// 停止中は番号が決まらないため、ネームスペース URI で表す（nsu=URI）。
+func (s *Server) NodeAddresses(variableIDs []string) map[string]string {
+	s.mu.Lock()
+	nodes, uri := s.nodes, s.config.NamespaceURI
+	s.mu.Unlock()
+
+	prefix := "nsu=" + uri
+	if nodes != nil {
+		prefix = fmt.Sprintf("ns=%d", nodes.ns)
+	}
+	result := make(map[string]string, len(variableIDs))
+	for _, id := range variableIDs {
+		result[id] = prefix + ";s=" + id
+	}
+	return result
 }
 
 // pkiDir は証明書ストアの場所（プラグイン exe と同じフォルダの pki）。

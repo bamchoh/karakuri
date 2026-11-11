@@ -10,6 +10,9 @@ import (
 
 const VERSION = "1.0.0"
 
+// ProtocolOPCUA は OPC UA プラグインのプロトコルタイプ
+const ProtocolOPCUA protocol.ProtocolType = "opcua"
+
 var _ protocol.ServerFactory = (*Factory)(nil)
 var _ protocol.VariableStoreInjector = (*Factory)(nil)
 
@@ -27,7 +30,7 @@ func (f *Factory) InjectVariableStore(accessor protocol.VariableStoreAccessor) {
 }
 
 func (f *Factory) Version() string                     { return VERSION }
-func (f *Factory) ProtocolType() protocol.ProtocolType { return protocol.ProtocolOPCUA }
+func (f *Factory) ProtocolType() protocol.ProtocolType { return ProtocolOPCUA }
 func (f *Factory) DisplayName() string                 { return "OPC UA" }
 
 func (f *Factory) ConfigVariants() []protocol.ConfigVariant {

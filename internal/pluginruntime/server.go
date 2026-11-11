@@ -280,6 +280,46 @@ func (s *Server) OnNodePublishingUpdated(ctx context.Context, _ *pb.Empty) (*pb.
 	return &pb.Empty{}, nil
 }
 
+// GetNodeAddresses は公開変数のノードアドレスを返す（NodeAddressResolver を実装するサーバーのみ）。
+// 起動中のサーバーがあればそれに問い合わせる。停止中はホストの設定が新しい可能性があるため、
+// リクエストの設定で起動しないサーバーを作って計算する。
+func (s *Server) GetNodeAddresses(ctx context.Context, req *pb.GetNodeAddressesRequest) (*pb.GetNodeAddressesResponse, error) {
+	s.mu.Lock()
+	srv := s.server
+	s.mu.Unlock()
+
+	if srv == nil || srv.Status() != protocol.StatusRunning {
+		if !s.factory.GetProtocolCapabilities().SupportsNodePublishing {
+			return &pb.GetNodeAddressesResponse{}, nil
+		}
+		config, err := s.configFromRequest(req.VariantId, req.SettingsJson)
+		if err != nil {
+			return nil, err
+		}
+		if srv, err = s.factory.CreateServer(config, s.factory.CreateDataStore()); err != nil {
+			return nil, err
+		}
+	}
+
+	resolver, ok := srv.(protocol.NodeAddressResolver)
+	if !ok {
+		return &pb.GetNodeAddressesResponse{}, nil
+	}
+	return &pb.GetNodeAddressesResponse{Addresses: resolver.NodeAddresses(req.VariableIds)}, nil
+}
+
+// configFromRequest は JSON の設定から ProtocolConfig を作る（空なら既定値）
+func (s *Server) configFromRequest(variantID, settingsJSON string) (protocol.ProtocolConfig, error) {
+	if settingsJSON == "" {
+		return s.factory.CreateConfigFromVariant(variantID), nil
+	}
+	var settings map[string]interface{}
+	if err := json.Unmarshal([]byte(settingsJSON), &settings); err != nil {
+		return nil, fmt.Errorf("設定のパース失敗: %w", err)
+	}
+	return s.factory.MapToConfig(variantID, settings)
+}
+
 // UnitID サポート
 
 func (s *Server) GetUnitIDSettings(ctx context.Context, _ *pb.Empty) (*pb.UnitIDSettingsResponse, error) {
@@ -356,6 +396,7 @@ func (s *Server) GetAreas(ctx context.Context, _ *pb.Empty) (*pb.GetAreasRespons
 			ReadOnly:       a.ReadOnly,
 			ByteAddressing: a.ByteAddressing,
 			OneOrigin:      a.OneOrigin,
+			ShortName:      a.ShortName,
 		}
 	}
 	return &pb.GetAreasResponse{Areas: pbAreas}, nil

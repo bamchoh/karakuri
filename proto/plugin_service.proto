@@ -30,6 +30,9 @@ service PluginService {
 
   // ノード公開設定変更通知（SupportsNodePublishing=true のプロトコル用）
   rpc OnNodePublishingUpdated(Empty) returns (Empty);
+  // 公開変数のノードアドレス（OPC UA なら NodeID）を返す（SupportsNodePublishing=true のプロトコル用）
+  // サーバー未作成時は settings_json の設定で計算する
+  rpc GetNodeAddresses(GetNodeAddressesRequest) returns (GetNodeAddressesResponse);
 
   // UnitID 管理（SupportsUnitID=true のプロトコル用）
   rpc GetUnitIDSettings(Empty) returns (UnitIDSettingsResponse);
@@ -142,6 +145,16 @@ message StatusResponse {
 message UpdateConfigRequest {
   string variant_id = 1;
   string settings_json = 2;
+}
+
+message GetNodeAddressesRequest {
+  string variant_id = 1;
+  string settings_json = 2;
+  repeated string variable_ids = 3;
+}
+
+message GetNodeAddressesResponse {
+  map<string, string> addresses = 1; // 変数 ID -> ノードアドレス
 }
 
 message UnitIDSettingsResponse {

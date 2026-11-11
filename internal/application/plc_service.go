@@ -476,6 +476,37 @@ func (s *PLCService) GetServerStatus(protocolType string) string {
 	return "Stopped"
 }
 
+// GetNodeAddresses は公開変数のノードアドレス（OPC UA なら NodeID）を返す。
+// アドレスの書式はプロトコルのプラグインが決める。対応していないプロトコルでは空のマップを返す。
+func (s *PLCService) GetNodeAddresses(protocolType string, variableIDs []string) map[string]string {
+	s.mu.RLock()
+	inst, err := s.getServerInstance(protocolType)
+	var srv protocol.ProtocolServer
+	var factory protocol.ServerFactory
+	var config protocol.ProtocolConfig
+	if err == nil {
+		srv, factory, config = inst.server, inst.factory, inst.config
+	}
+	s.mu.RUnlock()
+
+	result := map[string]string{}
+	if err != nil || len(variableIDs) == 0 {
+		return result
+	}
+	// 一度も起動していないサーバーは未作成なので、現在の設定で作って問い合わせる（起動はしない）
+	if srv == nil {
+		if srv, err = factory.CreateServer(config, nil); err != nil {
+			return result
+		}
+	}
+	if resolver, ok := srv.(protocol.NodeAddressResolver); ok {
+		for id, addr := range resolver.NodeAddresses(variableIDs) {
+			result[id] = addr
+		}
+	}
+	return result
+}
+
 // === プロトコル管理API ===
 
 // GetAvailableProtocols は利用可能なプロトコル一覧を返す
@@ -760,6 +791,7 @@ func (s *PLCService) GetMemoryAreas(protocolType string) []MemoryAreaDTO {
 			ReadOnly:       area.ReadOnly,
 			ByteAddressing: area.ByteAddressing,
 			OneOrigin:      area.OneOrigin,
+			ShortName:      area.ShortName,
 		}
 	}
 	return result
@@ -1730,8 +1762,8 @@ func (s *PLCService) LoadMonitoringConfig() error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	// デフォルトサーバーのプロトコルタイプを取得（後方互換用）
-	defaultProtocol := "modbus-tcp"
+	// ProtocolType のない古い項目は、追加済みサーバーのプロトコルタイプを割り当てる（後方互換用）
+	defaultProtocol := ""
 	for pt := range s.servers {
 		defaultProtocol = string(pt)
 		break

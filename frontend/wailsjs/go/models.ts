@@ -248,6 +248,7 @@ export namespace application {
 	    readOnly: boolean;
 	    byteAddressing: boolean;
 	    oneOrigin: boolean;
+	    shortName: string;
 	
 	    static createFrom(source: any = {}) {
 	        return new MemoryAreaDTO(source);
@@ -262,6 +263,7 @@ export namespace application {
 	        this.readOnly = source["readOnly"];
 	        this.byteAddressing = source["byteAddressing"];
 	        this.oneOrigin = source["oneOrigin"];
+	        this.shortName = source["shortName"];
 	    }
 	}
 	export class MonitoringItemDTO {

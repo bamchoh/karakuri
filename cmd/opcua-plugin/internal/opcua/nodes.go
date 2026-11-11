@@ -82,7 +82,7 @@ func newPLCNodes(as *server.AddressSpace, namespaceURI string, accessor protocol
 		ns:           ns,
 		folder:       folder,
 		accessor:     accessor,
-		protocolType: string(protocol.ProtocolOPCUA),
+		protocolType: string(ProtocolOPCUA),
 		logf:         logf,
 		vars:         map[string]*publishedVar{},
 		dirty:        map[string]struct{}{},
