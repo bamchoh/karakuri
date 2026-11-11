@@ -256,6 +256,8 @@ frontend/src/
 │   ├── RegisterPanel.tsx   # 汎用メモリ操作UI（サブタブで一覧/モニタリング切替）
 │   ├── MonitoringView.tsx  # カスタムレジスタモニタリング
 │   ├── VariableView.tsx    # 変数管理UI（IEC 61131-3データ型対応）
+│   ├── variableTypes.ts    # 変数のデータ型・値の純粋関数（型の解析、数値の解析と整形。state に依存しない）
+│   ├── StructArrayElementEditor.tsx  # 構造体配列要素のエディタ（VariableView の値編集ダイアログで使用）
 │   └── ScriptPanel.tsx     # スクリプト管理（エラー表示機能付き）
 └── App.tsx                 # タブベースのメインUI
 ```
@@ -466,7 +468,7 @@ JavaScript（goja）でPLC動作を記述。
 ### Reactコンポーネントの状態管理
 
 - **コンポーネントの定義位置**: 関数コンポーネント内で別のコンポーネントを定義すると、再レンダリング時に新しいコンポーネントとして扱われ、`useState`などの状態がリセットされる
-  - 例: `StructArrayElementEditor`は`VariableView`の外で定義
+  - 例: `StructArrayElementEditor`は`VariableView`の外（`StructArrayElementEditor.tsx`）で定義
   - 内部で使用する関数は props で渡す
 - **キーの設定**: リスト描画時は安定した`key`を設定（インデックスだけでなく、パスベースのキーを使用）
 
