@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import { useState } from "react";
 
 // 構造体型配列の要素エディタ（ローカルで展開/折りたたみ状態を管理）
 export const StructArrayElementEditor = ({

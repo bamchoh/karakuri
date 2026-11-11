@@ -617,3 +617,53 @@ test.describe("一括マッピング編集ダイアログ（レジスタ型）",
     expect((await getVariable(page, "A")).mappings ?? []).toEqual([]);
   });
 });
+
+test.describe("行のキーボード操作", () => {
+  test("Insert・F2・M・Enter でダイアログが開き、閉じると行にフォーカスが戻る", async ({
+    page,
+  }) => {
+    await addModbusServer(page);
+    await createVariable(page, "Counter", "INT", 1);
+    await page.reload();
+    await openApp(page);
+    await openVariables(page);
+    const row = variableRow(page, "Counter");
+
+    await row.focus();
+    await page.keyboard.press("Insert");
+    await expect(dialogByTitle(page, "変数を追加")).toBeVisible();
+    await page.keyboard.press("Escape");
+    await expect(dialogByTitle(page, "変数を追加")).toBeHidden();
+
+    await row.focus();
+    await page.keyboard.press("F2");
+    const meta = dialogByTitle(page, "変数を編集");
+    await expect(field(meta, "変数名:")).toHaveValue("Counter");
+    await page.keyboard.press("Escape");
+    await expect(meta).toBeHidden();
+
+    await row.focus();
+    await page.keyboard.press("m");
+    await expect(dialogByTitle(page, "マッピング設定: Counter")).toBeVisible();
+    await page.keyboard.press("Escape");
+    await expect(dialogByTitle(page, "マッピング設定: Counter")).toBeHidden();
+
+    // Enter で値の編集。確定すると行にフォーカスが戻り、続けてキー操作できる
+    await row.focus();
+    await page.keyboard.press("Enter");
+    const edit = dialogByTitle(page, "値を編集");
+    await expect(edit.locator("input")).toBeFocused();
+    await edit.locator("input").fill("5");
+    await waitForEnterReady(page);
+    await page.keyboard.press("Enter");
+    await expect(edit).toBeHidden();
+    await expect(row.locator("td.var-value")).toHaveText("5");
+    await expect(row).toBeFocused();
+
+    // Delete で削除（確認あり）
+    const confirm = nextDialogMessage(page);
+    await page.keyboard.press("Delete");
+    expect(await confirm).toContain('変数 "Counter" を削除しますか');
+    await expect(row).toHaveCount(0);
+  });
+});

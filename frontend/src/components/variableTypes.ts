@@ -329,3 +329,35 @@ export const generateDefaultForType = (
   if (isStructType(dataType)) return generateStructDefault(dataType, structTypes);
   return parseValue(getDefaultValue(dataType), dataType);
 };
+
+// フラット化された行の型定義
+export interface FlatRow {
+  key: string;
+  displayName: string;
+  dataType: string;
+  value: any;
+  depth: number;
+  // 親変数への参照（編集・削除・マッピング用）
+  variable: application.VariableDTO;
+  // 値のパスを表すキー配列（例: ["fieldName"] や [0, "fieldName"]）
+  valuePath: (string | number)[];
+  // この行がヘッダー行（構造体/配列の親）かどうか
+  isHeader: boolean;
+  // 変数のベースアドレスからのワードオフセット
+  wordOffset: number;
+}
+
+// 一括マッピング編集用の行データ
+export interface BulkEditRow {
+  variableId: string;
+  variableName: string;
+  dataType: string;
+  wordCount: number;
+  // レジスタ型プロトコル（メモリエリアを持つ）
+  memoryArea: string;
+  addressStr: string; // 空文字 = マッピングなし（削除）
+  endianness: string;
+  // ノード公開型プロトコル（SupportsNodePublishing=true）
+  nodeEnabled: boolean;
+  accessMode: string;
+}
