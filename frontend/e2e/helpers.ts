@@ -1,4 +1,4 @@
-import { Page, expect } from "@playwright/test";
+import { Locator, Page, expect } from "@playwright/test";
 import path from "path";
 
 // スクリーンショットの保存先（git には入れない）。frontend フォルダで実行する前提
@@ -27,10 +27,12 @@ export async function openApp(page: Page) {
   await expect(page.locator("#root")).not.toBeEmpty();
 }
 
-// テストで作ったサーバーと変数をすべて消して、アプリを初期状態に戻す
+// テストで作ったサーバー・変数・構造体型をすべて消して、アプリを初期状態に戻す
 export async function resetApp(page: Page) {
   const vars = await api<{ id: string }[]>(page, "GetVariables");
   for (const v of vars || []) await api(page, "DeleteVariable", v.id);
+  const types = await api<{ name: string }[]>(page, "GetStructTypes");
+  for (const t of types || []) await api(page, "DeleteStructType", t.name);
   const servers = await api<{ protocolType: string }[]>(
     page,
     "GetServerInstances",
@@ -39,4 +41,93 @@ export async function resetApp(page: Page) {
     await api(page, "StopServer", s.protocolType).catch(() => {});
     await api(page, "RemoveServer", s.protocolType);
   }
+}
+
+// ===== 変数画面の操作 =====
+
+export const MODBUS_PORT = 15020;
+
+// 正規表現の特別な文字を、文字そのものとして扱えるようにする
+export function escapeRegExp(s: string) {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+export async function openVariables(page: Page) {
+  await page.getByTitle("Variables").click();
+  await expect(page.locator(".variable-toolbar")).toBeVisible();
+}
+
+// 見出し（h3）でダイアログを特定する
+export function dialogByTitle(page: Page, title: string | RegExp) {
+  return page.locator(".dialog", {
+    has: page.locator("h3", { hasText: title }),
+  });
+}
+
+// 「ラベル: 入力欄」の行（.dialog-row）から入力欄を取る。ラベルは完全一致
+export function field(scope: Locator, label: string) {
+  return scope
+    .locator(".dialog-row", {
+      has: scope.page().locator("label", {
+        hasText: new RegExp("^" + escapeRegExp(label) + "$"),
+      }),
+    })
+    .locator("input, select")
+    .first();
+}
+
+// 変数一覧で、名前の列がちょうど name の行
+export function variableRow(page: Page, name: string) {
+  return page.locator(".variable-view > table.variable-table > tbody > tr", {
+    has: page.locator("td.var-name", {
+      hasText: new RegExp("^\\s*(▶|▼)?\\s*" + escapeRegExp(name) + "$"),
+    }),
+  });
+}
+
+export async function createVariable(
+  page: Page,
+  name: string,
+  dataType = "INT",
+  value: unknown = 0,
+) {
+  return api<{ id: string; name: string }>(
+    page,
+    "CreateVariable",
+    name,
+    dataType,
+    value,
+  );
+}
+
+export async function getVariable(page: Page, name: string) {
+  const vars = await api<any[]>(page, "GetVariables");
+  return (vars || []).find((v) => v.name === name);
+}
+
+// Modbus TCP サーバーを追加して起動する（マッピングのメモリエリアを使えるようにする）
+export async function addModbusServer(page: Page) {
+  await api(page, "AddServer", "modbus-tcp", "");
+  const cfg = await api<{ variant: string; settings: Record<string, unknown> }>(
+    page,
+    "GetServerConfig",
+    "modbus-tcp",
+  );
+  const portKey = Object.keys(cfg.settings).find((k) => /port/i.test(k))!;
+  await api(page, "UpdateServerConfig", {
+    protocolType: "modbus-tcp",
+    variant: cfg.variant,
+    settings: { ...cfg.settings, [portKey]: MODBUS_PORT },
+  });
+  await api(page, "StartServer", "modbus-tcp");
+}
+
+// 次に出る alert / confirm を受け取って OK し、メッセージを返す
+export function nextDialogMessage(page: Page): Promise<string> {
+  return new Promise<string>((resolve) =>
+    page.once("dialog", async (d) => {
+      resolve(d.message());
+      await d.accept();
+    }),
+  );
 }
