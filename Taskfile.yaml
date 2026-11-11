@@ -60,6 +60,12 @@ tasks:
     cmds:
       - go test ./...
 
+  e2e:
+    desc: 画面の確認用テスト（Playwright）を実行する。先に task dev で開発サーバーを起動しておく
+    dir: frontend
+    cmds:
+      - npx playwright test {{.CLI_ARGS}}
+
   clean:
     desc: ビルド成果物を削除する
     cmds:
