@@ -150,11 +150,22 @@ message UpdateConfigRequest {
 message GetNodeAddressesRequest {
   string variant_id = 1;
   string settings_json = 2;
-  repeated string variable_ids = 3;
+  repeated NodeVariable variables = 3;
+}
+
+// NodeVariable はノードアドレスを求める変数（アドレスに変数名を使うプロトコルのため名前も渡す）
+message NodeVariable {
+  string id = 1;
+  string name = 2;
 }
 
 message GetNodeAddressesResponse {
-  map<string, string> addresses = 1; // 変数 ID -> ノードアドレス
+  map<string, NodeAddress> addresses = 1; // 変数 ID -> ノードアドレス
+}
+
+message NodeAddress {
+  string address = 1;
+  string error = 2; // 空でなければ、この変数を公開できない理由（UI に表示する）
 }
 
 message UnitIDSettingsResponse {

@@ -199,5 +199,19 @@ type NodePublishingAware interface {
 // アドレスの書式はプロトコルが決める。サーバー停止中でも設定から計算できる範囲で返す。
 type NodeAddressResolver interface {
 	// NodeAddresses は変数 ID -> ノードアドレスを返す（アドレスを持たない変数は含めない）
-	NodeAddresses(variableIDs []string) map[string]string
+	NodeAddresses(variables []NodeVariable) map[string]NodeAddress
+}
+
+// NodeAddress は公開変数のノードアドレス
+type NodeAddress struct {
+	Address string
+	// Error は空でなければ、この変数をそのプロトコルで公開できない理由（アドレスの衝突など）。
+	// ホストは公開設定の保存・変数名の変更を拒否し、UI に表示する。
+	Error string
+}
+
+// NodeVariable はノードアドレスを求める変数
+type NodeVariable struct {
+	ID   string
+	Name string
 }

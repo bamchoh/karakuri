@@ -196,9 +196,10 @@ export function VariableView() {
   // 一括マッピング編集ダイアログ
   const [isBulkMappingOpen, setIsBulkMappingOpen] = useState(false);
   const [bulkProtocol, setBulkProtocol] = useState<string>("");
-  // プロトコル -> 変数 ID -> ノードアドレス（OPC UA の NodeID 等。書式はプラグインが決める）
+  // プロトコル -> 変数 ID -> ノードアドレス（OPC UA の NodeID 等）。
+  // 書式と、公開できない変数の判定（error）はプラグインが決める
   const [nodeAddresses, setNodeAddresses] = useState<
-    Record<string, Record<string, string>>
+    Record<string, Record<string, application.NodeAddressDTO>>
   >({});
   const [bulkRows, setBulkRows] = useState<BulkEditRow[]>([]);
   const [bulkIsSaving, setBulkIsSaving] = useState(false);
@@ -262,10 +263,11 @@ export function VariableView() {
       if (!protocolType || variableIds.length === 0) return;
       try {
         const addrs = await GetNodeAddresses(protocolType, variableIds);
-        setNodeAddresses((prev) => ({
-          ...prev,
-          [protocolType]: { ...(prev[protocolType] || {}), ...(addrs || {}) },
-        }));
+        setNodeAddresses((prev) => {
+          const byId = { ...(prev[protocolType] || {}) };
+          for (const a of addrs || []) byId[a.variableId] = a;
+          return { ...prev, [protocolType]: byId };
+        });
       } catch (e) {
         console.error("Failed to load node addresses:", e);
       }
@@ -1909,6 +1911,26 @@ export function VariableView() {
   // 一括マッピング保存
   const handleBulkMappingSave = async () => {
     if (bulkIsSaving) return;
+    if (isNodePublishingProtocol(bulkProtocol)) {
+      // 公開できない変数があれば、途中まで保存される前に止める
+      const blocked = bulkRows.filter(
+        (row) =>
+          row.nodeEnabled &&
+          nodeAddresses[bulkProtocol]?.[row.variableId]?.error,
+      );
+      if (blocked.length > 0) {
+        alert(
+          "公開できない変数があります:\n" +
+            blocked
+              .map(
+                (row) =>
+                  `${row.variableName}: ${nodeAddresses[bulkProtocol][row.variableId].error}`,
+              )
+              .join("\n"),
+        );
+        return;
+      }
+    }
     setBulkIsSaving(true);
     try {
       const isNP = isNodePublishingProtocol(bulkProtocol);
@@ -1985,6 +2007,15 @@ export function VariableView() {
   // マッピングを保存
   const handleSaveMappings = async () => {
     if (!mappingVariable) return;
+    // 公開できない変数は、マッピングだけ保存される前に止める
+    for (const pub of editNodePublishings) {
+      const error =
+        nodeAddresses[pub.protocolType]?.[mappingVariable.id]?.error;
+      if (pub.enabled && error) {
+        alert(error);
+        return;
+      }
+    }
     try {
       await UpdateVariableMappings(mappingVariable.id, editMappings);
       for (const pub of editNodePublishings) {
@@ -2920,13 +2951,25 @@ export function VariableView() {
                             <option value="write">Write Only</option>
                             <option value="readwrite">Read / Write</option>
                           </select>
-                          {pub.enabled && mappingVariable && (
-                            <span style={{ fontSize: "11px", color: "#888" }}>
-                              {nodeAddresses[server.protocolType]?.[
-                                mappingVariable.id
-                              ] ?? ""}
-                            </span>
-                          )}
+                          {pub.enabled &&
+                            mappingVariable &&
+                            (() => {
+                              const addr =
+                                nodeAddresses[server.protocolType]?.[
+                                  mappingVariable.id
+                                ];
+                              return addr?.error ? (
+                                <span className="node-address-error">
+                                  ⚠ {addr.error}
+                                </span>
+                              ) : (
+                                <span
+                                  style={{ fontSize: "11px", color: "#888" }}
+                                >
+                                  {addr?.address ?? ""}
+                                </span>
+                              );
+                            })()}
                         </div>
                       );
                     })}
@@ -3057,10 +3100,18 @@ export function VariableView() {
                           </select>
                         </td>
                         <td style={{ fontSize: "0.8em", color: "#888" }}>
-                          {row.nodeEnabled
-                            ? (nodeAddresses[bulkProtocol]?.[row.variableId] ??
-                              "-")
-                            : "-"}
+                          {(() => {
+                            if (!row.nodeEnabled) return "-";
+                            const addr =
+                              nodeAddresses[bulkProtocol]?.[row.variableId];
+                            return addr?.error ? (
+                              <span className="node-address-error">
+                                ⚠ {addr.error}
+                              </span>
+                            ) : (
+                              (addr?.address ?? "-")
+                            );
+                          })()}
                         </td>
                       </tr>
                     ))}

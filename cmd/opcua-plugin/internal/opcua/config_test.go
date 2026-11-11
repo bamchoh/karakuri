@@ -115,7 +115,7 @@ func TestServer_PublishesConfiguredIdentity(t *testing.T) {
 	if int(ns) >= len(nsArray) || nsArray[ns] != "urn:acme:line-a" {
 		t.Fatalf("namespace array = %v, variable ns = %d", nsArray, ns)
 	}
-	if _, err := c.ReadValue(ctx, ua.NewStringNodeId(ns, "v-int")); err != nil {
+	if _, err := c.ReadValue(ctx, ua.NewStringNodeId(ns, "Counter")); err != nil {
 		t.Errorf("read variable in configured namespace: %v", err)
 	}
 

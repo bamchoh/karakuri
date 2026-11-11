@@ -305,7 +305,15 @@ func (s *Server) GetNodeAddresses(ctx context.Context, req *pb.GetNodeAddressesR
 	if !ok {
 		return &pb.GetNodeAddressesResponse{}, nil
 	}
-	return &pb.GetNodeAddressesResponse{Addresses: resolver.NodeAddresses(req.VariableIds)}, nil
+	variables := make([]protocol.NodeVariable, len(req.Variables))
+	for i, v := range req.Variables {
+		variables[i] = protocol.NodeVariable{ID: v.Id, Name: v.Name}
+	}
+	addresses := map[string]*pb.NodeAddress{}
+	for id, a := range resolver.NodeAddresses(variables) {
+		addresses[id] = &pb.NodeAddress{Address: a.Address, Error: a.Error}
+	}
+	return &pb.GetNodeAddressesResponse{Addresses: addresses}, nil
 }
 
 // configFromRequest は JSON の設定から ProtocolConfig を作る（空なら既定値）

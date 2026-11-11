@@ -181,6 +181,13 @@ type NodePublishingDTO struct {
 	AccessMode   string `json:"accessMode"` // "read" | "write" | "readwrite"
 }
 
+// NodeAddressDTO は公開変数のノードアドレス（OPC UA なら NodeID）
+type NodeAddressDTO struct {
+	VariableID string `json:"variableId"`
+	Address    string `json:"address"`
+	Error      string `json:"error"` // 空でなければ、この変数を公開できない理由
+}
+
 // VariableDTO は変数のDTO
 type VariableDTO struct {
 	ID              string               `json:"id"`

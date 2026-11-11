@@ -174,21 +174,24 @@ func (s *Server) OnNodePublishingUpdated() {
 	}
 }
 
-// NodeAddresses は変数 ID ごとのルートノードの NodeID を返す（NodeAddressResolver）。
-// 起動中はアドレス空間に登録したネームスペースの番号（ns=N）を使う。
-// 停止中は番号が決まらないため、ネームスペース URI で表す（nsu=URI）。
-func (s *Server) NodeAddresses(variableIDs []string) map[string]string {
+// unknownNamespace は停止中の NodeID に表示するネームスペース番号（番号は起動時に決まる）
+const unknownNamespace = "???"
+
+// NodeAddresses は変数 ID ごとのルートノードの NodeID（ns=N;s=変数名）を返す（NodeAddressResolver）。
+// 起動中はアドレス空間に登録したネームスペースの番号を使う。停止中は番号が決まらないため ns=??? とする。
+// 公開できない変数名（NodeID が他のノードと重なる）には Error を付ける。
+func (s *Server) NodeAddresses(variables []protocol.NodeVariable) map[string]protocol.NodeAddress {
 	s.mu.Lock()
-	nodes, uri := s.nodes, s.config.NamespaceURI
+	nodes := s.nodes
 	s.mu.Unlock()
 
-	prefix := "nsu=" + uri
+	ns := unknownNamespace
 	if nodes != nil {
-		prefix = fmt.Sprintf("ns=%d", nodes.ns)
+		ns = fmt.Sprint(nodes.ns)
 	}
-	result := make(map[string]string, len(variableIDs))
-	for _, id := range variableIDs {
-		result[id] = prefix + ";s=" + id
+	result := make(map[string]protocol.NodeAddress, len(variables))
+	for _, v := range variables {
+		result[v.ID] = protocol.NodeAddress{Address: "ns=" + ns + ";s=" + v.Name, Error: publishNameError(v.Name)}
 	}
 	return result
 }

@@ -654,6 +654,12 @@ button:disabled {
   line-height: 1.4;
 }
 
+/* 公開できない変数の理由（プラグインが返すエラー） */
+.node-address-error {
+  color: #ef4444;
+  font-size: 0.8rem;
+}
+
 .mapping-conflict-warning {
   color: #f59e0b;
   font-size: 0.8rem;

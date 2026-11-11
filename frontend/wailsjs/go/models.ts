@@ -292,6 +292,22 @@ export namespace application {
 	        this.displayFormat = source["displayFormat"];
 	    }
 	}
+	export class NodeAddressDTO {
+	    variableId: string;
+	    address: string;
+	    error: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new NodeAddressDTO(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.variableId = source["variableId"];
+	        this.address = source["address"];
+	        this.error = source["error"];
+	    }
+	}
 	export class NodePublishingDTO {
 	    protocolType: string;
 	    enabled: boolean;

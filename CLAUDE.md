@@ -228,7 +228,7 @@ internal/
 - **VariableStoreInjector** / **NodePublishingAware** (`internal/domain/protocol/server.go`): OPC UA 等のノードベースプロトコル向けインターフェース
   - `VariableStoreInjector`: `InjectVariableStore(accessor)` で遅延注入を受け付ける
   - `NodePublishingAware`: `OnNodePublishingUpdated()` でノード公開設定変更通知を受け付ける
-  - `NodeAddressResolver`: `NodeAddresses(variableIDs)` で公開変数のノードアドレス（OPC UA なら NodeID 文字列）を返す。書式はプロトコルが決める
+  - `NodeAddressResolver`: `NodeAddresses(variables)`（`NodeVariable{ID, Name}` のスライス）で公開変数のノードアドレス（OPC UA なら NodeID 文字列）と、公開できない場合の理由（`NodeAddress.Error`）を返す。書式と判定はプロトコルが決める
   - `ProtocolCapabilities.SupportsNodePublishing: true` のプロトコルで利用される
 - **ScriptEngine** (`internal/infrastructure/scripting/engine.go`): gojaベースのJavaScript実行エンジン
   - `plc`オブジェクトでDataStoreおよびVariableStoreにアクセス可能
@@ -300,7 +300,7 @@ IEC 61131-3準拠の変数管理機能。
   - 2行表示レイアウト（ヘッダ行 + コントロール行）
   - マッピング競合警告: 他の変数と同じレジスタを使用している場合、ダイアログ内と変数一覧の両方に警告を表示
   - **マッピング列の表示**: レジスタマッピング（`protocol:area:addr`、area は `MemoryArea.shortName`）とノード公開設定（`opcua(R/W)` 等）をカンマ区切りで両方表示
-  - **NodeID の表示**: マッピングダイアログ・一括マッピング編集で、`GetNodeAddresses(protocolType, variableIds)` でプラグインから取得した値（`nodeAddresses` state）を表示する。フロントエンドで NodeID を組み立てない
+  - **NodeID の表示**: マッピングダイアログ・一括マッピング編集で、`GetNodeAddresses(protocolType, variableIds)` でプラグインから取得した値（`nodeAddresses` state）を表示する。フロントエンドで NodeID を組み立てない。`error` がある変数は理由を表示し、公開を有効にした保存を止める
   - **ダイアログを開く際に `loadServerInstancesAndAreas()` を再実行**: マウント後に追加されたサーバーも「プロトコル公開設定」セクションに反映
   - `loadServerInstancesAndAreas` は `useCallback` で定義し、マウント時・ダイアログオープン時の両方から呼び出す
 - **一括マッピング編集**: ツールバーの「一括マッピング編集」ボタンで全変数のマッピングをテーブル形式で一括設定
@@ -502,16 +502,20 @@ JavaScript（goja）でPLC動作を記述。
 
 | ノード種別 | NodeID 形式 | 例 |
 |-----------|------------|---|
-| ルート変数ノード | `ns=X;s={uuid}` | `ns=2;s=395a704c-...` |
-| 構造体フィールド | `ns=X;s={uuid}.fieldName` | `ns=2;s=395a704c-....speed` |
-| ネストフィールド | `ns=X;s={uuid}.field1.field2` | `ns=2;s=...-....motor.speed` |
-| 配列要素 | `ns=X;s={uuid}[index]` | `ns=2;s=395a704c-...[0]` |
+| ルート変数ノード | `ns=X;s={変数名}` | `ns=2;s=Motor1` |
+| 構造体フィールド | `ns=X;s={変数名}.fieldName` | `ns=2;s=Motor1.speed` |
+| ネストフィールド | `ns=X;s={変数名}.field1.field2` | `ns=2;s=Line1.motor.speed` |
+| 配列要素 | `ns=X;s={変数名}[index]` | `ns=2;s=Values[0]` |
 | 公開変数フォルダ | `ns=X;s=PLCVariables` | Objects 直下（Organizes） |
 
 - 名前空間 URI は設定の「ネームスペース」（既定 `urn:karakuri:plc`、通常 `ns=2`）。ns 番号は起動時に `AddressSpace.RegisterNamespace()` が割り当てるため固定値を使わない
-- UI に表示する NodeID は `Server.NodeAddresses()`（`NodeAddressResolver`）が返す。起動中は `ns=N;s={uuid}`、停止中は番号が決まらないため `nsu={ネームスペース URI};s={uuid}`
+- UI に表示する NodeID は `Server.NodeAddresses()`（`NodeAddressResolver`）が返す。起動中は `ns=N;s={変数名}`、停止中は番号が決まらないため `ns=???;s={変数名}`
   - 経路: フロントエンド → `App.GetNodeAddresses()` → `PLCService.GetNodeAddresses()` → `RemoteProtocolServer` → gRPC `GetNodeAddresses` → `pluginruntime.Server` → `opcua.Server`
-  - 停止中は、ホストの現在の設定（リクエストの `settings_json`）で起動しないサーバーを作って計算する（設定変更直後でも新しい URI を返す）
+  - 起動していないときは、プラグインがホストの現在の設定（リクエストの `settings_json`）で起動しないサーバーを作って問い合わせる（OPC UA は設定を使わないが、アドレスが設定に依存するプロトコルのため）
+- NodeID は変数名から作る（変数名はストア内で一意）。変数名を変えると NodeID も変わり、`rebuild()` が古いノードを消して新しい名前で作り直す。値の読み書きは内部で変数 ID を使う
+  - NodeID が他のノードと重なる変数名は公開できない: フォルダと同じ `PLCVariables`、`.` `[` `]` を含む名前（他の変数の子ノード `A.b`、`A[0]` と区別できない）。判定は `publishNameError()`（`nodes.go`）
+  - `NodeAddresses()` が該当する変数に `NodeAddress.Error`（理由）を付けて返す。ホストは `UpdateVariableNodePublishing()`（公開を有効にする保存）と `UpdateVariable()`（公開中の変数の改名）を拒否し、UI はマッピングダイアログ・一括マッピング編集で NodeID の代わりに理由を赤字で表示して保存を止める
+  - インポートした設定などに残っていた場合、`rebuild()` はその変数を公開せずログに出す
 - 配列要素の index は外部インデックス（`ARRAY[1..10]` なら `[1]`〜`[10]`）
 
 #### 型の対応
@@ -527,7 +531,7 @@ JavaScript（goja）でPLC動作を記述。
 | 構造体 | String（JSON）。フィールドは子ノードで型付きアクセス |
 | 構造体の配列（多次元を含む） | String の 1 次元配列 / Matrix（各要素が JSON） |
 
-- 多次元配列の子ノードは 1 次元ずつ減る（`{uuid}[1]` は 2 次元、`{uuid}[1][2]` は 1 次元、`{uuid}[1][2][3]` はスカラー）
+- 多次元配列の子ノードは 1 次元ずつ減る（`{変数名}[1]` は 2 次元、`{変数名}[1][2]` は 1 次元、`{変数名}[1][2][3]` はスカラー）
 - `shapeOf()`（`types.go`）が PLC 型から公開形（組み込み型・次元・JSON かどうか）を決める。`toVariant()` は入れ子の `[]interface{}` を平らにして `ua.NewMatrixVariant()` で Matrix にし、`fromVariant()` は `Variant.Dimensions()` に沿って入れ子に戻す
 - 次元数の違う書き込み（3 次元のノードに 1 次元配列など）は uastack が ValueRank の検査で拒否する
 

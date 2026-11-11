@@ -23,10 +23,10 @@ type addrServer struct {
 }
 
 func (s *addrServer) Status() protocol.ServerStatus { return s.status }
-func (s *addrServer) NodeAddresses(ids []string) map[string]string {
-	m := map[string]string{}
-	for _, id := range ids {
-		m[id] = s.cfg.prefix + id
+func (s *addrServer) NodeAddresses(vars []protocol.NodeVariable) map[string]protocol.NodeAddress {
+	m := map[string]protocol.NodeAddress{}
+	for _, v := range vars {
+		m[v.ID] = protocol.NodeAddress{Address: s.cfg.prefix + v.Name}
 	}
 	return m
 }
@@ -53,35 +53,35 @@ func (f *addrFactory) CreateServer(cfg protocol.ProtocolConfig, _ protocol.DataS
 
 func TestServer_GetNodeAddresses(t *testing.T) {
 	ctx := context.Background()
-	req := &pb.GetNodeAddressesRequest{SettingsJson: `{"prefix":"req:"}`, VariableIds: []string{"a"}}
+	req := &pb.GetNodeAddressesRequest{SettingsJson: `{"prefix":"req:"}`, Variables: []*pb.NodeVariable{{Id: "a", Name: "A"}}}
 	get := func(s *Server, r *pb.GetNodeAddressesRequest) string {
 		t.Helper()
 		resp, err := s.GetNodeAddresses(ctx, r)
 		if err != nil {
 			t.Fatalf("GetNodeAddresses: %v", err)
 		}
-		return resp.Addresses["a"]
+		return resp.Addresses["a"].GetAddress()
 	}
 
 	// サーバー未作成: リクエストの設定で計算する（設定が空なら既定値）
 	s := newServer(&addrFactory{nodePublishing: true})
-	if got := get(s, req); got != "req:a" {
-		t.Errorf("no server = %q, want req:a", got)
+	if got := get(s, req); got != "req:A" {
+		t.Errorf("no server = %q, want req:A", got)
 	}
-	if got := get(s, &pb.GetNodeAddressesRequest{VariableIds: []string{"a"}}); got != "default:a" {
-		t.Errorf("no settings = %q, want default:a", got)
+	if got := get(s, &pb.GetNodeAddressesRequest{Variables: []*pb.NodeVariable{{Id: "a", Name: "A"}}}); got != "default:A" {
+		t.Errorf("no settings = %q, want default:A", got)
 	}
 
 	// 起動中: 動いているサーバーに問い合わせる
 	s.server = &addrServer{cfg: &prefixConfig{prefix: "running:"}, status: protocol.StatusRunning}
-	if got := get(s, req); got != "running:a" {
-		t.Errorf("running = %q, want running:a", got)
+	if got := get(s, req); got != "running:A" {
+		t.Errorf("running = %q, want running:A", got)
 	}
 
 	// 停止中: プラグインが持つ設定は古い可能性があるため、リクエストの設定を使う
 	s.server = &addrServer{cfg: &prefixConfig{prefix: "stale:"}, status: protocol.StatusStopped}
-	if got := get(s, req); got != "req:a" {
-		t.Errorf("stopped = %q, want req:a", got)
+	if got := get(s, req); got != "req:A" {
+		t.Errorf("stopped = %q, want req:A", got)
 	}
 
 	// ノード公開型でないプロトコルは空

@@ -3,6 +3,7 @@ package application
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -477,8 +478,28 @@ func (s *PLCService) GetServerStatus(protocolType string) string {
 }
 
 // GetNodeAddresses は公開変数のノードアドレス（OPC UA なら NodeID）を返す。
-// アドレスの書式はプロトコルのプラグインが決める。対応していないプロトコルでは空のマップを返す。
-func (s *PLCService) GetNodeAddresses(protocolType string, variableIDs []string) map[string]string {
+// アドレスの書式と、公開できない変数の判定はプロトコルのプラグインが決める。
+// 対応していないプロトコルでは空のスライスを返す。
+func (s *PLCService) GetNodeAddresses(protocolType string, variableIDs []string) []NodeAddressDTO {
+	// アドレスに変数名を使うプロトコルのため、名前も渡す
+	variables := make([]protocol.NodeVariable, 0, len(variableIDs))
+	for _, id := range variableIDs {
+		if v, err := s.variableStore.GetVariable(id); err == nil {
+			variables = append(variables, protocol.NodeVariable{ID: id, Name: v.Name})
+		}
+	}
+	addrs := s.resolveNodeAddresses(protocolType, variables)
+	result := make([]NodeAddressDTO, 0, len(addrs))
+	for _, v := range variables {
+		if a, ok := addrs[v.ID]; ok {
+			result = append(result, NodeAddressDTO{VariableID: v.ID, Address: a.Address, Error: a.Error})
+		}
+	}
+	return result
+}
+
+// resolveNodeAddresses は NodeAddressResolver を実装するサーバーにノードアドレスを問い合わせる
+func (s *PLCService) resolveNodeAddresses(protocolType string, variables []protocol.NodeVariable) map[string]protocol.NodeAddress {
 	s.mu.RLock()
 	inst, err := s.getServerInstance(protocolType)
 	var srv protocol.ProtocolServer
@@ -489,22 +510,28 @@ func (s *PLCService) GetNodeAddresses(protocolType string, variableIDs []string)
 	}
 	s.mu.RUnlock()
 
-	result := map[string]string{}
-	if err != nil || len(variableIDs) == 0 {
-		return result
+	if err != nil || len(variables) == 0 {
+		return nil
 	}
 	// 一度も起動していないサーバーは未作成なので、現在の設定で作って問い合わせる（起動はしない）
 	if srv == nil {
 		if srv, err = factory.CreateServer(config, nil); err != nil {
-			return result
+			return nil
 		}
 	}
 	if resolver, ok := srv.(protocol.NodeAddressResolver); ok {
-		for id, addr := range resolver.NodeAddresses(variableIDs) {
-			result[id] = addr
-		}
+		return resolver.NodeAddresses(variables)
 	}
-	return result
+	return nil
+}
+
+// checkNodePublishable は変数を name の名前で protocolType に公開できるか確認する（できなければ理由をエラーで返す）
+func (s *PLCService) checkNodePublishable(protocolType, variableID, name string) error {
+	addrs := s.resolveNodeAddresses(protocolType, []protocol.NodeVariable{{ID: variableID, Name: name}})
+	if a, ok := addrs[variableID]; ok && a.Error != "" {
+		return errors.New(a.Error)
+	}
+	return nil
 }
 
 // === プロトコル管理API ===
@@ -1844,6 +1871,24 @@ func (s *PLCService) DeleteVariable(id string) error {
 // UpdateVariable は変数の名前とデータタイプを更新する
 // データタイプが変更された場合は値をデフォルト値にリセットする
 func (s *PLCService) UpdateVariable(id, name, dataType string) (*VariableDTO, error) {
+	// 公開中の変数は、新しい名前でも公開できるか先に確認する（ノードアドレスに変数名を使うプロトコルのため）
+	if old, err := s.variableStore.GetVariable(id); err == nil && old.Name != name {
+		s.mu.RLock()
+		protocolTypes := make([]string, 0, len(s.servers))
+		for pt := range s.servers {
+			protocolTypes = append(protocolTypes, string(pt))
+		}
+		s.mu.RUnlock()
+		for _, pt := range protocolTypes {
+			if pub := s.variableStore.GetNodePublishing(id, pt); pub == nil || !pub.Enabled {
+				continue
+			}
+			if err := s.checkNodePublishable(pt, id, name); err != nil {
+				return nil, err
+			}
+		}
+	}
+
 	v, err := s.variableStore.UpdateMetadata(id, name, variable.DataType(dataType))
 	if err != nil {
 		return nil, err
@@ -1882,6 +1927,13 @@ func (s *PLCService) GetVariableMappings(id string) ([]ProtocolMappingDTO, error
 
 // UpdateVariableNodePublishing は変数のプロトコル公開設定を更新する
 func (s *PLCService) UpdateVariableNodePublishing(variableID, protocolType string, dto *NodePublishingDTO) error {
+	if dto.Enabled {
+		if v, err := s.variableStore.GetVariable(variableID); err == nil {
+			if err := s.checkNodePublishable(protocolType, variableID, v.Name); err != nil {
+				return err
+			}
+		}
+	}
 	s.variableStore.SetNodePublishing(variableID, protocolType, &variable.NodePublishing{
 		Enabled:    dto.Enabled,
 		AccessMode: dto.AccessMode,

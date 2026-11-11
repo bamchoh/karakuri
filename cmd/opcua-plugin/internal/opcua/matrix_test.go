@@ -44,7 +44,7 @@ func TestServer_MultiDimensionalArrayIsMatrix(t *testing.T) {
 	acc.publish("v-3d", "Cube", dataType, "readwrite", val)
 	_, c, ns := startTestServer(t, acc)
 	ctx := context.Background()
-	root := ua.NewStringNodeId(ns, "v-3d")
+	root := ua.NewStringNodeId(ns, "Cube")
 
 	// ルートは 3 次元の Matrix
 	if rank, dims := readRankAndDims(t, c, root); rank != 3 || !reflect.DeepEqual(dims, []uint32{2, 3, 4}) {
@@ -63,13 +63,13 @@ func TestServer_MultiDimensionalArrayIsMatrix(t *testing.T) {
 	}
 
 	// 子ノードは 1 次元ずつ減る: [1] → 2 次元、[1][2] → 1 次元、[1][2][3] → スカラー
-	if rank, dims := readRankAndDims(t, c, ua.NewStringNodeId(ns, "v-3d[1]")); rank != 2 || !reflect.DeepEqual(dims, []uint32{3, 4}) {
+	if rank, dims := readRankAndDims(t, c, ua.NewStringNodeId(ns, "Cube[1]")); rank != 2 || !reflect.DeepEqual(dims, []uint32{3, 4}) {
 		t.Errorf("[1] ValueRank=%d ArrayDimensions=%v, want 2 / [3 4]", rank, dims)
 	}
-	if rank, dims := readRankAndDims(t, c, ua.NewStringNodeId(ns, "v-3d[1][2]")); rank != 1 || !reflect.DeepEqual(dims, []uint32{4}) {
+	if rank, dims := readRankAndDims(t, c, ua.NewStringNodeId(ns, "Cube[1][2]")); rank != 1 || !reflect.DeepEqual(dims, []uint32{4}) {
 		t.Errorf("[1][2] ValueRank=%d ArrayDimensions=%v, want 1 / [4]", rank, dims)
 	}
-	dv, err = c.ReadValue(ctx, ua.NewStringNodeId(ns, "v-3d[1][2][3]"))
+	dv, err = c.ReadValue(ctx, ua.NewStringNodeId(ns, "Cube[1][2][3]"))
 	if err != nil || dv.Value.Value() != int16(123) {
 		t.Errorf("[1][2][3] = %#v, %v", dv.Value.Value(), err)
 	}

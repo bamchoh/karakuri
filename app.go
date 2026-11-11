@@ -217,7 +217,7 @@ func (a *App) GetServerStatus(protocolType string) string {
 }
 
 // GetNodeAddresses は公開変数のノードアドレス（OPC UA なら NodeID）を返す
-func (a *App) GetNodeAddresses(protocolType string, variableIDs []string) map[string]string {
+func (a *App) GetNodeAddresses(protocolType string, variableIDs []string) []application.NodeAddressDTO {
 	return a.plcService.GetNodeAddresses(protocolType, variableIDs)
 }
 
