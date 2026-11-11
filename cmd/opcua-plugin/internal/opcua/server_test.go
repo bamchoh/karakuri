@@ -118,10 +118,22 @@ func freePort(t *testing.T) int {
 	return ln.Addr().(*net.TCPAddr).Port
 }
 
+// testConfig は 127.0.0.1:port で待ち受ける既定設定を返す
+func testConfig(port int) *Config {
+	cfg := DefaultConfig()
+	cfg.Host = "127.0.0.1"
+	cfg.Port = port
+	return cfg
+}
+
 func startTestServer(t *testing.T, acc *fakeAccessor) (*Server, *client.Client, uint16) {
 	t.Helper()
-	port := freePort(t)
-	cfg := &Config{Host: "127.0.0.1", Port: port}
+	return startTestServerWithConfig(t, acc, testConfig(freePort(t)))
+}
+
+func startTestServerWithConfig(t *testing.T, acc *fakeAccessor, cfg *Config) (*Server, *client.Client, uint16) {
+	t.Helper()
+	port := cfg.Port
 	srv := NewServer(cfg, acc)
 	if err := srv.Start(context.Background()); err != nil {
 		t.Fatalf("Start: %v", err)
@@ -290,7 +302,7 @@ func TestServer_StartFailsWhenPortInUse(t *testing.T) {
 	defer ln.Close()
 	port := ln.Addr().(*net.TCPAddr).Port
 
-	srv := NewServer(&Config{Host: "127.0.0.1", Port: port}, newFakeAccessor())
+	srv := NewServer(testConfig(port), newFakeAccessor())
 	if err := srv.Start(context.Background()); err == nil {
 		_ = srv.Stop()
 		t.Fatal("Start succeeded on a port in use")
@@ -303,7 +315,7 @@ func TestServer_StartFailsWhenPortInUse(t *testing.T) {
 func TestServer_RestartAfterStop(t *testing.T) {
 	acc := newFakeAccessor()
 	port := freePort(t)
-	srv := NewServer(&Config{Host: "127.0.0.1", Port: port}, acc)
+	srv := NewServer(testConfig(port), acc)
 	for i := 0; i < 2; i++ {
 		if err := srv.Start(context.Background()); err != nil {
 			t.Fatalf("Start #%d: %v", i+1, err)

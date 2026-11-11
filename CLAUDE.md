@@ -114,7 +114,7 @@ cmd/
     └── internal/
         └── opcua/        # OPC UA プロトコル実装（ホストから隔離）
             ├── factory.go      # Factory（VariableStoreInjector 実装）
-            ├── config.go       # Config（host / port / endpointHost）
+            ├── config.go       # Config（ネットワーク設定 + アプリケーション情報）
             ├── server.go       # Server（uastack サーバーのライフサイクル）
             ├── nodes.go        # plcNodes（公開変数 → uastack アドレス空間のノード、値の同期）
             ├── types.go        # PLC 型解析・PLC 値 ↔ ua.Variant 変換
@@ -501,7 +501,7 @@ JavaScript（goja）でPLC動作を記述。
 | 配列要素 | `ns=X;s={uuid}[index]` | `ns=2;s=395a704c-...[0]` |
 | 公開変数フォルダ | `ns=X;s=PLCVariables` | Objects 直下（Organizes） |
 
-- 名前空間 URI は `urn:karakuri:plc`（通常 `ns=2`）
+- 名前空間 URI は設定の「ネームスペース」（既定 `urn:karakuri:plc`、通常 `ns=2`）
 - 配列要素の index は外部インデックス（`ARRAY[1..10]` なら `[1]`〜`[10]`）
 
 #### 型の対応
@@ -525,6 +525,24 @@ JavaScript（goja）でPLC動作を記述。
 - ホスト → OPC UA: `SubscribeVariableChanges` で変更された変数 ID を受け取り、その変数を読み直してルートと全子ノードに `SetValue()`。取りこぼし対策として 1 秒ごとに全変数を再同期
 - OPC UA → ホスト: `Node.OnWrite` → `WriteVariableValue`（ルート）/ `WriteVariableFieldValue`（子ノード、フィールドパスは外部インデックス）。書き込み後に同じ変数の他ノードも更新
 - msgpack は `MapType=map[string]interface{}` でデコードし、構造体値を JSON 化できるようにする
+
+#### サーバー設定
+
+`GetConfigFields()` が返す設定項目。カテゴリごとにサーバー設定画面に表示される。
+
+| カテゴリ | キー | 項目 | 既定値 | 反映先 |
+|---------|------|------|--------|--------|
+| ネットワーク | `host` | アドレス | `0.0.0.0` | 待ち受けアドレス |
+| | `port` | ポート番号 | `4840` | 待ち受けポート |
+| | `endpointHost` | エンドポイントのホスト名 | （空 = PC のホスト名） | エンドポイント URL |
+| アプリケーション情報 | `application_name` | アプリケーション名 | `Karakuri PLC Simulator` | ApplicationDescription.ApplicationName、BuildInfo.ProductName |
+| | `manufacture_name` | メーカー名 | `karakuri` | BuildInfo.ManufacturerName |
+| | `product_uri` | プロダクト URI | `urn:karakuri` | ApplicationDescription.ProductUri、BuildInfo.ProductUri |
+| | `namespace` | ネームスペース | `urn:karakuri:plc` | 公開変数ノードの名前空間 URI |
+
+- アプリケーション情報のキー名は旧 C# 版 [opcua-plugin](https://github.com/bamchoh/opcua-plugin) と同じ（`manufacture_name` の綴りも同じ）
+- `MapToConfig()` はマップにないキーを既定値にする（項目追加前に保存された設定も読める）。文字列は前後の空白を除く
+- 検証: アプリケーション情報はすべて必須。ネームスペースに `http://opcfoundation.org/UA/`（名前空間 0）は使えない
 
 #### OPC UA ライブラリ
 

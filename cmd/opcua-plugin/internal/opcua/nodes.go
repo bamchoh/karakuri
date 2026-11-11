@@ -15,8 +15,6 @@ import (
 )
 
 const (
-	// NamespaceURI は PLC 変数ノードの名前空間
-	NamespaceURI = "urn:karakuri:plc"
 	// folderNodeName は公開変数をまとめるフォルダ（Objects 直下）
 	folderNodeName = "PLCVariables"
 	// maxTypeDepth は構造体・配列を展開する最大の深さ（循環定義の保険）
@@ -72,8 +70,9 @@ type plcNodes struct {
 	wake    chan struct{}
 }
 
-func newPLCNodes(as *server.AddressSpace, accessor protocol.VariableStoreAccessor, logf func(string, ...any)) (*plcNodes, error) {
-	ns := as.RegisterNamespace(NamespaceURI)
+// newPLCNodes は namespaceURI の名前空間に公開変数フォルダを作る
+func newPLCNodes(as *server.AddressSpace, namespaceURI string, accessor protocol.VariableStoreAccessor, logf func(string, ...any)) (*plcNodes, error) {
+	ns := as.RegisterNamespace(namespaceURI)
 	folder := ua.NewStringNodeId(ns, folderNodeName)
 	if _, err := as.AddFolder(server.ObjectsFolder, folder, ua.NewQualifiedName(ns, folderNodeName)); err != nil {
 		return nil, err
