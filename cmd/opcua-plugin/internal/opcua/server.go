@@ -26,7 +26,6 @@ type Server struct {
 	logger   *log.Logger
 
 	srv    *server.Server
-	ln     net.Listener
 	nodes  *plcNodes
 	cancel context.CancelFunc
 	done   chan struct{}
@@ -110,7 +109,6 @@ func (s *Server) Start(_ context.Context) error {
 	}()
 
 	s.srv = srv
-	s.ln = ln
 	s.nodes = nodes
 	s.cancel = cancel
 	s.done = done
@@ -121,8 +119,8 @@ func (s *Server) Start(_ context.Context) error {
 // Stop は OPC UA サーバーを停止する
 func (s *Server) Stop() error {
 	s.mu.Lock()
-	srv, ln, cancel, done := s.srv, s.ln, s.cancel, s.done
-	s.srv, s.ln, s.nodes, s.cancel, s.done = nil, nil, nil, nil, nil
+	srv, cancel, done := s.srv, s.cancel, s.done
+	s.srv, s.nodes, s.cancel, s.done = nil, nil, nil, nil
 	s.status = protocol.StatusStopped
 	s.mu.Unlock()
 
@@ -130,10 +128,8 @@ func (s *Server) Stop() error {
 		cancel()
 	}
 	if srv != nil {
-		// uastack v0.1.0 は Serve がリスナーを登録する前に Close されると Accept で待ち続けるため、
-		// 自前で Listen したリスナーをここで閉じて Serve を確実に終わらせる
+		// Close は Serve に渡したリスナーも閉じる（Serve の開始前に呼んでも Serve は終了する）
 		_ = srv.Close()
-		_ = ln.Close()
 		<-done
 	}
 	return nil
