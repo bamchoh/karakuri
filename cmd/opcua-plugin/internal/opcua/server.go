@@ -18,7 +18,7 @@ var _ protocol.ProtocolServer = (*Server)(nil)
 var _ protocol.NodePublishingAware = (*Server)(nil)
 
 // Server は uastack を使った OPC UA サーバー。
-// ホストの VariableStore で OPC UA 公開設定された変数を ns=<NamespaceURI> のノードとして公開する。
+// ホストの VariableStore で OPC UA 公開設定された変数を、設定のネームスペースのノードとして公開する。
 type Server struct {
 	mu       sync.Mutex
 	config   *Config
@@ -63,11 +63,11 @@ func (s *Server) Start(_ context.Context) error {
 		host = "localhost"
 	}
 	srv, err := server.New(server.Config{
-		ApplicationName:  "Karakuri PLC Simulator",
+		ApplicationName:  s.config.ApplicationName,
 		ApplicationURI:   "urn:" + host + ":karakuri",
-		ProductURI:       "urn:karakuri",
-		ManufacturerName: "karakuri",
-		ProductName:      "Karakuri PLC Simulator",
+		ProductURI:       s.config.ProductURI,
+		ManufacturerName: s.config.ManufacturerName,
+		ProductName:      s.config.ApplicationName,
 		SoftwareVersion:  VERSION,
 		ListenAddr:       s.config.listenAddr(),
 		EndpointURL:      s.config.endpointURL(),
@@ -79,7 +79,7 @@ func (s *Server) Start(_ context.Context) error {
 		return fmt.Errorf("OPC UA サーバーの作成に失敗: %w", err)
 	}
 
-	nodes, err := newPLCNodes(srv.AddressSpace(), s.accessor, s.logger.Printf)
+	nodes, err := newPLCNodes(srv.AddressSpace(), s.config.NamespaceURI, s.accessor, s.logger.Printf)
 	if err != nil {
 		s.status = protocol.StatusError
 		return fmt.Errorf("アドレス空間の作成に失敗: %w", err)
