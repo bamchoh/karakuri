@@ -21,6 +21,9 @@ type Server struct {
 	store   protocol.DataStore
 	server  protocol.ProtocolServer
 
+	// accessor はホストの変数ストアへの接続（SupportsNodePublishing=true のプラグインのみ）
+	accessor *RemoteVariableStoreAccessor
+
 	// SubscribeChanges ストリームの購読者チャンネル
 	subsMu      sync.RWMutex
 	subscribers []chan *pb.DataChange
@@ -44,14 +47,15 @@ func (s *Server) Register(srv *grpc.Server) {
 // ===== PluginService =====
 
 func (s *Server) GetMetadata(ctx context.Context, _ *pb.Empty) (*pb.PluginMetadata, error) {
+	caps := s.factory.GetProtocolCapabilities()
 	return &pb.PluginMetadata{
 		ProtocolType: string(s.factory.ProtocolType()),
 		DisplayName:  s.factory.DisplayName(),
 		Capabilities: &pb.ProtocolCapabilities{
-			SupportsUnitId:         true,
-			UnitIdMin:              1,
-			UnitIdMax:              247,
-			SupportsNodePublishing: false,
+			SupportsUnitId:         caps.SupportsUnitID,
+			UnitIdMin:              int32(caps.UnitIDMin),
+			UnitIdMax:              int32(caps.UnitIDMax),
+			SupportsNodePublishing: caps.SupportsNodePublishing,
 		},
 	}, nil
 }
@@ -177,6 +181,20 @@ func (s *Server) CreateAndStart(ctx context.Context, req *pb.CreateAndStartReque
 		config = factory.CreateConfigFromVariant(variantID)
 	}
 
+	// ノード公開型プロトコル（OPC UA 等）: ホストの VariableAccessorService への accessor を注入
+	if injector, ok := factory.(protocol.VariableStoreInjector); ok && req.HostGrpcAddr != "" {
+		if s.accessor != nil {
+			_ = s.accessor.Close()
+			s.accessor = nil
+		}
+		accessor, err := DialVariableStoreAccessor(req.HostGrpcAddr)
+		if err != nil {
+			return nil, err
+		}
+		s.accessor = accessor
+		injector.InjectVariableStore(accessor)
+	}
+
 	// DataStore を作成
 	innerStore := factory.CreateDataStore()
 	s.store = innerStore
@@ -251,7 +269,14 @@ func (s *Server) UpdateConfig(ctx context.Context, req *pb.UpdateConfigRequest) 
 }
 
 func (s *Server) OnNodePublishingUpdated(ctx context.Context, _ *pb.Empty) (*pb.Empty, error) {
-	// Modbus は NodePublishing をサポートしないため何もしない
+	s.mu.Lock()
+	srv := s.server
+	s.mu.Unlock()
+
+	// NodePublishing 対応サーバー（OPC UA 等）にのみ通知する
+	if aware, ok := srv.(protocol.NodePublishingAware); ok {
+		aware.OnNodePublishingUpdated()
+	}
 	return &pb.Empty{}, nil
 }
 
