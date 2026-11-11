@@ -11,6 +11,7 @@ import (
 
 	"karakuri/internal/application"
 	"karakuri/internal/domain/protocol"
+	"karakuri/internal/infrastructure/appconfig"
 	"karakuri/internal/infrastructure/httpapi"
 
 	"github.com/wailsapp/wails/v2/pkg/runtime"
@@ -139,15 +140,7 @@ func (a *App) SetHTTPAPIPort(port int) error {
 // --- HTTP API 設定ファイルヘルパー ---
 
 func httpAPIConfigPath() (string, error) {
-	configDir, err := os.UserConfigDir()
-	if err != nil {
-		return "", err
-	}
-	dir := filepath.Join(configDir, "PLCSimulator")
-	if err := os.MkdirAll(dir, 0755); err != nil {
-		return "", err
-	}
-	return filepath.Join(dir, "httpapi_config.json"), nil
+	return appconfig.Path("httpapi_config.json")
 }
 
 func loadHTTPAPIPort() int {

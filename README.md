@@ -446,9 +446,11 @@ PLCService は `servers map[protocol.ProtocolType]*serverInstance` で複数の�
 | `monitoring_config.json` | モニタリング項目の登録内容                |
 | `httpapi_config.json`    | HTTP API のポート番号（デフォルト: 8765） |
 
-- **Windows**: `%APPDATA%\PLCSimulator\`
-- **macOS**: `~/Library/Application Support/PLCSimulator/`
-- **Linux**: `~/.config/PLCSimulator/`
+- **Windows**: `%APPDATA%\Karakuri\`
+- **macOS**: `~/Library/Application Support/Karakuri/`
+- **Linux**: `~/.config/Karakuri/`
+
+以前のバージョンの設定フォルダ（`PLCSimulator`）がある場合は、初回起動時に設定ファイルを新しいフォルダへコピーして引き継ぎます（旧フォルダは残ります）。
 
 ## 技術スタック
 
