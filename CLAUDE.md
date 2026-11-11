@@ -95,7 +95,9 @@ Wails v2をベースに、フロントエンドはVite + React + TypeScript、�
 
 ```
 proto/                    # protobuf 定義
-│   └── plugin.proto      # gRPC サービス定義（PluginService, DataStoreService, VariableAccessorService）
+│   ├── plugin_service.proto            # PluginService（ファクトリー情報・サーバーライフサイクル・ノードアドレス）
+│   ├── datastore_service.proto         # DataStoreService（メモリエリア・レジスタ読み書き）
+│   └── variable_accessor_service.proto # VariableAccessorService（ホストの変数アクセス）
 pb/pluginpb/              # protoc 生成 Go コード（コミット対象）
 cmd/
 ├── modbus-plugin/        # Modbus プラグインバイナリ
@@ -131,7 +133,7 @@ internal/
 │   ├── protocol/     # プロトコル共通インターフェース（ServerFactory, DataStore, ConfigField等）
 │   ├── datastore/    # DataStore共通定義
 │   ├── script/       # スクリプトエンティティ
-│   └── register/     # レジスタエンティティ（レガシー）
+│   └── variable/     # 変数・構造体型・NodePublishing
 ├── application/      # アプリケーション層
 │   ├── plc_service.go  # メインサービス（プロトコル非依存、モニタリング管理含む）
 │   └── dto.go          # DTO定義（ProtocolSchemaDTO, MonitoringItemDTO等）
@@ -217,6 +219,7 @@ internal/
   - `ReadBits()`, `WriteBit()`, `ReadWords()`, `WriteWord()`: 汎用メモリ操作
   - `Snapshot()`, `Restore()`: Export/Import用
   - `GetAreas()`: `MemoryArea` スライスを返す。`MemoryArea.OneOrigin` が true のエリアはUIで1オリジンアドレスを表示する（内部は常に0ベース）。Modbusの全4エリアは `OneOrigin: true`
+  - `MemoryArea.ShortName`: マッピング列などに表示する短い名前（Modbus は `0` / `1` / `3` / `4`）。空ならエリア ID を表示する
 - **VariableStoreAccessor** (`internal/domain/protocol/server.go`): プロトコルが VariableStore にアクセスするための汎用インターフェース
   - `GetEnabledNodePublishings(protocolType)`: 指定プロトコルで公開設定された変数一覧を返す
   - `ReadVariableValue(variableID)` / `WriteVariableValue(variableID, value)`: 変数値の読み書き
@@ -225,6 +228,7 @@ internal/
 - **VariableStoreInjector** / **NodePublishingAware** (`internal/domain/protocol/server.go`): OPC UA 等のノードベースプロトコル向けインターフェース
   - `VariableStoreInjector`: `InjectVariableStore(accessor)` で遅延注入を受け付ける
   - `NodePublishingAware`: `OnNodePublishingUpdated()` でノード公開設定変更通知を受け付ける
+  - `NodeAddressResolver`: `NodeAddresses(variables)`（`NodeVariable{ID, Name}` のスライス）で公開変数のノードアドレス（OPC UA なら NodeID 文字列）と、公開できない場合の理由（`NodeAddress.Error`）を返す。書式と判定はプロトコルが決める
   - `ProtocolCapabilities.SupportsNodePublishing: true` のプロトコルで利用される
 - **ScriptEngine** (`internal/infrastructure/scripting/engine.go`): gojaベースのJavaScript実行エンジン
   - `plc`オブジェクトでDataStoreおよびVariableStoreにアクセス可能
@@ -295,7 +299,8 @@ IEC 61131-3準拠の変数管理機能。
   - メモリエリア選択は `memoryAreasByProtocol[m.protocolType]` で取得
   - 2行表示レイアウト（ヘッダ行 + コントロール行）
   - マッピング競合警告: 他の変数と同じレジスタを使用している場合、ダイアログ内と変数一覧の両方に警告を表示
-  - **マッピング列の表示**: Modbus マッピング（`protocol:area:addr`）と OPC UA 公開設定（`opcua(R/W)` 等）をカンマ区切りで両方表示
+  - **マッピング列の表示**: レジスタマッピング（`protocol:area:addr`、area は `MemoryArea.shortName`）とノード公開設定（`opcua(R/W)` 等）をカンマ区切りで両方表示
+  - **NodeID の表示**: マッピングダイアログ・一括マッピング編集で、`GetNodeAddresses(protocolType, variableIds)` でプラグインから取得した値（`nodeAddresses` state）を表示する。フロントエンドで NodeID を組み立てない。`error` がある変数は理由を表示し、公開を有効にした保存を止める
   - **ダイアログを開く際に `loadServerInstancesAndAreas()` を再実行**: マウント後に追加されたサーバーも「プロトコル公開設定」セクションに反映
   - `loadServerInstancesAndAreas` は `useCallback` で定義し、マウント時・ダイアログオープン時の両方から呼び出す
 - **一括マッピング編集**: ツールバーの「一括マッピング編集」ボタンで全変数のマッピングをテーブル形式で一括設定
@@ -427,13 +432,15 @@ JavaScript（goja）でPLC動作を記述。
 
 ## 新プロトコル追加手順
 
-1. `internal/infrastructure/newprotocol/` ディレクトリを作成
-2. 以下のファイルを実装:
-   - `factory.go`: `ServerFactory`インターフェースを実装
-   - `server.go`: `ProtocolServer`インターフェースを実装
-   - `datastore.go`: `DataStore`インターフェースを実装
-3. `factory.go`の`init()`で`protocol.Register()`を呼び出してレジストリに登録
-4. **フロントエンド変更不要** - スキーマから自動生成
+プロトコル固有のコード（プロトコルタイプの値、設定、メモリエリア、アドレス書式など）はすべてプラグインのフォルダ（`cmd/<name>-plugin/`）に置く。ホスト（`internal/`, `app.go`）とフロントエンドはプロトコル名や固有の値を持たず、能力フラグ（`ProtocolCapabilities`）・スキーマ（`GetConfigFields()`）・`MemoryArea` の属性・`NodeAddressResolver` だけで動く。
+
+1. `cmd/<name>-plugin/internal/<name>/` を作成し、以下を実装:
+   - `factory.go`: `ServerFactory`（プロトコルタイプの定数もここで定義する）
+   - `server.go`: `ProtocolServer`（ノード公開型なら `NodePublishingAware` / `NodeAddressResolver` も）
+   - `datastore.go`: `DataStore`（レジスタを持たないなら空の実装）
+2. `cmd/<name>-plugin/main.go` で `pluginruntime.RunFactory(factory, debug)` を呼ぶ
+3. `cmd/<name>-plugin/plugin-manifest/main.go` で `pluginruntime.NewManifest()` を出力し、`Taskfile.yaml` の `plugins` タスクに追加
+4. **ホスト・フロントエンドの変更不要** - スキーマと能力フラグから自動生成
 
 ## 重要な実装ポイント
 
@@ -495,13 +502,20 @@ JavaScript（goja）でPLC動作を記述。
 
 | ノード種別 | NodeID 形式 | 例 |
 |-----------|------------|---|
-| ルート変数ノード | `ns=X;s={uuid}` | `ns=2;s=395a704c-...` |
-| 構造体フィールド | `ns=X;s={uuid}.fieldName` | `ns=2;s=395a704c-....speed` |
-| ネストフィールド | `ns=X;s={uuid}.field1.field2` | `ns=2;s=...-....motor.speed` |
-| 配列要素 | `ns=X;s={uuid}[index]` | `ns=2;s=395a704c-...[0]` |
+| ルート変数ノード | `ns=X;s={変数名}` | `ns=2;s=Motor1` |
+| 構造体フィールド | `ns=X;s={変数名}.fieldName` | `ns=2;s=Motor1.speed` |
+| ネストフィールド | `ns=X;s={変数名}.field1.field2` | `ns=2;s=Line1.motor.speed` |
+| 配列要素 | `ns=X;s={変数名}[index]` | `ns=2;s=Values[0]` |
 | 公開変数フォルダ | `ns=X;s=PLCVariables` | Objects 直下（Organizes） |
 
-- 名前空間 URI は設定の「ネームスペース」（既定 `urn:karakuri:plc`、通常 `ns=2`）
+- 名前空間 URI は設定の「ネームスペース」（既定 `urn:karakuri:plc`、通常 `ns=2`）。ns 番号は起動時に `AddressSpace.RegisterNamespace()` が割り当てるため固定値を使わない
+- UI に表示する NodeID は `Server.NodeAddresses()`（`NodeAddressResolver`）が返す。起動中は `ns=N;s={変数名}`、停止中は番号が決まらないため `ns=???;s={変数名}`
+  - 経路: フロントエンド → `App.GetNodeAddresses()` → `PLCService.GetNodeAddresses()` → `RemoteProtocolServer` → gRPC `GetNodeAddresses` → `pluginruntime.Server` → `opcua.Server`
+  - 起動していないときは、プラグインがホストの現在の設定（リクエストの `settings_json`）で起動しないサーバーを作って問い合わせる（OPC UA は設定を使わないが、アドレスが設定に依存するプロトコルのため）
+- NodeID は変数名から作る（変数名はストア内で一意）。変数名を変えると NodeID も変わり、`rebuild()` が古いノードを消して新しい名前で作り直す。値の読み書きは内部で変数 ID を使う
+  - NodeID が他のノードと重なる変数名は公開できない: フォルダと同じ `PLCVariables`、`.` `[` `]` を含む名前（他の変数の子ノード `A.b`、`A[0]` と区別できない）。判定は `publishNameError()`（`nodes.go`）
+  - `NodeAddresses()` が該当する変数に `NodeAddress.Error`（理由）を付けて返す。ホストは `UpdateVariableNodePublishing()`（公開を有効にする保存）と `UpdateVariable()`（公開中の変数の改名）を拒否し、UI はマッピングダイアログ・一括マッピング編集で NodeID の代わりに理由を赤字で表示して保存を止める
+  - インポートした設定などに残っていた場合、`rebuild()` はその変数を公開せずログに出す
 - 配列要素の index は外部インデックス（`ARRAY[1..10]` なら `[1]`〜`[10]`）
 
 #### 型の対応
@@ -517,7 +531,7 @@ JavaScript（goja）でPLC動作を記述。
 | 構造体 | String（JSON）。フィールドは子ノードで型付きアクセス |
 | 構造体の配列（多次元を含む） | String の 1 次元配列 / Matrix（各要素が JSON） |
 
-- 多次元配列の子ノードは 1 次元ずつ減る（`{uuid}[1]` は 2 次元、`{uuid}[1][2]` は 1 次元、`{uuid}[1][2][3]` はスカラー）
+- 多次元配列の子ノードは 1 次元ずつ減る（`{変数名}[1]` は 2 次元、`{変数名}[1][2]` は 1 次元、`{変数名}[1][2][3]` はスカラー）
 - `shapeOf()`（`types.go`）が PLC 型から公開形（組み込み型・次元・JSON かどうか）を決める。`toVariant()` は入れ子の `[]interface{}` を平らにして `ua.NewMatrixVariant()` で Matrix にし、`fromVariant()` は `Variant.Dimensions()` に沿って入れ子に戻す
 - 次元数の違う書き込み（3 次元のノードに 1 次元配列など）は uastack が ValueRank の検査で拒否する
 

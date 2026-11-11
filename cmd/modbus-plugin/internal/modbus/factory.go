@@ -10,6 +10,13 @@ import (
 
 const VERSION = "1.0.0"
 
+// Modbus プラグインのプロトコルタイプ
+const (
+	ProtocolModbusTCP   protocol.ProtocolType = "modbus-tcp"
+	ProtocolModbusRTU   protocol.ProtocolType = "modbus-rtu"
+	ProtocolModbusASCII protocol.ProtocolType = "modbus-ascii"
+)
+
 // ErrUnitIdDisabled はUnitIDが無効化されている場合のエラー
 var ErrUnitIdDisabled = errors.New("unit ID is disabled")
 
@@ -49,7 +56,7 @@ type TCPFactory struct {
 
 // ProtocolType はファクトリーが作成するプロトコルの種類を返す
 func (f *TCPFactory) ProtocolType() protocol.ProtocolType {
-	return protocol.ProtocolModbusTCP
+	return ProtocolModbusTCP
 }
 
 // DisplayName はプロトコルの表示名を返す
@@ -116,7 +123,7 @@ type RTUFactory struct {
 
 // ProtocolType はファクトリーが作成するプロトコルの種類を返す
 func (f *RTUFactory) ProtocolType() protocol.ProtocolType {
-	return protocol.ProtocolModbusRTU
+	return ProtocolModbusRTU
 }
 
 // DisplayName はプロトコルの表示名を返す
@@ -218,7 +225,7 @@ type ASCIIFactory struct {
 
 // ProtocolType はファクトリーが作成するプロトコルの種類を返す
 func (f *ASCIIFactory) ProtocolType() protocol.ProtocolType {
-	return protocol.ProtocolModbusASCII
+	return ProtocolModbusASCII
 }
 
 // DisplayName はプロトコルの表示名を返す
@@ -347,13 +354,13 @@ type ModbusConfig struct {
 func (c *ModbusConfig) ProtocolType() protocol.ProtocolType {
 	switch c.variant {
 	case VariantTCP:
-		return protocol.ProtocolModbusTCP
+		return ProtocolModbusTCP
 	case VariantRTU:
-		return protocol.ProtocolModbusRTU
+		return ProtocolModbusRTU
 	case VariantASCII:
-		return protocol.ProtocolModbusASCII
+		return ProtocolModbusASCII
 	default:
-		return protocol.ProtocolModbusTCP
+		return ProtocolModbusTCP
 	}
 }
 

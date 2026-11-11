@@ -82,7 +82,7 @@ func newPLCNodes(as *server.AddressSpace, namespaceURI string, accessor protocol
 		ns:           ns,
 		folder:       folder,
 		accessor:     accessor,
-		protocolType: string(protocol.ProtocolOPCUA),
+		protocolType: string(ProtocolOPCUA),
 		logf:         logf,
 		vars:         map[string]*publishedVar{},
 		dirty:        map[string]struct{}{},
@@ -128,8 +128,24 @@ func (p *plcNodes) planVar(info protocol.NodePublishingInfo, fieldCache map[stri
 			}
 		}
 	}
-	walk(info.VariableID, p.folder, info.VariableName, info.DataType, nil, "", 0)
+	// NodeID は変数名から作る（変数名はストア内で一意。名前を変えると NodeID も変わる）
+	walk(info.VariableName, p.folder, info.VariableName, info.DataType, nil, "", 0)
 	return out
+}
+
+// publishNameError は、変数名から作る NodeID が他のノードと重なる場合にその理由を返す（問題なければ ""）。
+// 子ノードの NodeID は「変数名.フィールド」「変数名[添字]」なので、変数名にこれらの文字があると
+// 別の変数の子ノードと区別できない。
+func publishNameError(name string) string {
+	switch {
+	case name == "":
+		return "変数名が空のため OPC UA で公開できません"
+	case name == folderNodeName:
+		return fmt.Sprintf("変数名 %q は公開変数フォルダの NodeID と重なるため OPC UA で公開できません", name)
+	case strings.ContainsAny(name, ".[]"):
+		return "変数名に . [ ] を含む変数は、構造体フィールドや配列要素の NodeID と重なるため OPC UA で公開できません"
+	}
+	return ""
 }
 
 func appendStep(steps []valueStep, s valueStep) []valueStep {
@@ -159,6 +175,11 @@ func (p *plcNodes) rebuild() {
 
 	next := make(map[string]*publishedVar, len(infos))
 	for _, info := range infos {
+		// ホストが保存時に拒否するが、インポートした設定などに残っている場合に備える
+		if msg := publishNameError(info.VariableName); msg != "" {
+			p.logf("変数 %q を公開しません: %s", info.VariableName, msg)
+			continue
+		}
 		nodes := p.planVar(info, fieldCache)
 		next[info.VariableID] = &publishedVar{info: info, nodes: nodes, signature: signatureOf(info, nodes)}
 	}

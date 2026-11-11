@@ -12,6 +12,7 @@ import {
   UpdateVariableNodePublishing,
   GetServerInstances,
   GetMemoryAreas,
+  GetNodeAddresses,
   GetStructTypes,
   RegisterStructType,
   DeleteStructType,
@@ -195,6 +196,11 @@ export function VariableView() {
   // 一括マッピング編集ダイアログ
   const [isBulkMappingOpen, setIsBulkMappingOpen] = useState(false);
   const [bulkProtocol, setBulkProtocol] = useState<string>("");
+  // プロトコル -> 変数 ID -> ノードアドレス（OPC UA の NodeID 等）。
+  // 書式と、公開できない変数の判定（error）はプラグインが決める
+  const [nodeAddresses, setNodeAddresses] = useState<
+    Record<string, Record<string, application.NodeAddressDTO>>
+  >({});
   const [bulkRows, setBulkRows] = useState<BulkEditRow[]>([]);
   const [bulkIsSaving, setBulkIsSaving] = useState(false);
 
@@ -227,8 +233,10 @@ export function VariableView() {
     }
   }, []);
 
-  // サーバー一覧とメモリエリアを取得
-  const loadServerInstancesAndAreas = useCallback(async () => {
+  // サーバー一覧とメモリエリアを取得（取得したサーバー一覧を返す）
+  const loadServerInstancesAndAreas = useCallback(async (): Promise<
+    application.ServerInstanceDTO[]
+  > => {
     try {
       const instances = await GetServerInstances();
       setServerInstances(instances || []);
@@ -242,10 +250,30 @@ export function VariableView() {
         }
       }
       setMemoryAreasByProtocol(areasMap);
+      return instances || [];
     } catch (e) {
       console.error("Failed to load server instances:", e);
+      return [];
     }
   }, []);
+
+  // ノード公開型プロトコルのサーバーから、変数のノードアドレスを取得する
+  const loadNodeAddresses = useCallback(
+    async (protocolType: string, variableIds: string[]) => {
+      if (!protocolType || variableIds.length === 0) return;
+      try {
+        const addrs = await GetNodeAddresses(protocolType, variableIds);
+        setNodeAddresses((prev) => {
+          const byId = { ...(prev[protocolType] || {}) };
+          for (const a of addrs || []) byId[a.variableId] = a;
+          return { ...prev, [protocolType]: byId };
+        });
+      } catch (e) {
+        console.error("Failed to load node addresses:", e);
+      }
+    },
+    [],
+  );
 
   // データ型一覧を取得
   useEffect(() => {
@@ -550,11 +578,11 @@ export function VariableView() {
     variableName: string;
     dataType: string;
     wordCount: number;
-    // Modbus系
+    // レジスタ型プロトコル（メモリエリアを持つ）
     memoryArea: string;
     addressStr: string; // 空文字 = マッピングなし（削除）
     endianness: string;
-    // OPC UA系（SupportsNodePublishing=true）
+    // ノード公開型プロトコル（SupportsNodePublishing=true）
     nodeEnabled: boolean;
     accessMode: string;
   }
@@ -871,16 +899,10 @@ export function VariableView() {
     }
   };
 
-  // メモリエリアIDを短い表示名に変換（Modbusは番号、その他はそのまま）
-  const areaShortName = (areaId: string): string => {
-    const map: Record<string, string> = {
-      coils: "0",
-      discreteInputs: "1",
-      inputRegisters: "3",
-      holdingRegisters: "4",
-    };
-    return map[areaId] ?? areaId;
-  };
+  // メモリエリアIDを短い表示名に変換（プラグインが shortName を返さなければ ID のまま）
+  const areaShortName = (protocolType: string, areaId: string): string =>
+    (memoryAreasByProtocol[protocolType] || []).find((a) => a.id === areaId)
+      ?.shortName || areaId;
 
   const isOneOriginArea = (protocolType: string, areaId: string): boolean =>
     (memoryAreasByProtocol[protocolType] || []).find((a) => a.id === areaId)
@@ -961,7 +983,7 @@ export function VariableView() {
         const addr = isOneOriginArea(m.protocolType, m.memoryArea)
           ? m.address + 1
           : m.address;
-        return `${m.protocolType}:${areaShortName(m.memoryArea)}:${addr}`;
+        return `${m.protocolType}:${areaShortName(m.protocolType, m.memoryArea)}:${addr}`;
       })
       .join(", ");
   };
@@ -997,7 +1019,7 @@ export function VariableView() {
         const addr = isOneOriginArea(m.protocolType, m.memoryArea)
           ? m.address + offset + 1
           : m.address + offset;
-        return `${areaShortName(m.memoryArea)}:${addr}`;
+        return `${areaShortName(m.protocolType, m.memoryArea)}:${addr}`;
       })
       .join(", ");
   };
@@ -1729,7 +1751,12 @@ export function VariableView() {
 
   // マッピングダイアログを開く
   const handleMappingClick = async (v: application.VariableDTO) => {
-    await loadServerInstancesAndAreas();
+    const instances = await loadServerInstancesAndAreas();
+    for (const inst of instances) {
+      if (inst.supportsNodePublishing) {
+        loadNodeAddresses(inst.protocolType, [v.id]);
+      }
+    }
     setMappingVariable(v);
     setEditMappings(v.mappings ? [...v.mappings] : []);
     setEditNodePublishings(v.nodePublishings ? [...v.nodePublishings] : []);
@@ -1792,11 +1819,15 @@ export function VariableView() {
 
   // 一括マッピング編集ダイアログを開く
   const handleBulkMappingOpen = async () => {
-    await loadServerInstancesAndAreas();
+    const instances = await loadServerInstancesAndAreas();
     if (variables.length === 0) return;
-    const firstProtocol = serverInstances[0]?.protocolType ?? "";
+    const first = instances[0];
+    const firstProtocol = first?.protocolType ?? "";
     setBulkProtocol(firstProtocol);
     setBulkRows(buildBulkRows(variables, firstProtocol));
+    if (first?.supportsNodePublishing) {
+      loadNodeAddresses(firstProtocol, variables.map((v) => v.id));
+    }
     setIsBulkMappingOpen(true);
   };
 
@@ -1804,6 +1835,9 @@ export function VariableView() {
   const handleBulkProtocolChange = (newProtocol: string) => {
     setBulkProtocol(newProtocol);
     setBulkRows(buildBulkRows(variables, newProtocol));
+    if (isNodePublishingProtocol(newProtocol)) {
+      loadNodeAddresses(newProtocol, variables.map((v) => v.id));
+    }
   };
 
   // 一括編集テーブルのセル更新
@@ -1838,7 +1872,7 @@ export function VariableView() {
     );
   };
 
-  // 一括編集ダイアログ内のアドレス競合を検出（Modbus系のみ）
+  // 一括編集ダイアログ内のアドレス競合を検出（レジスタ型プロトコルのみ）
   const findBulkRowConflicts = (
     rows: BulkEditRow[],
     protocolType: string,
@@ -1877,6 +1911,26 @@ export function VariableView() {
   // 一括マッピング保存
   const handleBulkMappingSave = async () => {
     if (bulkIsSaving) return;
+    if (isNodePublishingProtocol(bulkProtocol)) {
+      // 公開できない変数があれば、途中まで保存される前に止める
+      const blocked = bulkRows.filter(
+        (row) =>
+          row.nodeEnabled &&
+          nodeAddresses[bulkProtocol]?.[row.variableId]?.error,
+      );
+      if (blocked.length > 0) {
+        alert(
+          "公開できない変数があります:\n" +
+            blocked
+              .map(
+                (row) =>
+                  `${row.variableName}: ${nodeAddresses[bulkProtocol][row.variableId].error}`,
+              )
+              .join("\n"),
+        );
+        return;
+      }
+    }
     setBulkIsSaving(true);
     try {
       const isNP = isNodePublishingProtocol(bulkProtocol);
@@ -1953,6 +2007,15 @@ export function VariableView() {
   // マッピングを保存
   const handleSaveMappings = async () => {
     if (!mappingVariable) return;
+    // 公開できない変数は、マッピングだけ保存される前に止める
+    for (const pub of editNodePublishings) {
+      const error =
+        nodeAddresses[pub.protocolType]?.[mappingVariable.id]?.error;
+      if (pub.enabled && error) {
+        alert(error);
+        return;
+      }
+    }
     try {
       await UpdateVariableMappings(mappingVariable.id, editMappings);
       for (const pub of editNodePublishings) {
@@ -2888,11 +2951,25 @@ export function VariableView() {
                             <option value="write">Write Only</option>
                             <option value="readwrite">Read / Write</option>
                           </select>
-                          {pub.enabled && mappingVariable && (
-                            <span style={{ fontSize: "11px", color: "#888" }}>
-                              ns=1;s={mappingVariable.name}
-                            </span>
-                          )}
+                          {pub.enabled &&
+                            mappingVariable &&
+                            (() => {
+                              const addr =
+                                nodeAddresses[server.protocolType]?.[
+                                  mappingVariable.id
+                                ];
+                              return addr?.error ? (
+                                <span className="node-address-error">
+                                  ⚠ {addr.error}
+                                </span>
+                              ) : (
+                                <span
+                                  style={{ fontSize: "11px", color: "#888" }}
+                                >
+                                  {addr?.address ?? ""}
+                                </span>
+                              );
+                            })()}
                         </div>
                       );
                     })}
@@ -2957,7 +3034,7 @@ export function VariableView() {
                   変数がありません
                 </p>
               ) : isNodePublishingProtocol(bulkProtocol) ? (
-                /* OPC UA 系テーブル */
+                /* ノード公開型プロトコルのテーブル */
                 <table className="variable-table">
                   <thead>
                     <tr>
@@ -3023,14 +3100,25 @@ export function VariableView() {
                           </select>
                         </td>
                         <td style={{ fontSize: "0.8em", color: "#888" }}>
-                          {row.nodeEnabled ? `ns=1;s=${row.variableName}` : "-"}
+                          {(() => {
+                            if (!row.nodeEnabled) return "-";
+                            const addr =
+                              nodeAddresses[bulkProtocol]?.[row.variableId];
+                            return addr?.error ? (
+                              <span className="node-address-error">
+                                ⚠ {addr.error}
+                              </span>
+                            ) : (
+                              (addr?.address ?? "-")
+                            );
+                          })()}
                         </td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
               ) : (
-                /* Modbus 系テーブル */
+                /* レジスタ型プロトコルのテーブル */
                 (() => {
                   const conflictIds = findBulkRowConflicts(
                     bulkRows,

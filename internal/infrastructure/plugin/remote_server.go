@@ -87,6 +87,28 @@ func (s *RemoteProtocolServer) OnNodePublishingUpdated() {
 	_, _ = s.pluginClient.OnNodePublishingUpdated(backgroundCtx(), &pb.Empty{})
 }
 
+// NodeAddresses はプラグインに公開変数のノードアドレスを問い合わせる（NodeAddressResolver）。
+// 停止中のサーバーでも計算できるよう、ホスト側の現在の設定を渡す。
+func (s *RemoteProtocolServer) NodeAddresses(variables []protocol.NodeVariable) map[string]protocol.NodeAddress {
+	req := &pb.GetNodeAddressesRequest{Variables: make([]*pb.NodeVariable, len(variables))}
+	for i, v := range variables {
+		req.Variables[i] = &pb.NodeVariable{Id: v.ID, Name: v.Name}
+	}
+	if rc, ok := s.config.(*remoteProtocolConfig); ok {
+		req.VariantId = rc.variantID
+		req.SettingsJson = rc.settingsJSON
+	}
+	resp, err := s.pluginClient.GetNodeAddresses(backgroundCtx(), req)
+	if err != nil {
+		return nil
+	}
+	result := make(map[string]protocol.NodeAddress, len(resp.Addresses))
+	for id, a := range resp.Addresses {
+		result[id] = protocol.NodeAddress{Address: a.Address, Error: a.Error}
+	}
+	return result
+}
+
 // GetDisabledUnitIDs は UnitID duck-typing インターフェースを満たすためのメソッド
 func (s *RemoteProtocolServer) GetDisabledUnitIDs() []uint8 {
 	resp, err := s.pluginClient.GetUnitIDSettings(backgroundCtx(), &pb.Empty{})

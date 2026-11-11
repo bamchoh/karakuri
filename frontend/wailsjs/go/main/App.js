@@ -82,6 +82,10 @@ export function GetMonitoringItems() {
   return window['go']['main']['App']['GetMonitoringItems']();
 }
 
+export function GetNodeAddresses(arg1, arg2) {
+  return window['go']['main']['App']['GetNodeAddresses'](arg1, arg2);
+}
+
 export function GetProtocolSchema(arg1) {
   return window['go']['main']['App']['GetProtocolSchema'](arg1);
 }

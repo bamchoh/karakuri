@@ -34,6 +34,7 @@ func (d *RemoteDataStore) GetAreas() []protocol.MemoryArea {
 			ReadOnly:       a.ReadOnly,
 			ByteAddressing: a.ByteAddressing,
 			OneOrigin:      a.OneOrigin,
+			ShortName:      a.ShortName,
 		}
 	}
 	return areas

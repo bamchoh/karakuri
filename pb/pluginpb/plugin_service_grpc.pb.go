@@ -38,6 +38,9 @@ type PluginServiceClient interface {
 	UpdateConfig(ctx context.Context, in *UpdateConfigRequest, opts ...grpc.CallOption) (*Empty, error)
 	// ノード公開設定変更通知（SupportsNodePublishing=true のプロトコル用）
 	OnNodePublishingUpdated(ctx context.Context, in *Empty, opts ...grpc.CallOption) (*Empty, error)
+	// 公開変数のノードアドレス（OPC UA なら NodeID）を返す（SupportsNodePublishing=true のプロトコル用）
+	// サーバー未作成時は settings_json の設定で計算する
+	GetNodeAddresses(ctx context.Context, in *GetNodeAddressesRequest, opts ...grpc.CallOption) (*GetNodeAddressesResponse, error)
 	// UnitID 管理（SupportsUnitID=true のプロトコル用）
 	GetUnitIDSettings(ctx context.Context, in *Empty, opts ...grpc.CallOption) (*UnitIDSettingsResponse, error)
 	SetUnitIDEnabled(ctx context.Context, in *SetUnitIDEnabledRequest, opts ...grpc.CallOption) (*Empty, error)
@@ -151,6 +154,15 @@ func (c *pluginServiceClient) OnNodePublishingUpdated(ctx context.Context, in *E
 	return out, nil
 }
 
+func (c *pluginServiceClient) GetNodeAddresses(ctx context.Context, in *GetNodeAddressesRequest, opts ...grpc.CallOption) (*GetNodeAddressesResponse, error) {
+	out := new(GetNodeAddressesResponse)
+	err := c.cc.Invoke(ctx, "/plugin.v1.PluginService/GetNodeAddresses", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *pluginServiceClient) GetUnitIDSettings(ctx context.Context, in *Empty, opts ...grpc.CallOption) (*UnitIDSettingsResponse, error) {
 	out := new(UnitIDSettingsResponse)
 	err := c.cc.Invoke(ctx, "/plugin.v1.PluginService/GetUnitIDSettings", in, out, opts...)
@@ -198,6 +210,9 @@ type PluginServiceServer interface {
 	UpdateConfig(context.Context, *UpdateConfigRequest) (*Empty, error)
 	// ノード公開設定変更通知（SupportsNodePublishing=true のプロトコル用）
 	OnNodePublishingUpdated(context.Context, *Empty) (*Empty, error)
+	// 公開変数のノードアドレス（OPC UA なら NodeID）を返す（SupportsNodePublishing=true のプロトコル用）
+	// サーバー未作成時は settings_json の設定で計算する
+	GetNodeAddresses(context.Context, *GetNodeAddressesRequest) (*GetNodeAddressesResponse, error)
 	// UnitID 管理（SupportsUnitID=true のプロトコル用）
 	GetUnitIDSettings(context.Context, *Empty) (*UnitIDSettingsResponse, error)
 	SetUnitIDEnabled(context.Context, *SetUnitIDEnabledRequest) (*Empty, error)
@@ -241,6 +256,9 @@ func (UnimplementedPluginServiceServer) UpdateConfig(context.Context, *UpdateCon
 }
 func (UnimplementedPluginServiceServer) OnNodePublishingUpdated(context.Context, *Empty) (*Empty, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method OnNodePublishingUpdated not implemented")
+}
+func (UnimplementedPluginServiceServer) GetNodeAddresses(context.Context, *GetNodeAddressesRequest) (*GetNodeAddressesResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetNodeAddresses not implemented")
 }
 func (UnimplementedPluginServiceServer) GetUnitIDSettings(context.Context, *Empty) (*UnitIDSettingsResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetUnitIDSettings not implemented")
@@ -462,6 +480,24 @@ func _PluginService_OnNodePublishingUpdated_Handler(srv interface{}, ctx context
 	return interceptor(ctx, in, info, handler)
 }
 
+func _PluginService_GetNodeAddresses_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetNodeAddressesRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(PluginServiceServer).GetNodeAddresses(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/plugin.v1.PluginService/GetNodeAddresses",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(PluginServiceServer).GetNodeAddresses(ctx, req.(*GetNodeAddressesRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _PluginService_GetUnitIDSettings_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(Empty)
 	if err := dec(in); err != nil {
@@ -566,6 +602,10 @@ var PluginService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "OnNodePublishingUpdated",
 			Handler:    _PluginService_OnNodePublishingUpdated_Handler,
+		},
+		{
+			MethodName: "GetNodeAddresses",
+			Handler:    _PluginService_GetNodeAddresses_Handler,
 		},
 		{
 			MethodName: "GetUnitIDSettings",

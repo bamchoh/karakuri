@@ -5,7 +5,6 @@ import (
 	"sync"
 
 	"karakuri/internal/domain/protocol"
-	"karakuri/internal/domain/server"
 )
 
 type Transport interface {
@@ -25,12 +24,11 @@ type ModbusHandler interface {
 type Server struct {
 	mu        sync.Mutex
 	transport Transport
-	status    server.ServerStatus
+	status    protocol.ServerStatus
 }
 
 // NewServerWithHandler はDataStoreHandlerを使用するサーバーを作成する
 func NewServerWithHandler(config *ModbusConfig, handler *DataStoreHandler, eventEmitter protocol.CommunicationEventEmitter, sessionManager *protocol.SessionManager) *Server {
-	// ModbusConfigからserver.ServerConfigへ変換
 	var transport Transport
 	switch config.GetVariant() {
 	case VariantRTU:
@@ -43,7 +41,7 @@ func NewServerWithHandler(config *ModbusConfig, handler *DataStoreHandler, event
 
 	return &Server{
 		transport: transport,
-		status:    server.StatusStopped,
+		status:    protocol.StatusStopped,
 	}
 }
 
@@ -52,16 +50,16 @@ func (s *Server) Start() error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	if s.status == server.StatusRunning {
+	if s.status == protocol.StatusRunning {
 		return fmt.Errorf("server is already running")
 	}
 
 	if err := s.transport.Start(); err != nil {
-		s.status = server.StatusError
+		s.status = protocol.StatusError
 		return err
 	}
 
-	s.status = server.StatusRunning
+	s.status = protocol.StatusRunning
 	return nil
 }
 
@@ -74,12 +72,12 @@ func (s *Server) Stop() error {
 		return fmt.Errorf("failed to stop server: %w", err)
 	}
 
-	s.status = server.StatusStopped
+	s.status = protocol.StatusStopped
 	return nil
 }
 
 // Status はサーバーの状態を返す
-func (s *Server) Status() server.ServerStatus {
+func (s *Server) Status() protocol.ServerStatus {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.status

@@ -86,6 +86,7 @@ type MemoryAreaDTO struct {
 	ReadOnly       bool   `json:"readOnly"`
 	ByteAddressing bool   `json:"byteAddressing"`
 	OneOrigin      bool   `json:"oneOrigin"`
+	ShortName      string `json:"shortName"`
 }
 
 // === UnitID設定DTO ===
@@ -178,6 +179,13 @@ type NodePublishingDTO struct {
 	ProtocolType string `json:"protocolType"`
 	Enabled      bool   `json:"enabled"`
 	AccessMode   string `json:"accessMode"` // "read" | "write" | "readwrite"
+}
+
+// NodeAddressDTO は公開変数のノードアドレス（OPC UA なら NodeID）
+type NodeAddressDTO struct {
+	VariableID string `json:"variableId"`
+	Address    string `json:"address"`
+	Error      string `json:"error"` // 空でなければ、この変数を公開できない理由
 }
 
 // VariableDTO は変数のDTO

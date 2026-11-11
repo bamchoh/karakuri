@@ -48,7 +48,7 @@ func DefaultConfig() *Config {
 	}
 }
 
-func (c *Config) ProtocolType() protocol.ProtocolType { return protocol.ProtocolOPCUA }
+func (c *Config) ProtocolType() protocol.ProtocolType { return ProtocolOPCUA }
 func (c *Config) Variant() string                     { return "" }
 
 func (c *Config) Validate() error {

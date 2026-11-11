@@ -248,6 +248,7 @@ export namespace application {
 	    readOnly: boolean;
 	    byteAddressing: boolean;
 	    oneOrigin: boolean;
+	    shortName: string;
 	
 	    static createFrom(source: any = {}) {
 	        return new MemoryAreaDTO(source);
@@ -262,6 +263,7 @@ export namespace application {
 	        this.readOnly = source["readOnly"];
 	        this.byteAddressing = source["byteAddressing"];
 	        this.oneOrigin = source["oneOrigin"];
+	        this.shortName = source["shortName"];
 	    }
 	}
 	export class MonitoringItemDTO {
@@ -288,6 +290,22 @@ export namespace application {
 	        this.bitWidth = source["bitWidth"];
 	        this.endianness = source["endianness"];
 	        this.displayFormat = source["displayFormat"];
+	    }
+	}
+	export class NodeAddressDTO {
+	    variableId: string;
+	    address: string;
+	    error: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new NodeAddressDTO(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.variableId = source["variableId"];
+	        this.address = source["address"];
+	        this.error = source["error"];
 	    }
 	}
 	export class NodePublishingDTO {

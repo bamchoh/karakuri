@@ -178,7 +178,7 @@ func TestServer_BrowseReadWrite(t *testing.T) {
 	}
 
 	// スカラーの読み取り（PLC 型に合った組み込み型で返る）
-	dv, err := c.ReadValue(ctx, ua.NewStringNodeId(ns, "v-int"))
+	dv, err := c.ReadValue(ctx, ua.NewStringNodeId(ns, "Counter"))
 	if err != nil {
 		t.Fatalf("Read: %v", err)
 	}
@@ -187,7 +187,7 @@ func TestServer_BrowseReadWrite(t *testing.T) {
 	}
 
 	// 構造体フィールドの子ノード
-	dv, err = c.ReadValue(ctx, ua.NewStringNodeId(ns, "v-str.speed"))
+	dv, err = c.ReadValue(ctx, ua.NewStringNodeId(ns, "Motor1.speed"))
 	if err != nil {
 		t.Fatalf("Read field: %v", err)
 	}
@@ -196,7 +196,7 @@ func TestServer_BrowseReadWrite(t *testing.T) {
 	}
 
 	// 配列（型付き配列）と配列要素の子ノード
-	dv, err = c.ReadValue(ctx, ua.NewStringNodeId(ns, "v-arr"))
+	dv, err = c.ReadValue(ctx, ua.NewStringNodeId(ns, "Values"))
 	if err != nil {
 		t.Fatalf("Read array: %v", err)
 	}
@@ -205,7 +205,7 @@ func TestServer_BrowseReadWrite(t *testing.T) {
 	}
 
 	// ルートへの書き込みがホストに届く
-	if err := c.WriteValue(ctx, ua.NewStringNodeId(ns, "v-int"), ua.NewVariant(int16(7))); err != nil {
+	if err := c.WriteValue(ctx, ua.NewStringNodeId(ns, "Counter"), ua.NewVariant(int16(7))); err != nil {
 		t.Fatalf("Write: %v", err)
 	}
 	if got := toInt64(acc.mustRead("v-int")); got != 7 {
@@ -213,21 +213,21 @@ func TestServer_BrowseReadWrite(t *testing.T) {
 	}
 
 	// 子ノードへの書き込みはフィールドパス付きで届き、親ノードの値も更新される
-	if err := c.WriteValue(ctx, ua.NewStringNodeId(ns, "v-arr[1]"), ua.NewVariant(int32(20))); err != nil {
+	if err := c.WriteValue(ctx, ua.NewStringNodeId(ns, "Values[1]"), ua.NewVariant(int32(20))); err != nil {
 		t.Fatalf("Write element: %v", err)
 	}
 	waitFor(t, func() bool {
-		dv, err := c.ReadValue(ctx, ua.NewStringNodeId(ns, "v-arr"))
+		dv, err := c.ReadValue(ctx, ua.NewStringNodeId(ns, "Values"))
 		arr, _ := dv.Value.Value().([]int32)
 		return err == nil && len(arr) == 3 && arr[1] == 20
 	})
 
 	// 読み取り専用ノードへの書き込みは拒否される
-	if err := c.WriteValue(ctx, ua.NewStringNodeId(ns, "v-real"), ua.NewVariant(float32(2))); err == nil {
+	if err := c.WriteValue(ctx, ua.NewStringNodeId(ns, "Temp"), ua.NewVariant(float32(2))); err == nil {
 		t.Errorf("write to read-only node succeeded")
 	}
 	// 型が違う書き込みは拒否される
-	if err := c.WriteValue(ctx, ua.NewStringNodeId(ns, "v-int"), ua.NewVariant("x")); err == nil {
+	if err := c.WriteValue(ctx, ua.NewStringNodeId(ns, "Counter"), ua.NewVariant("x")); err == nil {
 		t.Errorf("write with wrong type succeeded")
 	}
 }
@@ -242,7 +242,7 @@ func TestServer_HostChangeNotifiesSubscription(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateSubscription: %v", err)
 	}
-	if _, err := sub.MonitorValues(ctx, ua.NewStringNodeId(ns, "v-int")); err != nil {
+	if _, err := sub.MonitorValues(ctx, ua.NewStringNodeId(ns, "Counter")); err != nil {
 		t.Fatalf("MonitorValues: %v", err)
 	}
 
@@ -276,7 +276,7 @@ func TestServer_OnNodePublishingUpdated(t *testing.T) {
 	acc.publish("v-b", "B", "LREAL", "read", float64(3.25))
 	srv.OnNodePublishingUpdated()
 
-	dv, err := c.ReadValue(ctx, ua.NewStringNodeId(ns, "v-b"))
+	dv, err := c.ReadValue(ctx, ua.NewStringNodeId(ns, "B"))
 	if err != nil {
 		t.Fatalf("Read new node: %v", err)
 	}
@@ -289,7 +289,7 @@ func TestServer_OnNodePublishingUpdated(t *testing.T) {
 	acc.pubs = acc.pubs[1:]
 	acc.mu.Unlock()
 	srv.OnNodePublishingUpdated()
-	if _, err := c.ReadValue(ctx, ua.NewStringNodeId(ns, "v-a")); err == nil {
+	if _, err := c.ReadValue(ctx, ua.NewStringNodeId(ns, "A")); err == nil {
 		t.Errorf("unpublished node v-a is still readable")
 	}
 }
