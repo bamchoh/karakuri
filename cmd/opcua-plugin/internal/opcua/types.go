@@ -105,25 +105,42 @@ func isStructType(dataType string) bool {
 
 // nodeShape は PLC 型を OPC UA 変数ノードとして公開するときの形
 type nodeShape struct {
-	builtin ua.TypeID // 値の組み込み型（構造体・ネスト配列は String = JSON）
-	array   bool      // 1 次元配列として公開するか
-	size    int       // 配列の要素数
+	builtin ua.TypeID // 要素（スカラーなら値）の組み込み型。構造体は String（JSON）
+	// dims は配列の各次元の要素数。nil = スカラー、1 個 = 1 次元配列、2 個以上 = Matrix（多次元配列）
+	dims []int
+	// json は値（配列なら各要素）が構造体で、JSON 文字列として公開することを表す
+	json bool
 }
 
+// isArray は配列（1 次元または多次元）として公開するかを返す
+func (s nodeShape) isArray() bool { return len(s.dims) > 0 }
+
 // shapeOf は PLC 型の公開形を返す。
-// スカラー → 対応する組み込み型、スカラーの配列 → その型の配列、
-// 構造体 → JSON 文字列、構造体やネスト配列の配列 → JSON 文字列の配列。
+//
+//	スカラー                       → 対応する組み込み型
+//	スカラーの配列                  → その型の 1 次元配列
+//	多次元配列（ARRAY[0..1, 0..2] OF INT など） → その型の Matrix（ValueRank = 次元数）
+//	構造体                         → JSON 文字列
+//	構造体の配列（多次元を含む）      → JSON 文字列の配列 / Matrix
 func shapeOf(dataType string) nodeShape {
 	if t, ok := scalarBuiltin(dataType); ok {
 		return nodeShape{builtin: t}
 	}
-	if elem, _, size, ok := parseArrayType(dataType); ok {
-		if t, ok := scalarBuiltin(elem); ok {
-			return nodeShape{builtin: t, array: true, size: size}
+	// 配列の要素型を、配列でなくなるまでたどって次元を集める
+	var dims []int
+	base := dataType
+	for {
+		elem, _, size, ok := parseArrayType(base)
+		if !ok {
+			break
 		}
-		return nodeShape{builtin: ua.TypeString, array: true, size: size}
+		dims = append(dims, size)
+		base = elem
 	}
-	return nodeShape{builtin: ua.TypeString}
+	if t, ok := scalarBuiltin(base); ok {
+		return nodeShape{builtin: t, dims: dims}
+	}
+	return nodeShape{builtin: ua.TypeString, dims: dims, json: true}
 }
 
 // dataTypeNodeID は組み込み型の DataType NodeId を返す
@@ -160,53 +177,82 @@ func dataTypeNodeID(t ua.TypeID) ua.NodeId {
 
 // toVariant は PLC の値（msgpack デコード後の値）を型に合った Variant に変換する。
 // 値が欠けている場合はゼロ値を使う（Null の Variant は作らない）。
+// 多次元配列は入れ子の []interface{} を行優先（最後の添字が最も速く変わる）で平らにして Matrix にする。
 func toVariant(val interface{}, sh nodeShape) ua.Variant {
-	if !sh.array {
+	if !sh.isArray() {
 		return ua.NewVariant(toScalar(val, sh.builtin))
 	}
-	elems, _ := val.([]interface{})
-	get := func(i int) interface{} {
-		if i < len(elems) {
-			return elems[i]
+	flat := flatten(val, sh.dims, nil)
+	typed := typedSlice(flat, sh.builtin)
+	if len(sh.dims) == 1 {
+		if b, ok := typed.([]byte); ok {
+			return ua.NewByteArrayVariant(b) // []byte は NewVariant だと ByteString になる
 		}
-		return nil
+		return ua.NewVariant(typed)
 	}
-	n := sh.size
-	if len(elems) > n {
-		n = len(elems)
+	dims := make([]int32, len(sh.dims))
+	for i, d := range sh.dims {
+		dims[i] = int32(d)
 	}
-	switch sh.builtin {
+	v, err := ua.NewMatrixVariant(typed, dims)
+	if err != nil {
+		// flatten が要素数を dims の積にそろえるので通常は起きない
+		return ua.NewVariant(typed)
+	}
+	return v
+}
+
+// flatten は入れ子の配列値を dims の形に合わせて行優先で平らにする。
+// 足りない要素は nil（ゼロ値）で埋め、多い要素は捨てる。
+func flatten(v interface{}, dims []int, out []interface{}) []interface{} {
+	if len(dims) == 0 {
+		return append(out, v)
+	}
+	arr, _ := v.([]interface{})
+	for i := 0; i < dims[0]; i++ {
+		var e interface{}
+		if i < len(arr) {
+			e = arr[i]
+		}
+		out = flatten(e, dims[1:], out)
+	}
+	return out
+}
+
+// typedSlice は要素の並びを組み込み型の Go スライスに変換する
+func typedSlice(elems []interface{}, t ua.TypeID) interface{} {
+	switch t {
 	case ua.TypeBoolean:
-		return ua.NewVariant(fillSlice(n, get, toBool))
+		return convertSlice(elems, toBool)
 	case ua.TypeSByte:
-		return ua.NewVariant(fillSlice(n, get, func(v interface{}) int8 { return int8(toInt64(v)) }))
+		return convertSlice(elems, func(v interface{}) int8 { return int8(toInt64(v)) })
 	case ua.TypeByte:
-		return ua.NewByteArrayVariant(fillSlice(n, get, func(v interface{}) uint8 { return uint8(toUint64(v)) }))
+		return convertSlice(elems, func(v interface{}) uint8 { return uint8(toUint64(v)) })
 	case ua.TypeInt16:
-		return ua.NewVariant(fillSlice(n, get, func(v interface{}) int16 { return int16(toInt64(v)) }))
+		return convertSlice(elems, func(v interface{}) int16 { return int16(toInt64(v)) })
 	case ua.TypeUInt16:
-		return ua.NewVariant(fillSlice(n, get, func(v interface{}) uint16 { return uint16(toUint64(v)) }))
+		return convertSlice(elems, func(v interface{}) uint16 { return uint16(toUint64(v)) })
 	case ua.TypeInt32:
-		return ua.NewVariant(fillSlice(n, get, func(v interface{}) int32 { return int32(toInt64(v)) }))
+		return convertSlice(elems, func(v interface{}) int32 { return int32(toInt64(v)) })
 	case ua.TypeUInt32:
-		return ua.NewVariant(fillSlice(n, get, func(v interface{}) uint32 { return uint32(toUint64(v)) }))
+		return convertSlice(elems, func(v interface{}) uint32 { return uint32(toUint64(v)) })
 	case ua.TypeInt64:
-		return ua.NewVariant(fillSlice(n, get, toInt64))
+		return convertSlice(elems, toInt64)
 	case ua.TypeUInt64:
-		return ua.NewVariant(fillSlice(n, get, toUint64))
+		return convertSlice(elems, toUint64)
 	case ua.TypeFloat:
-		return ua.NewVariant(fillSlice(n, get, func(v interface{}) float32 { return float32(toFloat64(v)) }))
+		return convertSlice(elems, func(v interface{}) float32 { return float32(toFloat64(v)) })
 	case ua.TypeDouble:
-		return ua.NewVariant(fillSlice(n, get, toFloat64))
+		return convertSlice(elems, toFloat64)
 	default:
-		return ua.NewVariant(fillSlice(n, get, toText))
+		return convertSlice(elems, toText)
 	}
 }
 
-func fillSlice[T any](n int, get func(int) interface{}, conv func(interface{}) T) []T {
-	out := make([]T, n)
-	for i := range out {
-		out[i] = conv(get(i))
+func convertSlice[T any](elems []interface{}, conv func(interface{}) T) []T {
+	out := make([]T, len(elems))
+	for i, e := range elems {
+		out[i] = conv(e)
 	}
 	return out
 }
@@ -339,17 +385,51 @@ func toFloat64(v interface{}) float64 {
 
 // fromVariant はクライアントが書き込んだ Variant をホストの VariableStore に渡せる値に変換する。
 // dataType はノードの PLC 型。構造体（JSON 文字列）はマップに、配列は []interface{} にする。
+// Matrix（多次元配列）は Variant の次元に沿って入れ子の []interface{} に戻す。
 func fromVariant(v ua.Variant, dataType string) (interface{}, error) {
+	sh := shapeOf(dataType)
 	val := v.Value()
 	if !v.IsArray() {
-		if s, ok := val.(string); ok && isStructType(dataType) {
+		if s, ok := val.(string); ok && sh.json {
 			return parseJSON(s)
 		}
 		return val, nil
 	}
 
-	elemType, _, _, _ := parseArrayType(dataType)
-	_, scalarElem := scalarBuiltin(elemType)
+	flat, err := flatElements(val, sh.json)
+	if err != nil {
+		return nil, err
+	}
+	dims := v.Dimensions()
+	if len(dims) < 2 {
+		return flat, nil
+	}
+	if len(dims) != len(sh.dims) {
+		return nil, fmt.Errorf("次元数が違います: %d 次元の値を %d 次元の配列に書き込もうとしました", len(dims), len(sh.dims))
+	}
+	return nest(flat, dims), nil
+}
+
+// nest は行優先で平らな要素を dims の形の入れ子の []interface{} に戻す
+func nest(flat []interface{}, dims []int32) []interface{} {
+	if len(dims) <= 1 {
+		return flat
+	}
+	n := int(dims[0])
+	step := 0
+	if n > 0 {
+		step = len(flat) / n
+	}
+	out := make([]interface{}, n)
+	for i := range out {
+		out[i] = nest(flat[i*step:(i+1)*step], dims[1:])
+	}
+	return out
+}
+
+// flatElements は配列 Variant の値（型付きスライス）を []interface{} にする。
+// jsonCells なら各要素を JSON 文字列として解釈する（構造体の配列）。
+func flatElements(val interface{}, jsonCells bool) ([]interface{}, error) {
 	var out []interface{}
 	switch x := val.(type) {
 	case []bool:
@@ -377,11 +457,11 @@ func fromVariant(v ua.Variant, dataType string) (interface{}, error) {
 	case []string:
 		out = make([]interface{}, len(x))
 		for i, s := range x {
-			if scalarElem {
+			if !jsonCells {
 				out[i] = s
 				continue
 			}
-			// 構造体やネスト配列の要素は JSON 文字列で受け取る
+			// 構造体の要素は JSON 文字列で受け取る
 			parsed, err := parseJSON(s)
 			if err != nil {
 				return nil, fmt.Errorf("要素 %d: %w", i, err)

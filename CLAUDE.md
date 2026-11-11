@@ -512,9 +512,14 @@ JavaScript（goja）でPLC動作を記述。
 | USINT / UINT / UDINT / ULINT | Byte / UInt16 / UInt32 / UInt64 |
 | REAL / LREAL | Float / Double |
 | STRING, STRING[n], TIME, DATE, TIME_OF_DAY, DATE_AND_TIME | String（TIME 等は `T#1s` 形式の文字列） |
-| スカラーの配列 | 要素型の 1 次元配列（ValueRank=1） |
+| スカラーの配列 | 要素型の 1 次元配列（ValueRank=1、ArrayDimensions=[要素数]） |
+| 多次元配列（`ARRAY[0..1, 0..2, 0..3] OF INT`、旧形式 `ARRAY[ARRAY[INT;5];3]` も同じ） | 要素型の Matrix（ValueRank=次元数、ArrayDimensions=各次元の要素数）。値は行優先（最後の添字が最も速く変わる） |
 | 構造体 | String（JSON）。フィールドは子ノードで型付きアクセス |
-| 構造体・ネスト配列の配列 | String[]（各要素が JSON） |
+| 構造体の配列（多次元を含む） | String の 1 次元配列 / Matrix（各要素が JSON） |
+
+- 多次元配列の子ノードは 1 次元ずつ減る（`{uuid}[1]` は 2 次元、`{uuid}[1][2]` は 1 次元、`{uuid}[1][2][3]` はスカラー）
+- `shapeOf()`（`types.go`）が PLC 型から公開形（組み込み型・次元・JSON かどうか）を決める。`toVariant()` は入れ子の `[]interface{}` を平らにして `ua.NewMatrixVariant()` で Matrix にし、`fromVariant()` は `Variant.Dimensions()` に沿って入れ子に戻す
+- 次元数の違う書き込み（3 次元のノードに 1 次元配列など）は uastack が ValueRank の検査で拒否する
 
 - 書き込みは uastack が DataType / ValueRank を検査する（INT ノードには Int16 で書く必要がある）
 - 構造体ノードへの書き込みは JSON 文字列を `map[string]interface{}` に変換してホストへ送る
