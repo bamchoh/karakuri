@@ -5,12 +5,13 @@ import (
 	"flag"
 	"os"
 
+	"karakuri/cmd/modbus-plugin/internal/modbus"
 	"karakuri/cmd/modbus-plugin/plugin"
 	"karakuri/internal/pluginruntime"
 )
 
 func main() {
-	protocolType := flag.String("protocol-type", "modbus-tcp", "プロトコルタイプ (modbus-tcp, modbus-rtu, modbus-ascii)")
+	protocolType := flag.String("protocol-type", string(modbus.ProtocolModbusTCP), "プロトコルタイプ (modbus-tcp, modbus-rtu, modbus-ascii)")
 
 	flag.Parse()
 
