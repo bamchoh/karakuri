@@ -1,8 +1,9 @@
 module karakuri
 
-go 1.24.0
+go 1.25.0
 
 require (
+	github.com/bamchoh/uastack v0.1.0
 	github.com/dop251/goja v0.0.0-20260106131823-651366fbe6e3
 	github.com/google/uuid v1.6.0
 	github.com/simonvetter/modbus v1.6.4

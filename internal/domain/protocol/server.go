@@ -11,6 +11,7 @@ const (
 	ProtocolModbusTCP   ProtocolType = "modbus-tcp"
 	ProtocolModbusRTU   ProtocolType = "modbus-rtu"
 	ProtocolModbusASCII ProtocolType = "modbus-ascii"
+	ProtocolOPCUA       ProtocolType = "opcua"
 )
 
 // ServerStatus はサーバーの状態を表す

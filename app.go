@@ -9,9 +9,9 @@ import (
 	"sort"
 	"strings"
 
-	"modbus_simulator/internal/application"
-	"modbus_simulator/internal/domain/protocol"
-	"modbus_simulator/internal/infrastructure/httpapi"
+	"karakuri/internal/application"
+	"karakuri/internal/domain/protocol"
+	"karakuri/internal/infrastructure/httpapi"
 
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 	"go.bug.st/serial"

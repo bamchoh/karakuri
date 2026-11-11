@@ -88,15 +88,17 @@ cmd/
 │   │       └── rtu/            # RTU/ASCII フレーム処理
 │   └── server/
 │       └── plugin_server.go  # PluginService + DataStoreService 実装
-└── opcua-plugin/         # OPC UA プラグインバイナリ
-    ├── main.go
-    ├── internal/
-    │   └── opcua/        # OPC UA プロトコル実装（ホストから隔離）
-    │       ├── factory.go      # OpcuaServerFactory
-    │       ├── server.go       # OpcuaServer + PLCNameSpace（カスタム名前空間）
-    │       └── datastore.go    # OpcuaDataStore（変数ストアを DataStore として公開）
-    └── server/
-        └── plugin_server.go  # PluginService + DataStoreService（空実装）+ RemoteVariableStoreAccessor
+└── opcua-plugin/         # OPC UA プラグインバイナリ（bamchoh/uastack 使用）
+    ├── main.go           # pluginruntime.RunFactory で gRPC サーバー起動
+    ├── plugin-manifest/  # plugin.json 生成（task plugins から実行）
+    └── internal/
+        └── opcua/        # OPC UA プロトコル実装（ホストから隔離）
+            ├── factory.go      # Factory（VariableStoreInjector 実装）
+            ├── config.go       # Config（host / port / endpointHost）
+            ├── server.go       # Server（uastack サーバーのライフサイクル）
+            ├── nodes.go        # plcNodes（公開変数 → uastack アドレス空間のノード、値の同期）
+            ├── types.go        # PLC 型解析・PLC 値 ↔ ua.Variant 変換
+            └── datastore.go    # emptyDataStore（OPC UA はレジスタを持たない）
 plugins/                  # ビルド済みプラグイン配置先（task plugins で生成）
 ├── modbus-plugin/
 │   ├── modbus-plugin.exe
@@ -158,9 +160,9 @@ internal/
   - それぞれ `ProtocolType()` が `"modbus-tcp"` / `"modbus-rtu"` / `"modbus-ascii"` を返す
   - ホスト本体からは直接使用しない（プラグインバイナリ `cmd/modbus-plugin/` からインポート）
   - テストでは `fakeServerFactory`（`internal/application/fake_factory_test.go`）を使用（プロトコル固有実装に依存しない）
-- **OpcuaServerFactory** (`cmd/opcua-plugin/internal/opcua/factory.go`): OPC UA サーバーのファクトリー
-  - `ProtocolType()` が `"opcua"` を返す
-  - `VariableStoreInjector` を実装し、PLCService から `VariableStoreAccessor` を遅延注入
+- **opcua.Factory** (`cmd/opcua-plugin/internal/opcua/factory.go`): OPC UA サーバーのファクトリー
+  - `ProtocolType()` が `"opcua"`（`protocol.ProtocolOPCUA`）を返す
+  - `VariableStoreInjector` を実装。プラグイン内の `pluginruntime.Server.CreateAndStart()` が `host_grpc_addr` に接続した `RemoteVariableStoreAccessor` を注入する
   - `GetProtocolCapabilities()` が `SupportsNodePublishing: true` を返す
   - ホスト本体からは直接使用しない（プラグインバイナリ `cmd/opcua-plugin/` からインポート）
 - **PluginProcessManager** (`internal/infrastructure/plugin/process_manager.go`): プラグインプロセスのライフサイクル管理
@@ -181,13 +183,16 @@ internal/
   - `ProtocolServer`, `DataStore` の各インターフェースを gRPC クライアント呼び出しで実装
 - **ModbusDataStore** (`cmd/modbus-plugin/internal/modbus/datastore.go`):
   - `SetChangeHook(DataChangeHook)`: Modbus クライアントが書き込んだ変更をフックで通知（循環防止のためホスト→プラグイン書き込み時は通知しない）
-- **PLCNameSpace** (`cmd/opcua-plugin/internal/opcua/server.go`): gopcua の NameSpace インターフェースを直接実装したカスタム名前空間
-  - `VariableStore` の変数を OPC UA ノードとして公開（`loadFromAccessor()` で初期化）
-  - NodeID は String 型: ルートノードは `ns=X;s={uuid}`、子ノードは `ns=X;s={uuid}.fieldName` / `ns=X;s={uuid}[index]`
-  - `Browse()`: 構造体フィールドと配列インデックスを子ノードとして返す
-  - `Attribute()` / `SetAttribute()`: 子ノードパスをナビゲートして値の読み書きを行う
-  - `pollChanges()`: `allNodeIDs` に登録された全 NodeID（子ノードを含む）の変更を通知
-  - 構造体型には専用 DataType ノード `ns=X;s=_dt_型名` を割り当て
+- **plcNodes** (`cmd/opcua-plugin/internal/opcua/nodes.go`): 公開変数を uastack の `AddressSpace` に実ノードとして登録する
+  - `rebuild()`: `GetEnabledNodePublishings("opcua")` からノード構成を計画し、差分（追加・削除・型変更）だけノードを作り直す
+  - 構造体フィールド・配列要素は子ノード（HasComponent）として事前に展開
+  - `run()`: `SubscribeVariableChanges` ストリーム + 1 秒ごとの再同期でホストの値を `SetValue()`（変化したノードだけ uastack がサブスクリプションに即時通知）
+  - `Node.OnWrite` でクライアントの書き込みを `WriteVariableValue` / `WriteVariableFieldValue` に転送
+- **pluginruntime** (`internal/pluginruntime/`): プラグイン共通の gRPC サーバー実装（Modbus / OPC UA 共通）
+  - `GetMetadata()` はファクトリーの `GetProtocolCapabilities()` を返す
+  - `CreateAndStart()`: ファクトリーが `VariableStoreInjector` なら `host_grpc_addr` に接続して `RemoteVariableStoreAccessor`（`variable_accessor.go`）を注入
+  - `OnNodePublishingUpdated()`: サーバーが `NodePublishingAware` なら転送
+  - `NewManifest(factory, entrypoint)`: ホストの `PluginManifest` と同じ JSON 形式（`capabilities` は snake_case）でマニフェストを作る
 - **DataStore** (`internal/domain/protocol/server.go`): プロトコル共通のメモリ操作インターフェース
   - `ReadBits()`, `WriteBit()`, `ReadWords()`, `WriteWord()`: 汎用メモリ操作
   - `Snapshot()`, `Restore()`: Export/Import用
@@ -474,39 +479,40 @@ JavaScript（goja）でPLC動作を記述。
 | 構造体フィールド | `ns=X;s={uuid}.fieldName` | `ns=2;s=395a704c-....speed` |
 | ネストフィールド | `ns=X;s={uuid}.field1.field2` | `ns=2;s=...-....motor.speed` |
 | 配列要素 | `ns=X;s={uuid}[index]` | `ns=2;s=395a704c-...[0]` |
-| カスタムDataTypeノード | `ns=X;s=_dt_TypeName` | `ns=2;s=_dt_MyStruct` |
+| 公開変数フォルダ | `ns=X;s=PLCVariables` | Objects 直下（Organizes） |
 
-#### 子ノードブラウズ・サブスクリプション
+- 名前空間 URI は `urn:karakuri:plc`（通常 `ns=2`）
+- 配列要素の index は外部インデックス（`ARRAY[1..10]` なら `[1]`〜`[10]`）
 
-- **`Browse()`**: 配列型→インデックスノード、構造体型→フィールドノードを子として返す。再帰的に展開
-- **`collectAllNodeIDs()`**: 型情報を再帰的にたどって全 NodeID を列挙し、`allNodeIDs` に保存
-- **`pollChanges()`**: `allNodeIDs` に登録された全 NodeID（子ノードを含む）の変更を監視し、OPC UA クライアントに通知
-- **`GetStructFields(typeName)`**: `VariableStoreAccessor` 経由で構造体型のフィールド一覧を取得（子ノード生成に使用）
+#### 型の対応
 
-#### パスナビゲーション
+| PLC 型 | OPC UA |
+|--------|--------|
+| BOOL / SINT / INT / DINT / LINT | Boolean / SByte / Int16 / Int32 / Int64 |
+| USINT / UINT / UDINT / ULINT | Byte / UInt16 / UInt32 / UInt64 |
+| REAL / LREAL | Float / Double |
+| STRING, STRING[n], TIME, DATE, TIME_OF_DAY, DATE_AND_TIME | String（TIME 等は `T#1s` 形式の文字列） |
+| スカラーの配列 | 要素型の 1 次元配列（ValueRank=1） |
+| 構造体 | String（JSON）。フィールドは子ノードで型付きアクセス |
+| 構造体・ネスト配列の配列 | String[]（各要素が JSON） |
 
-- **`parseNodePath(s)`**: NodeID 文字列を `(varID, []pathSegment)` に分解
-- **`parseSegments(s)`**: パス文字列（`.field[index]...`）を `[]pathSegment` に分解
-- **`followTypeForPath(rootType, path)`**: 型情報に沿ってパスを辿り、末端の型名を取得
-- **`navigateValue(value, path)`**: 値ツリーをパスに沿って辿り、末端の値を取得
-- **`updateValue(root, path, newVal)`**: 値ツリーのパス位置を更新して新しいルートを返す
+- 書き込みは uastack が DataType / ValueRank を検査する（INT ノードには Int16 で書く必要がある）
+- 構造体ノードへの書き込みは JSON 文字列を `map[string]interface{}` に変換してホストへ送る
+- アクセスモード: `read` → CurrentRead、`write` → CurrentWrite、`readwrite` → 両方
 
-#### DataType ノード
+#### 値の同期
 
-- 構造体型にはカスタム DataType ノード（`_dt_` プレフィックス）を割り当て
-- `Node()` が `_dt_` 付き NodeID を受け取ると `NodeClass=DataType` のノードを返す
-- `isStructDataType(dataType)`: プリミティブでも配列でもない型名を構造体型と判定する
-
-#### 書き込み処理
-
-- **配列書き込み**: gopcua は型付きスライス（`[]int16` 等）を渡すため、`fromOpcuaValue()` で `[]interface{}` に変換
-- **構造体書き込み**: OPC UA クライアントが JSON 文字列で送る場合に `json.Unmarshal` で `map[string]interface{}` に変換
-- **子ノード書き込み**: `updateValue()` でルートから新しい値を構築し `WriteVariableValue()` で保存
+- ホスト → OPC UA: `SubscribeVariableChanges` で変更された変数 ID を受け取り、その変数を読み直してルートと全子ノードに `SetValue()`。取りこぼし対策として 1 秒ごとに全変数を再同期
+- OPC UA → ホスト: `Node.OnWrite` → `WriteVariableValue`（ルート）/ `WriteVariableFieldValue`（子ノード、フィールドパスは外部インデックス）。書き込み後に同じ変数の他ノードも更新
+- msgpack は `MapType=map[string]interface{}` でデコードし、構造体値を JSON 化できるようにする
 
 #### OPC UA ライブラリ
 
-- **gopcua v0.8.0**: `server.Start(ctx)` はノンブロッキング、`server.Close()` でシャットダウン
-- セキュリティなし・匿名認証（`ua.SecurityModeNone` / `ua.MessageSecurityModeNone`）
+- **bamchoh/uastack v0.1.0**（`github.com/bamchoh/uastack/server`）
+- セキュリティなし・匿名認証のみ（証明書は作られない。`PKIDir` はプラグイン exe と同じフォルダの `pki`）
+- `Start()` で `net.Listen` してから `server.Serve(ln)` をゴルーチンで実行（ポート使用中を Start のエラーで返すため）
+- `Stop()` では `server.Close()` の後に自前のリスナーも閉じる（v0.1.0 は Serve がリスナーを登録する前に Close されると Accept で待ち続けるため）
+- `server.Server` は Close 後に再利用できないため、Start のたびに作り直す
 
 ### REST HTTP API 実装
 

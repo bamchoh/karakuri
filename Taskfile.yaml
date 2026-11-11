@@ -35,6 +35,10 @@ tasks:
           powershell -Command "Copy-Item '{{.PLUGINS_DIR}}/modbus-plugin.exe' '{{.PLUGINS_DIR}}/{{.ITEM}}-plugin/modbus-plugin.exe'"
           go run ./cmd/modbus-plugin/plugin-manifest -protocol-type {{.ITEM}} > {{.PLUGINS_DIR}}/{{.ITEM}}-plugin/plugin.json
 
+      - powershell -Command "New-Item -ItemType Directory -Path '{{.PLUGINS_DIR}}/opcua-plugin' -Force | Out-Null"
+      - go build -o {{.PLUGINS_DIR}}/opcua-plugin/opcua-plugin.exe ./cmd/opcua-plugin
+      - go run ./cmd/opcua-plugin/plugin-manifest > {{.PLUGINS_DIR}}/opcua-plugin/plugin.json
+
       - powershell -Command "if (Test-Path build/bin/plugins) { Remove-Item build/bin/plugins -Recurse -Force }"
 
       - powershell -Command "Copy-Item '{{.PLUGINS_DIR}}' build/bin/plugins -Recurse"

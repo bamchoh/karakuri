@@ -3,7 +3,6 @@ package main
 import (
 	"encoding/json"
 	"flag"
-	"fmt"
 	"os"
 
 	"karakuri/cmd/modbus-plugin/plugin"
@@ -17,15 +16,7 @@ func main() {
 
 	factory := plugin.ResolveFactory(*protocolType)
 
-	manifest := pluginruntime.Manifest{
-		Name:         fmt.Sprintf("%s Plugin", factory.DisplayName()),
-		EntryPoint:   "modbus-plugin.exe",
-		Version:      factory.Version(),
-		ProtocolType: string(factory.ProtocolType()),
-		DisplayName:  factory.DisplayName(),
-		Variants:     []string{},
-		Capabilities: factory.GetProtocolCapabilities(),
-	}
+	manifest := pluginruntime.NewManifest(factory, "modbus-plugin.exe")
 
 	enc := json.NewEncoder(os.Stdout)
 	enc.SetIndent("", "  ")
