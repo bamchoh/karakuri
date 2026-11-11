@@ -131,7 +131,6 @@ plugins/                  # ビルド済みプラグイン配置先（task plugi
 internal/
 ├── domain/           # ドメイン層
 │   ├── protocol/     # プロトコル共通インターフェース（ServerFactory, DataStore, ConfigField等）
-│   ├── datastore/    # DataStore共通定義
 │   ├── script/       # スクリプトエンティティ
 │   └── variable/     # 変数・構造体型・NodePublishing
 ├── application/      # アプリケーション層

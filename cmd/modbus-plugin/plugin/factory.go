@@ -5,12 +5,13 @@ import (
 	"karakuri/internal/domain/protocol"
 )
 
+// ResolveFactory はプロトコルタイプに対応するファクトリーを返す（不明な値は Modbus TCP）
 func ResolveFactory(protocolType string) protocol.ServerFactory {
 	switch protocolType {
-	case "modbus-rtu":
+	case string(modbus.ProtocolModbusRTU):
 		return &modbus.RTUFactory{}
 
-	case "modbus-ascii":
+	case string(modbus.ProtocolModbusASCII):
 		return &modbus.ASCIIFactory{}
 
 	default:

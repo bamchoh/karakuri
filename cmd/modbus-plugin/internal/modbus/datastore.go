@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"sync"
 
-	"karakuri/internal/domain/datastore"
 	"karakuri/internal/domain/protocol"
 	"karakuri/internal/pluginruntime"
 )
@@ -130,14 +129,14 @@ func (s *ModbusDataStore) ReadBits(area string, address uint32, count uint16) ([
 	switch area {
 	case AreaCoils:
 		if int(address)+int(count) > len(s.coils) {
-			return nil, datastore.ErrAddressOutOfRange
+			return nil, ErrAddressOutOfRange
 		}
 		result := make([]bool, count)
 		copy(result, s.coils[address:address+uint32(count)])
 		return result, nil
 	case AreaDiscreteInputs:
 		if int(address)+int(count) > len(s.discreteInputs) {
-			return nil, datastore.ErrAddressOutOfRange
+			return nil, ErrAddressOutOfRange
 		}
 		result := make([]bool, count)
 		copy(result, s.discreteInputs[address:address+uint32(count)])
@@ -150,7 +149,7 @@ func (s *ModbusDataStore) ReadBits(area string, address uint32, count uint16) ([
 		return readRegisterBits(s.inputRegs, address, count)
 
 	default:
-		return nil, datastore.ErrAreaNotFound
+		return nil, ErrAreaNotFound
 	}
 }
 
@@ -161,14 +160,14 @@ func (s *ModbusDataStore) WriteBits(area string, address uint32, values []bool) 
 	case AreaCoils:
 		if int(address)+len(values) > len(s.coils) {
 			s.mu.Unlock()
-			return datastore.ErrAddressOutOfRange
+			return ErrAddressOutOfRange
 		}
 		copy(s.coils[address:], values)
 
 	case AreaDiscreteInputs:
 		if int(address)+len(values) > len(s.discreteInputs) {
 			s.mu.Unlock()
-			return datastore.ErrAddressOutOfRange
+			return ErrAddressOutOfRange
 		}
 		copy(s.discreteInputs[address:], values)
 
@@ -200,7 +199,7 @@ func (s *ModbusDataStore) WriteBits(area string, address uint32, values []bool) 
 
 	default:
 		s.mu.Unlock()
-		return datastore.ErrAreaNotFound
+		return ErrAreaNotFound
 	}
 
 	s.mu.Unlock()
@@ -237,14 +236,14 @@ func (s *ModbusDataStore) ReadWords(area string, address uint32, count uint16) (
 	switch area {
 	case AreaHoldingRegs:
 		if int(address)+int(count) > len(s.holdingRegs) {
-			return nil, datastore.ErrAddressOutOfRange
+			return nil, ErrAddressOutOfRange
 		}
 		result := make([]uint16, count)
 		copy(result, s.holdingRegs[address:address+uint32(count)])
 		return result, nil
 	case AreaInputRegs:
 		if int(address)+int(count) > len(s.inputRegs) {
-			return nil, datastore.ErrAddressOutOfRange
+			return nil, ErrAddressOutOfRange
 		}
 		result := make([]uint16, count)
 		copy(result, s.inputRegs[address:address+uint32(count)])
@@ -252,7 +251,7 @@ func (s *ModbusDataStore) ReadWords(area string, address uint32, count uint16) (
 	case AreaCoils:
 		end := int(address) + int(count)*16
 		if end > len(s.coils) {
-			return nil, datastore.ErrAddressOutOfRange
+			return nil, ErrAddressOutOfRange
 		}
 		result := packBitsToWords(s.coils[address:uint32(end)])
 		return result, nil
@@ -260,12 +259,12 @@ func (s *ModbusDataStore) ReadWords(area string, address uint32, count uint16) (
 		end := int(address) + int(count)*16
 
 		if end > len(s.discreteInputs) {
-			return nil, datastore.ErrAddressOutOfRange
+			return nil, ErrAddressOutOfRange
 		}
 		result := packBitsToWords(s.discreteInputs[address:uint32(end)])
 		return result, nil
 	default:
-		return nil, datastore.ErrAreaNotFound
+		return nil, ErrAreaNotFound
 	}
 }
 
@@ -279,20 +278,20 @@ func (s *ModbusDataStore) WriteWords(area string, address uint32, values []uint1
 	case AreaHoldingRegs:
 		if int(address)+len(values) > len(s.holdingRegs) {
 			s.mu.Unlock()
-			return datastore.ErrAddressOutOfRange
+			return ErrAddressOutOfRange
 		}
 		copy(s.holdingRegs[address:], values)
 	case AreaInputRegs:
 		if int(address)+len(values) > len(s.inputRegs) {
 			s.mu.Unlock()
-			return datastore.ErrAddressOutOfRange
+			return ErrAddressOutOfRange
 		}
 		copy(s.inputRegs[address:], values)
 
 	case AreaCoils:
 		if int(address)+len(values)*16 > len(s.coils) {
 			s.mu.Unlock()
-			return datastore.ErrAddressOutOfRange
+			return ErrAddressOutOfRange
 		}
 
 		changeBits = unpackWordsToBits(values)
@@ -300,14 +299,14 @@ func (s *ModbusDataStore) WriteWords(area string, address uint32, values []uint1
 	case AreaDiscreteInputs:
 		if int(address)+len(values)*16 > len(s.discreteInputs) {
 			s.mu.Unlock()
-			return datastore.ErrAddressOutOfRange
+			return ErrAddressOutOfRange
 		}
 
 		changeBits = unpackWordsToBits(values)
 		copy(s.discreteInputs[address:], changeBits)
 	default:
 		s.mu.Unlock()
-		return datastore.ErrAreaNotFound
+		return ErrAreaNotFound
 	}
 	s.mu.Unlock()
 
@@ -484,7 +483,7 @@ func getRegisterBit(regs []uint16, bitAddr uint32) (bool, error) {
 	bitIndex := bitAddr % 16
 
 	if int(wordIndex) >= len(regs) {
-		return false, datastore.ErrAddressOutOfRange
+		return false, ErrAddressOutOfRange
 	}
 
 	return (regs[wordIndex] & (1 << bitIndex)) != 0, nil
@@ -495,7 +494,7 @@ func setRegisterBit(regs []uint16, bitAddr uint32, value bool) error {
 	bitIndex := bitAddr % 16
 
 	if int(wordIndex) >= len(regs) {
-		return datastore.ErrAddressOutOfRange
+		return ErrAddressOutOfRange
 	}
 
 	mask := uint16(1 << bitIndex)
@@ -511,7 +510,7 @@ func setRegisterBit(regs []uint16, bitAddr uint32, value bool) error {
 
 func checkRegisterBitRange(regs []uint16, address uint32, count int) error {
 	if int(address)+count > len(regs)*16 {
-		return datastore.ErrAddressOutOfRange
+		return ErrAddressOutOfRange
 	}
 	return nil
 }

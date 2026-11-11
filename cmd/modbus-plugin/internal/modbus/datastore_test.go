@@ -3,8 +3,6 @@ package modbus
 import (
 	"reflect"
 	"testing"
-
-	"karakuri/internal/domain/datastore"
 )
 
 func TestNewModbusDataStore(t *testing.T) {
@@ -146,12 +144,12 @@ func TestModbusDataStore_ReadWriteBit_OutOfRange(t *testing.T) {
 			store := NewModbusDataStore(100, 50, 200, 150)
 
 			_, err := store.ReadBit(tt.area, tt.address)
-			if err != datastore.ErrAddressOutOfRange {
+			if err != ErrAddressOutOfRange {
 				t.Fatalf("expected ErrAddressOutOfRange, got %v", err)
 			}
 
 			err = store.WriteBit(tt.area, tt.address, true)
-			if err != datastore.ErrAddressOutOfRange {
+			if err != ErrAddressOutOfRange {
 				t.Fatalf("expected ErrAddressOutOfRange, got %v", err)
 			}
 		})
@@ -163,12 +161,12 @@ func TestModbusDataStore_ReadWriteBit_AreaNotFound(t *testing.T) {
 
 	// 存在しないエリア
 	_, err := store.ReadBit("nonexistent", 0)
-	if err != datastore.ErrAreaNotFound {
+	if err != ErrAreaNotFound {
 		t.Errorf("expected ErrAreaNotFound, got %v", err)
 	}
 
 	err = store.WriteBit("nonexistent", 0, true)
-	if err != datastore.ErrAreaNotFound {
+	if err != ErrAreaNotFound {
 		t.Errorf("expected ErrAreaNotFound, got %v", err)
 	}
 }
@@ -375,14 +373,14 @@ func TestModbusDataStore_ReadWriteBits_OutOfRange(t *testing.T) {
 
 			if tt.count > 0 {
 				_, err := store.ReadBits(tt.area, tt.address, tt.count)
-				if err != datastore.ErrAddressOutOfRange {
+				if err != ErrAddressOutOfRange {
 					t.Fatalf("expected ErrAddressOutOfRange, got %v", err)
 				}
 			}
 
 			if tt.values != nil {
 				err := store.WriteBits(tt.area, tt.address, tt.values)
-				if err != datastore.ErrAddressOutOfRange {
+				if err != ErrAddressOutOfRange {
 					t.Fatalf("expected ErrAddressOutOfRange, got %v", err)
 				}
 			}
@@ -449,7 +447,7 @@ func TestModbusDataStore_ReadWriteBits_Boundary(t *testing.T) {
 			_, err := store.ReadBits(tt.area, tt.address, tt.count)
 
 			if tt.shouldErr {
-				if err != datastore.ErrAddressOutOfRange {
+				if err != ErrAddressOutOfRange {
 					t.Fatalf("expected ErrAddressOutOfRange, got %v", err)
 				}
 			} else {
@@ -636,12 +634,12 @@ func TestModbusDataStore_ReadWriteWord_OutOfRange(t *testing.T) {
 
 			// 範囲外アクセス
 			_, err := store.ReadWord(tt.area, tt.address)
-			if err != datastore.ErrAddressOutOfRange {
+			if err != ErrAddressOutOfRange {
 				t.Errorf("expected ErrAddressOutOfRange, got %v", err)
 			}
 
 			err = store.WriteWord(tt.area, tt.address, tt.value)
-			if err != datastore.ErrAddressOutOfRange {
+			if err != ErrAddressOutOfRange {
 				t.Errorf("expected ErrAddressOutOfRange, got %v", err)
 			}
 		})
@@ -653,12 +651,12 @@ func TestModbusDataStore_ReadWriteWord_AreaNotFound(t *testing.T) {
 
 	// 存在しないエリア
 	_, err := store.ReadWord("nonexistent", 0)
-	if err != datastore.ErrAreaNotFound {
+	if err != ErrAreaNotFound {
 		t.Errorf("expected ErrAreaNotFound, got %v", err)
 	}
 
 	err = store.WriteWord("nonexistent", 0, 0x1234)
-	if err != datastore.ErrAreaNotFound {
+	if err != ErrAreaNotFound {
 		t.Errorf("expected ErrAreaNotFound, got %v", err)
 	}
 }
@@ -799,12 +797,12 @@ func TestModbusDataStore_ReadWriteWords_OutOfRange(t *testing.T) {
 
 			// 範囲外アクセス
 			_, err := store.ReadWords(tt.area, tt.address, tt.count)
-			if err != datastore.ErrAddressOutOfRange {
+			if err != ErrAddressOutOfRange {
 				t.Errorf("expected ErrAddressOutOfRange, got %v", err)
 			}
 
 			err = store.WriteWords(tt.area, tt.address, tt.values)
-			if err != datastore.ErrAddressOutOfRange {
+			if err != ErrAddressOutOfRange {
 				t.Errorf("expected ErrAddressOutOfRange, got %v", err)
 			}
 		})

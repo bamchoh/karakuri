@@ -1,7 +1,8 @@
-package datastore
+package modbus
 
 import "errors"
 
+// DataStore の操作で返すエラー
 var (
 	// ErrAreaNotFound は指定されたエリアが存在しない場合のエラー
 	ErrAreaNotFound = errors.New("memory area not found")

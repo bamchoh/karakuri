@@ -2,7 +2,7 @@ syntax = "proto3";
 
 package plugin.v1;
 
-option go_package = "modbus_simulator/pb/pluginpb";
+option go_package = "karakuri/pb/pluginpb";
 
 // =============================================================================
 // 共通型（全サービスで使用）
