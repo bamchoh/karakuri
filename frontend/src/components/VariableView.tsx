@@ -480,7 +480,7 @@ export function VariableView() {
     }
   };
 
-  // メモリエリアIDを短い表示名に変換（プラグインが shortName を返さなければ ID のまま）
+  // メモリエリアIDを短い表示名に変換（プロトコルが shortName を返さなければ ID のまま）
   const areaShortName = (protocolType: string, areaId: string): string =>
     (memoryAreasByProtocol[protocolType] || []).find((a) => a.id === areaId)
       ?.shortName || areaId;

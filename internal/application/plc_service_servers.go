@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"os"
 	"sort"
 
 	"karakuri/internal/domain/protocol"
@@ -25,41 +24,11 @@ func (s *PLCService) StartServer(protocolType string) error {
 		return fmt.Errorf("server not initialized")
 	}
 
-	startErr := inst.server.Start(context.Background())
-	if startErr == nil {
-		go s.emitServerChanged()
-		return nil
-	}
-
-	// Start 失敗時: 再接続をサポートするファクトリー（debug_port 等）の場合は
-	// 接続をリセットしてサーバーインスタンスを再構築してからリトライする
-	reconnector, ok := inst.factory.(pluginReconnector)
-	if !ok {
-		return fmt.Errorf("サーバーの起動に失敗しました: %w", startErr)
-	}
-
-	fmt.Fprintf(os.Stderr, "[INFO] StartServer 失敗。再接続を試みます (protocol=%s)\n", protocolType)
-	if rerr := reconnector.ForceReconnect(); rerr != nil {
-		return fmt.Errorf("再接続失敗 (start=%v, reconnect=%w)", startErr, rerr)
-	}
-
-	if rerr := s.rebuildServerInstance(inst); rerr != nil {
-		return fmt.Errorf("サーバー再構築失敗: %w", rerr)
-	}
-
 	if err := inst.server.Start(context.Background()); err != nil {
-		return err
+		return fmt.Errorf("サーバーの起動に失敗しました: %w", err)
 	}
 	go s.emitServerChanged()
 	return nil
-}
-
-// rebuildServerInstance は既存の serverInstance の DataStore・Server を再作成する。
-// プラグイン再接続後に呼び出す（ロック済み前提）。
-func (s *PLCService) rebuildServerInstance(inst *serverInstance) error {
-	// 古い同期を止めてから作り直す
-	inst.detachSync()
-	return s.attachServer(inst)
 }
 
 // StopServer はサーバーを停止する
@@ -72,14 +41,6 @@ func (s *PLCService) StopServer(protocolType string) error {
 		return err
 	}
 	if inst.server == nil {
-		return nil
-	}
-
-	if checker, ok := inst.factory.(pluginCrashChecker); ok && checker.IsProcessCrashed() {
-		if stopper, ok2 := inst.factory.(pluginStopper); ok2 {
-			stopper.StopProcess()
-		}
-		go s.emitServerChanged()
 		return nil
 	}
 
@@ -106,7 +67,7 @@ func (s *PLCService) GetServerStatus(protocolType string) string {
 }
 
 // GetNodeAddresses は公開変数のノードアドレス（OPC UA なら NodeID）を返す。
-// アドレスの書式と、公開できない変数の判定はプロトコルのプラグインが決める。
+// アドレスの書式と、公開できない変数の判定はプロトコルの実装が決める。
 // 対応していないプロトコルでは空のスライスを返す。
 func (s *PLCService) GetNodeAddresses(protocolType string, variableIDs []string) []NodeAddressDTO {
 	// アドレスに変数名を使うプロトコルのため、名前も渡す
@@ -191,18 +152,6 @@ func (s *PLCService) GetAvailableProtocols() []ProtocolInfoDTO {
 	return result
 }
 
-// stopPluginIfUnused は、プロトコルのサーバーが追加されていなければプラグインのプロセスを止める
-func (s *PLCService) stopPluginIfUnused(pt protocol.ProtocolType) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if _, inUse := s.servers[pt]; inUse {
-		return
-	}
-	if stopper, ok := s.factories[pt].(pluginStopper); ok {
-		stopper.StopProcess()
-	}
-}
-
 // GetProtocolSchema はプロトコルスキーマを返す
 func (s *PLCService) GetProtocolSchema(protocolType string) (*ProtocolSchemaDTO, error) {
 	s.mu.RLock()
@@ -210,13 +159,6 @@ func (s *PLCService) GetProtocolSchema(protocolType string) (*ProtocolSchemaDTO,
 	s.mu.RUnlock()
 	if !ok {
 		return nil, fmt.Errorf("protocol not found: %s", protocolType)
-	}
-
-	// 設定項目はプラグインに問い合わせるため、プロセスが動いていなければ起動される。
-	// サーバーを追加していないプロトコルでは、問い合わせのために起動したプロセスを終わったら止める
-	// （止めないと、そのプロトコルのサーバーを追加・削除するまでプロセスが残る）
-	if checker, ok := factory.(pluginRunningChecker); ok && !checker.IsProcessRunning() {
-		defer s.stopPluginIfUnused(protocol.ProtocolType(protocolType))
 	}
 
 	variants := factory.ConfigVariants()

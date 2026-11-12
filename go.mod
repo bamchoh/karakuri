@@ -7,12 +7,8 @@ require (
 	github.com/dop251/goja v0.0.0-20260106131823-651366fbe6e3
 	github.com/google/uuid v1.6.0
 	github.com/simonvetter/modbus v1.6.4
-	github.com/ugorji/go/codec v1.3.1
 	github.com/wailsapp/wails/v2 v2.11.0
 	go.bug.st/serial v1.6.4
-	golang.org/x/sys v0.39.0
-	google.golang.org/grpc v1.79.1
-	google.golang.org/protobuf v1.36.11
 )
 
 require (
@@ -45,8 +41,8 @@ require (
 	github.com/wailsapp/mimetype v1.4.1 // indirect
 	golang.org/x/crypto v0.46.0 // indirect
 	golang.org/x/net v0.48.0 // indirect
+	golang.org/x/sys v0.39.0 // indirect
 	golang.org/x/text v0.32.0 // indirect
-	google.golang.org/genproto/googleapis/rpc v0.0.0-20251202230838-ff82c1b0f217 // indirect
 )
 
 // replace github.com/wailsapp/wails/v2 v2.11.0 => C:\Users\bamch\go\pkg\mod

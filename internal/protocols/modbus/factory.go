@@ -11,7 +11,7 @@ import (
 
 const VERSION = "1.0.0"
 
-// Modbus プラグインのプロトコルタイプ
+// Modbus のプロトコルタイプ
 const (
 	ProtocolModbusTCP   protocol.ProtocolType = "modbus-tcp"
 	ProtocolModbusRTU   protocol.ProtocolType = "modbus-rtu"

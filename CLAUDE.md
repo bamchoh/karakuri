@@ -24,17 +24,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Build and Development Commands
 
 ```bash
-# 開発モード（プラグインビルド → ホットリロード起動）
+# 開発モード（画面はホットリロード。Go 側を変更したら起動し直す）
 task dev
 
-# プロダクションビルド（プラグインビルド → wails build）
+# プロダクションビルド（build/bin に exe を 1 つ作る）
 task build
-
-# プラグインバイナリのみビルド（plugins/ 以下にサブフォルダ + plugin.json を生成）
-task plugins
-
-# proto ファイルから Go コードを再生成
-task proto
 
 # 全テスト実行
 task test
@@ -59,7 +53,7 @@ go build ./...
 
 ### 画面の確認用テスト（Playwright）
 
-`frontend/e2e/` に、ブラウザで画面を操作して確認するテストがある。`task dev` が立てる開発用サーバー（`http://localhost:34115`）に接続するため、Go 側の API とプラグインを含めた動作を確認できる。手順と注意は `frontend/e2e/README.md` を参照。
+`frontend/e2e/` に、ブラウザで画面を操作して確認するテストがある。`task dev` が立てる開発用サーバー（`http://localhost:34115`）に接続するため、Go 側の API とプロトコルの実装を含めた動作を確認できる。手順と注意は `frontend/e2e/README.md` を参照。
 
 - 画面ごとのテスト: サーバー画面 `server-panel.spec.ts`、変数画面 `variable-dialogs.spec.ts` / `node-publishing.spec.ts`、レジスタ画面 `register-panel.spec.ts` / `monitoring.spec.ts`
 - 画面を変更したら、該当するテストを実行する（なければ追加する）。`shot()` で撮ったスクリーンショット（`frontend/e2e/.screenshots/`）で見た目も確認する
@@ -104,56 +98,21 @@ setx KARAKURI_WEBVIEW2_PATH D:\tools\WebView2-156
 
 Wails v2をベースに、フロントエンドはVite + React + TypeScript、バックエンドはGoで構成。
 
-### ディレクトリ構造（DDD + マルチプロトコル + プラグイン）
+### ディレクトリ構造（DDD + マルチプロトコル）
+
+プロトコル（Modbus / OPC UA）の実装はアプリに組み込まれている（1 つの exe）。以前はプロトコルごとに別の exe（プラグイン）にして gRPC で通信していたが、やめた（issue #58）。
 
 ```
-proto/                    # protobuf 定義
-│   ├── plugin_service.proto            # PluginService（ファクトリー情報・サーバーライフサイクル・ノードアドレス）
-│   ├── datastore_service.proto         # DataStoreService（メモリエリア・レジスタ読み書き）
-│   └── variable_accessor_service.proto # VariableAccessorService（ホストの変数アクセス）
-pb/pluginpb/              # protoc 生成 Go コード（コミット対象）
-cmd/
-├── modbus-plugin/        # Modbus プラグインバイナリ（TCP / RTU / ASCII で共通の exe。-protocol-type で切り替える）
-│   ├── main.go           # pluginruntime.RunFactory で gRPC サーバー起動
-│   ├── plugin/           # ResolveFactory（-protocol-type の値 → ファクトリー）
-│   ├── plugin-manifest/  # plugin.json 生成（task plugins から実行）
-│   └── internal/
-│       └── modbus/       # Modbus プロトコル実装（ホストから隔離）
-│           ├── factory.go      # TCPFactory / RTUFactory / ASCIIFactory、ModbusConfig、ModbusServer、プロトコルタイプの定数
-│           ├── server.go       # Server（トランスポートの起動・停止）
-│           ├── *_transport.go  # TCP / RTU / ASCII のトランスポート（TCP は、オフにした UnitID 宛てのリクエストを捨てる中継を持つ）
-│           ├── datastore.go    # ModbusDataStore（SetChangeHook でクライアント書き込みフック）
-│           ├── datastore_adapter.go # リクエスト → DataStore の読み書き
-│           └── rtu/            # RTU/ASCII フレーム処理
-└── opcua-plugin/         # OPC UA プラグインバイナリ（bamchoh/uastack 使用）
-    ├── main.go           # pluginruntime.RunFactory で gRPC サーバー起動
-    ├── plugin-manifest/  # plugin.json 生成（task plugins から実行）
-    └── internal/
-        └── opcua/        # OPC UA プロトコル実装（ホストから隔離）
-            ├── factory.go      # Factory（VariableStoreInjector 実装）
-            ├── config.go       # Config（ネットワーク設定 + アプリケーション情報）
-            ├── server.go       # Server（uastack サーバーのライフサイクル）
-            ├── nodes.go        # plcNodes（公開変数 → uastack アドレス空間のノード、値の同期）
-            ├── types.go        # PLC 型解析・PLC 値 ↔ ua.Variant 変換
-            └── datastore.go    # emptyDataStore（OPC UA はレジスタを持たない）
-plugins/                  # ビルド済みプラグイン配置先（task plugins で生成。git には入れない）
-├── modbus-tcp-plugin/    # プロトコルタイプごとにフォルダを分ける（exe は同じもののコピー）
-│   ├── modbus-plugin.exe
-│   └── plugin.json       # protocol_type: "modbus-tcp"
-├── modbus-rtu-plugin/
-├── modbus-ascii-plugin/
-└── opcua-plugin/
-    ├── opcua-plugin.exe
-    └── plugin.json
+app.go / main.go      # Wails のエントリー。起動時に protocols.Factories() を PLCService に登録する
 internal/
 ├── domain/           # ドメイン層
 │   ├── protocol/     # プロトコル共通インターフェース（ServerFactory, DataStore, ConfigField等）
 │   │   └── protocoltest/  # テスト用のフェイク（Factory / Server / DataStore）。ホスト側のテストで共通に使う
 │   ├── script/       # スクリプトエンティティ
 │   └── variable/     # 変数・構造体型・NodePublishing
-├── application/      # アプリケーション層
-│   ├── plc_service.go            # メインサービス本体（構造体・初期化・プラグイン登録・サーバーの追加/削除・終了処理・イベント）
-│   ├── plc_service_instance.go   # サーバーの組み立て（attachServer / detachSync）とプラグイン操作用インターフェース
+├── application/      # アプリケーション層（プロトコル固有の値を持たない）
+│   ├── plc_service.go            # メインサービス本体（構造体・初期化・ファクトリーの登録・サーバーの追加/削除・終了処理・イベント）
+│   ├── plc_service_instance.go   # サーバーの組み立て（attachServer / detachSync）
 │   ├── plc_service_servers.go    # サーバーの起動/停止・設定・プロトコルスキーマ・ノードアドレス・UnitID
 │   ├── plc_service_memory.go     # 汎用メモリ操作
 │   ├── plc_service_scripts.go    # スクリプト管理・コンソールログ
@@ -162,92 +121,71 @@ internal/
 │   ├── plc_service_variables.go  # 変数・マッピング・ノード公開設定・構造体型
 │   ├── app_events.go             # Wails イベントの送信（WailsAppStateEmitter）と変数変更の間引き
 │   └── dto.go                    # DTO定義（ProtocolSchemaDTO, MonitoringItemDTO等）
-├── valuecodec/       # ホストとプラグインの間で変数の値を運ぶ MessagePack の変換（両側で共通）
-├── pluginruntime/    # プラグイン側の共通実装（各プラグインの main から使う。Wails に依存しない）
-│   ├── runtime.go            # RunFactory（gRPC サーバー起動・GRPC_PORT 出力）
-│   ├── server.go             # PluginService + DataStoreService の実装
-│   ├── variable_accessor.go  # RemoteVariableStoreAccessor（ホストの変数にアクセスする gRPC クライアント）
-│   └── interfaces.go         # NewManifest（plugin.json の内容）など
-└── infrastructure/   # インフラ層（ホスト側インフラ。プロトコル固有実装は含まない）
-    ├── plugin/       # プラグインインフラ（ホスト側）
-    │   ├── process_manager.go         # PluginProcessManager（plugin.json スキャン・オンデマンドプロセス起動）
-    │   ├── process_manager_windows.go # Windows 向け: コンソールウィンドウ非表示（CREATE_NO_WINDOW）
-    │   ├── process_manager_unix.go    # 非Windows 向け: スタブ
-    │   ├── host_grpc_server.go        # HostGrpcServer（VariableAccessorService gRPC サーバー）
-    │   ├── remote_factory.go          # LazyRemoteServerFactory（マニフェストからプロトコル情報を返し gRPC はオンデマンド）
-    │   ├── remote_server.go           # RemoteProtocolServer（gRPC クライアント実装）
-    │   ├── remote_datastore.go        # RemoteDataStore（gRPC クライアント実装）
-    │   └── remote_listener.go         # RemoteVariableChangeListener（変数→DataStore gRPC 同期）
+├── protocols/        # プロトコルの実装（プロトコル固有のコードはすべてここ）
+│   ├── protocols.go      # Factories(): 組み込むプロトコルの一覧
+│   ├── integration_test.go # アプリと同じ組み立てで、実際のクライアントからつないで確認するテスト
+│   ├── modbus/           # Modbus TCP / RTU / ASCII
+│   │   ├── factory.go      # TCPFactory / RTUFactory / ASCIIFactory、ModbusConfig、ModbusServer、プロトコルタイプの定数
+│   │   ├── server.go       # Server（トランスポートの起動・停止）
+│   │   ├── *_transport.go  # TCP / RTU / ASCII のトランスポート（TCP は、オフにした UnitID 宛てのリクエストを捨てる中継を持つ）
+│   │   ├── datastore.go    # ModbusDataStore（4 つのメモリエリア）
+│   │   ├── datastore_adapter.go # リクエスト → DataStore の読み書き
+│   │   └── rtu/            # RTU / ASCII のフレーム処理（Processor は RTU と ASCII で共通）
+│   └── opcua/            # OPC UA（bamchoh/uastack 使用）
+│       ├── factory.go      # Factory（VariableStoreInjector 実装）
+│       ├── config.go       # Config（ネットワーク設定 + アプリケーション情報）
+│       ├── server.go       # Server（uastack サーバーのライフサイクル）
+│       ├── nodes.go        # plcNodes（公開変数 → uastack アドレス空間のノード、値の同期）
+│       ├── types.go        # PLC 型解析・PLC 値 ↔ ua.Variant 変換
+│       └── datastore.go    # emptyDataStore（OPC UA はレジスタを持たない）
+└── infrastructure/   # インフラ層（プロトコル固有実装は含まない）
     ├── httpapi/      # REST HTTP APIサーバー実装
     │   └── server.go       # HTTPAPIServer（net/http ServeMux使用）
     ├── appconfig/    # 設定フォルダの決定（旧フォルダからの移行を含む）
     ├── adapter/      # アダプター層
     │   ├── variable_datastore.go       # VariableBackedDataStore（変数↔DataStore双方向同期）
-    │   └── variable_store_accessor.go  # VariableStoreAccessor 実装（OPC UA用）
+    │   └── variable_store_accessor.go  # VariableStoreAccessor 実装（ノード公開型プロトコルが変数を読み書きする）
     └── scripting/    # JSエンジン（goja使用）
 ```
+
+**依存の向き**: `internal/protocols/<名前>/` は `internal/domain/protocol` だけに依存する。`internal/application` と `internal/infrastructure` は `internal/protocols` を import しない（プロトコルを知っているのは `app.go` と `internal/protocols/protocols.go` だけ）。
 
 ### 主要コンポーネント
 
 - **PLCService** (`internal/application/plc_service*.go`、機能ごとにファイルを分割): メインサービス。プロトコル非依存で、複数のサーバーインスタンスを同時管理
   - `servers map[protocol.ProtocolType]*serverInstance` で各プロトコルのサーバーを保持
   - 各プロトコルタイプは最大1インスタンス（プロトコルタイプをサーバー識別子として利用）
-  - プロトコルタイプの値は各プラグインが決める（Modbus は `"modbus-tcp"` / `"modbus-rtu"` / `"modbus-ascii"` の 3 つ、OPC UA は `"opcua"`）。ホストは値の意味を持たない
+  - プロトコルタイプの値は各プロトコルの実装が決める（Modbus は `"modbus-tcp"` / `"modbus-rtu"` / `"modbus-ascii"` の 3 つ、OPC UA は `"opcua"`）。ホストは値の意味を持たない
   - `variableStore` と `scriptEngine` は全サーバーで共有
   - `factories map[protocol.ProtocolType]protocol.ServerFactory` でプロトコルファクトリーを管理
-  - `RegisterPluginFactory()`: ファクトリーを登録する（ホスト起動時に `InitPlugins()` が呼び出す）
-  - `InitPlugins(pluginsDir)`: `PluginProcessManager.DiscoverManifests()` でマニフェストを読み込み `LazyRemoteServerFactory` を登録（プロセスは起動しない）
-  - `AddServer()` 時に `LazyRemoteServerFactory.EnsureStarted()` でプラグインプロセスをオンデマンド起動
-  - `RemoveServer()` 時に `LazyRemoteServerFactory.StopProcess()` でプラグインプロセスを停止
-  - `StartHostGrpcServer()`: `HostGrpcServer` を起動（OPC UA プラグインが変数にアクセスするための gRPC サーバー）
-  - `AddServer()` 時に `VariableStoreInjector` を実装するファクトリーへ `VariableStoreAccessor` を注入
-  - `attachServer()`（`plc_service_instance.go`）: DataStore とサーバーを作り、変数との同期を始める。`AddServer()` とプラグイン再接続時の作り直しで共通
-    - リモート DataStore: `RemoteVariableChangeListener` で変数↔プラグイン DataStore を双方向 gRPC 同期
-    - インプロセス DataStore（テスト用のフェイク）: `VariableBackedDataStore` で包む
+  - `RegisterFactory()`: ファクトリーを登録する（起動時に `app.go` が `protocols.Factories()` の分だけ呼ぶ）
+  - `AddServer()`: バリアントの指定が空なら、そのプロトコルの最初のバリアントにする。`VariableStoreInjector` を実装するファクトリーへ `VariableStoreAccessor` を注入する
+  - `attachServer()`（`plc_service_instance.go`）: DataStore とサーバーを作る。DataStore は `VariableBackedDataStore` で包み、変数と双方向に同期する
+    - **DataStore とサーバーは、サーバーを削除するまで同じものを使い続ける**（起動・停止では作り直さない）。そのため、起動前からレジスタを読み書きでき、レジスタの値と UnitID の応答設定は起動し直しても残る
+    - プロジェクトを読み込むと、サーバーをすべて作り直す（レジスタの値は残らない）
   - `UpdateVariableMappings()` 後に `NodePublishingAware` を実装するサーバーへ変更通知を送信
+- **protocols.Factories()** (`internal/protocols/protocols.go`): 組み込むプロトコルのファクトリーの一覧。プロトコルを足すときはここに 1 行足す
 - **ServerFactory** (`internal/domain/protocol/server.go`): プロトコルサーバーを作成するファクトリーインターフェース
   - `GetConfigFields()`: スキーマ駆動UIのためのフィールド定義を返す
   - `GetProtocolCapabilities()`: UnitIDサポート等の機能情報を返す
   - `ConfigToMap()` / `MapToConfig()`: 設定の変換
-- **Modbus のファクトリー** (`cmd/modbus-plugin/internal/modbus/factory.go`): `TCPFactory` / `RTUFactory` / `ASCIIFactory` の 3 種
+- **Modbus のファクトリー** (`internal/protocols/modbus/factory.go`): `TCPFactory` / `RTUFactory` / `ASCIIFactory` の 3 種
   - それぞれ `ProtocolType()` が `"modbus-tcp"` / `"modbus-rtu"` / `"modbus-ascii"`（`modbus.ProtocolModbusTCP` など）を返す
-  - プラグインの exe は 1 つで、起動引数 `-protocol-type` から `plugin.ResolveFactory()` がファクトリーを選ぶ
-  - ホスト本体からは直接使用しない（プラグインバイナリ `cmd/modbus-plugin/` からインポート）
-  - テストでは `protocoltest.Factory`（`internal/domain/protocol/protocoltest`）を使用（プロトコル固有実装に依存しない）
-- **opcua.Factory** (`cmd/opcua-plugin/internal/opcua/factory.go`): OPC UA サーバーのファクトリー
+  - ホスト側のテストでは `protocoltest.Factory`（`internal/domain/protocol/protocoltest`）を使用（プロトコル固有実装に依存しない）
+- **opcua.Factory** (`internal/protocols/opcua/factory.go`): OPC UA サーバーのファクトリー
   - `ProtocolType()` が `"opcua"`（`opcua.ProtocolOPCUA`）を返す
-  - `VariableStoreInjector` を実装。プラグイン内の `pluginruntime.Server.CreateAndStart()` が `host_grpc_addr` に接続した `RemoteVariableStoreAccessor` を注入する
+  - `VariableStoreInjector` を実装。`AddServer()` が変数ストアへの accessor を注入する
   - `GetProtocolCapabilities()` が `SupportsNodePublishing: true` を返す
-  - ホスト本体からは直接使用しない（プラグインバイナリ `cmd/opcua-plugin/` からインポート）
-- **PluginProcessManager** (`internal/infrastructure/plugin/process_manager.go`): プラグインプロセスのライフサイクル管理
-  - `DiscoverManifests(pluginsDir)`: `plugins/*/plugin.json` を走査してマニフェストを読み込む（プロセスは起動しない）
-  - `Launch(entrypoint)`: プラグイン exe を起動し、stdout から `GRPC_PORT=N` を読み取って gRPC 接続を確立
-  - `plugin.json` スキーマ: `name`, `entrypoint`, `version`, `protocol_type`(必須), `display_name`(必須), `variants`(必須), `capabilities`(省略可), `author`(省略可), `description`(省略可)
-  - クラッシュ監視 goroutine で `crashed`/`exitErr` を更新
-  - `setSysProcAttr(cmd)`: Windows では `CREATE_NO_WINDOW` フラグでコンソールウィンドウを非表示にする（`process_manager_windows.go`）
-- **LazyRemoteServerFactory** (`internal/infrastructure/plugin/remote_factory.go`): オンデマンドプロセス起動のファクトリー
-  - `ProtocolType()`, `DisplayName()`, `ConfigVariants()`, `GetProtocolCapabilities()`: `plugin.json` のマニフェストから返す（gRPC 不要）
-  - `EnsureStarted()`: プロセスが未起動または停止済みの場合に `PluginProcessManager.Launch()` でプロセスを起動
-  - `StopProcess()`: プロセスを停止してリセット（次回 `EnsureStarted()` で再起動可能）
-  - `CreateServer()`, `CreateDataStore()`, `GetConfigFields()` 等 gRPC が必要なメソッドはプロセス起動後のみ呼ばれる
-- **HostGrpcServer** (`internal/infrastructure/plugin/host_grpc_server.go`): ホスト側 gRPC サーバー
-  - `VariableAccessorService` を実装（OPC UA プラグインが変数を読み書きするため）
-  - `SubscribeVariableChanges()` ストリームで変数変更を OPC UA プラグインに配信
-- **RemoteProtocolServer** / **RemoteDataStore** (`internal/infrastructure/plugin/`):
-  - `ProtocolServer`, `DataStore` の各インターフェースを gRPC クライアント呼び出しで実装
-- **ModbusDataStore** (`cmd/modbus-plugin/internal/modbus/datastore.go`):
-  - `SetChangeHook(DataChangeHook)`: Modbus クライアントが書き込んだ変更をフックで通知（循環防止のためホスト→プラグイン書き込み時は通知しない）
-- **plcNodes** (`cmd/opcua-plugin/internal/opcua/nodes.go`): 公開変数を uastack の `AddressSpace` に実ノードとして登録する
+- **VariableBackedDataStore** (`internal/infrastructure/adapter/variable_datastore.go`): プロトコルの DataStore を包み、変数と双方向に同期する
+  - 変数 → レジスタ: 変数が変わると（`OnVariableChanged`）、マッピング先のレジスタに書く
+  - レジスタ → 変数: この DataStore に書かれると（`Write*`）、その範囲にマッピングされた変数に反映する。プロトコルのサーバーにはこの DataStore を渡すので、クライアントの書き込み・画面・スクリプトのどれもここを通る
+  - **どちらも、呼び出しが戻った時点で反映が終わっている**（別のゴルーチンに回さない。Modbus のクライアントに応答が返った時点で、変数は更新済み）
+  - 行き来を防ぐ仕組み: 変数 → レジスタは内側の DataStore に直接書く。レジスタ → 変数は `VariableStore.UpdateValueFrom()` で自分を通知先から外す
+- **plcNodes** (`internal/protocols/opcua/nodes.go`): 公開変数を uastack の `AddressSpace` に実ノードとして登録する
   - `rebuild()`: `GetEnabledNodePublishings("opcua")` からノード構成を計画し、差分（追加・削除・型変更）だけノードを作り直す
   - 構造体フィールド・配列要素は子ノード（HasComponent）として事前に展開
-  - `run()`: `SubscribeVariableChanges` ストリーム + 1 秒ごとの再同期でホストの値を `SetValue()`（変化したノードだけ uastack がサブスクリプションに即時通知）
+  - `run()`: 変数の変更の通知（accessor の `SubscribeVariableChanges`）+ 1 秒ごとの再同期で、変数の値を `SetValue()`（変化したノードだけ uastack がサブスクリプションに即時通知）
   - `Node.OnWrite` でクライアントの書き込みを `WriteVariableValue` / `WriteVariableFieldValue` に転送
-- **pluginruntime** (`internal/pluginruntime/`): プラグイン共通の gRPC サーバー実装（Modbus / OPC UA 共通）
-  - `GetMetadata()` はファクトリーの `GetProtocolCapabilities()` を返す
-  - DataStore（レジスタ）は `Server.dataStore()` が最初に必要になったときに 1 つだけ作り、サーバーの起動・停止をまたいで使い続ける。ホストはサーバーを追加した時点（起動前）から読み書きし、変数の値も一度だけ書き込むため、起動のたびに作り直してはいけない
-  - `CreateAndStart()`: ファクトリーが `VariableStoreInjector` なら `host_grpc_addr` に接続して `RemoteVariableStoreAccessor`（`variable_accessor.go`）を注入
-  - `OnNodePublishingUpdated()`: サーバーが `NodePublishingAware` なら転送
-  - `NewManifest(factory, entrypoint)`: ホストの `PluginManifest` と同じ JSON 形式（`capabilities` は snake_case）でマニフェストを作る
 - **DataStore** (`internal/domain/protocol/server.go`): プロトコル共通のメモリ操作インターフェース
   - `ReadBits()`, `WriteBit()`, `ReadWords()`, `WriteWord()`: 汎用メモリ操作
   - `Snapshot()`, `Restore()`: Export/Import用
@@ -257,15 +195,15 @@ internal/
   - `GetEnabledNodePublishings(protocolType)`: 指定プロトコルで公開設定された変数一覧を返す
   - `ReadVariableValue(variableID)` / `WriteVariableValue(variableID, value)`: 変数値の読み書き
   - `GetStructFields(typeName)`: 構造体型のフィールド一覧を返す（子ノードブラウズ用）
-  - 実装: `internal/infrastructure/adapter/variable_store_accessor.go`
+  - 実装: `internal/infrastructure/adapter/variable_store_accessor.go`。`SubscribeVariableChanges(ctx, onChange)` も持ち、変数が変わるたびに変数 ID を通知する（プロトコル側は、あれば使う）
 - **VariableStoreInjector** / **NodePublishingAware** (`internal/domain/protocol/server.go`): OPC UA 等のノードベースプロトコル向けインターフェース
   - `VariableStoreInjector`: `InjectVariableStore(accessor)` で遅延注入を受け付ける
   - `NodePublishingAware`: `OnNodePublishingUpdated()` でノード公開設定変更通知を受け付ける
   - `NodeAddressResolver`: `NodeAddresses(variables)`（`NodeVariable{ID, Name}` のスライス）で公開変数のノードアドレス（OPC UA なら NodeID 文字列）と、公開できない場合の理由（`NodeAddress.Error`）を返す。書式と判定はプロトコルが決める
   - `ProtocolCapabilities.SupportsNodePublishing: true` のプロトコルで利用される
 - **UnitIDConfigurable** (`internal/domain/protocol/server.go`): UnitID ごとの応答有効・無効を設定できる ProtocolServer 用インターフェース（`GetDisabledUnitIDs` / `SetUnitIdEnabled` / `SetDisabledUnitIDs`）
-  - `ProtocolCapabilities.SupportsUnitID: true` のプロトコルで利用される。ホストと pluginruntime はこの型で判定する（個別のローカル定義は持たない）
-  - 応答しない UnitID の一覧は、プラグイン側の `pluginruntime.Server` が持つ。サーバーは起動のたびに作り直すため、作ったサーバーに毎回渡す。サーバーを一度も起動していなくても設定でき、起動し直しても残る
+  - `ProtocolCapabilities.SupportsUnitID: true` のプロトコルで利用される。ホストはこの型で判定する（個別のローカル定義は持たない）
+  - 応答しない UnitID の一覧は、サーバーのオブジェクト（Modbus は `ModbusServer` の `DataStoreHandler`）が持つ。サーバーは削除するまで同じものを使うので、起動前から設定でき、起動し直しても残る
   - オフにした UnitID には、TCP / RTU / ASCII のどれも応答しない（例外応答も返さない）
   - Modbus TCP は simonvetter/modbus のサーバーを使うが、このライブラリは受け取ったリクエストに必ず応答する。そのため `TCPTransport`（`tcp_transport.go`）がクライアントとの間に中継を入れ、オフにした UnitID 宛てのフレームを捨てる。ライブラリのサーバーは 127.0.0.1 の空きポートで動く
 - **ScriptEngine** (`internal/infrastructure/scripting/engine.go`): gojaベースのJavaScript実行エンジン
@@ -377,7 +315,7 @@ frontend/src/
   - 2行表示レイアウト（ヘッダ行 + コントロール行）
   - マッピング競合警告: 他の変数と同じレジスタを使用している場合、ダイアログ内と変数一覧の両方に警告を表示
   - **マッピング列の表示**: レジスタマッピング（`protocol:area:addr`、area は `MemoryArea.shortName`）とノード公開設定（`opcua(R/W)` 等）をカンマ区切りで両方表示
-  - **NodeID の表示**: マッピングダイアログ・一括マッピング編集で、`GetNodeAddresses(protocolType, variableIds)` でプラグインから取得した値（`nodeAddresses` state）を表示する。フロントエンドで NodeID を組み立てない。`error` がある変数は理由を表示し、公開を有効にした保存を止める
+  - **NodeID の表示**: マッピングダイアログ・一括マッピング編集で、`GetNodeAddresses(protocolType, variableIds)` でプロトコルの実装から取得した値（`nodeAddresses` state）を表示する。フロントエンドで NodeID を組み立てない。`error` がある変数は理由を表示し、公開を有効にした保存を止める
   - **ダイアログを開く際に `loadServerInstancesAndAreas()` を再実行**: マウント後に追加されたサーバーも「プロトコル公開設定」セクションに反映
   - `loadServerInstancesAndAreas` は `useCallback` で定義し、マウント時・ダイアログオープン時の両方から呼び出す
 - **一括マッピング編集**: ツールバーの「一括マッピング編集」ボタンで全変数のマッピングをテーブル形式で一括設定
@@ -521,24 +459,31 @@ JavaScript（goja）でPLC動作を記述。
 
 ## テストの構成
 
-- **ホスト側のテストはフェイクのプロトコルで動かす**: `protocoltest.NewFactory()` を `PLCService.RegisterPluginFactory()` に登録する。プラグインの実装（`cmd/*-plugin/internal/`）はホストから参照できない
+- **ホスト側のテストはフェイクのプロトコルで動かす**: `protocoltest.NewFactory()` を `PLCService.RegisterFactory()` に登録する。`internal/application` と `internal/infrastructure` のテストは、実際のプロトコルの実装を使わない
 - **REST API**（`internal/infrastructure/httpapi/server_test.go`）: `httptest` でハンドラーを直接呼ぶ。エンドポイントを追加・変更したらここに足す
-- **プラグイン通信**（`internal/infrastructure/plugin/*_test.go`）: プラグイン側の `pluginruntime.NewServer()` をテストのプロセス内の gRPC サーバーとして立て、ホスト側の `LazyRemoteServerFactory` / `Remote*` から実際の gRPC 越しに呼ぶ（`harness_test.go` の `startPlugin()` / `startedServer()`）。exe は起動せず、`debug_port` と同じ「起動済みのプロセスに接続する」経路を使う
-  - ホストの変数へのアクセス（`HostGrpcServer` ↔ `pluginruntime.RemoteVariableStoreAccessor`）も同じファイル群で往復を確認する
-- **Modbus RTU / ASCII のフレーム**（`cmd/modbus-plugin/internal/modbus/rtu/rtu_test.go`）: 仕様書の既知のフレームで CRC / LRC を確認し、同じリクエストを RTU と ASCII の両方で処理して結果が一致することを確認する
+- **変数とレジスタの同期**（`internal/infrastructure/adapter/variable_datastore_test.go`）: 複数の変数にまたがる書き込み、同時の書き込み、行き来しないこと
+- **組み込みの構成での確認**（`internal/protocols/integration_test.go`）: アプリと同じように `protocols.Factories()` を登録した `PLCService` に、実際の Modbus TCP / OPC UA のクライアントからつなぐ。サーバーの起動・停止をまたいだ状態（レジスタ、UnitID の設定）、変数との同期、プロジェクトの読み込みを確認する。**プロトコルを足したら、ここにそのプロトコルの確認を足す**
+- **Modbus**（`internal/protocols/modbus/`）: `tcp_transport_test.go` は実際に TCP でつないで確認する。`rtu/rtu_test.go` は仕様書の既知のフレームで CRC / LRC を確認し、同じリクエストを RTU と ASCII の両方で処理して結果が一致することを確認する
+- **OPC UA**（`internal/protocols/opcua/`）: 実際の OPC UA クライアントでつなぐ。`host_integration_test.go` は実際の変数ストアを使う（他のテストはフェイクの変数ストアを使うため、変数ストアが持つ値の型や型変換を通らない）
 - 設定フォルダに書き込むパッケージのテストは、`TestMain` で `KARAKURI_CONFIG_DIR` を一時フォルダに向ける
 
 ## 新プロトコル追加手順
 
-プロトコル固有のコード（プロトコルタイプの値、設定、メモリエリア、アドレス書式など）はすべてプラグインのフォルダ（`cmd/<name>-plugin/`）に置く。ホスト（`internal/`, `app.go`）とフロントエンドはプロトコル名や固有の値を持たず、能力フラグ（`ProtocolCapabilities`）・スキーマ（`GetConfigFields()`）・`MemoryArea` の属性・`NodeAddressResolver` だけで動く。
+プロトコル固有のコード（プロトコルタイプの値、設定、メモリエリア、アドレス書式など）はすべて `internal/protocols/<name>/` に置く。ホスト（`internal/application`, `internal/infrastructure`, `app.go`）とフロントエンドはプロトコル名や固有の値を持たず、能力フラグ（`ProtocolCapabilities`）・スキーマ（`GetConfigFields()`）・`MemoryArea` の属性・`NodeAddressResolver` だけで動く。
 
-1. `cmd/<name>-plugin/internal/<name>/` を作成し、以下を実装:
+1. `internal/protocols/<name>/` を作成し、以下を実装:
    - `factory.go`: `ServerFactory`（プロトコルタイプの定数もここで定義する）
-   - `server.go`: `ProtocolServer`（ノード公開型なら `NodePublishingAware` / `NodeAddressResolver` も）
+   - `server.go`: `ProtocolServer`（ノード公開型なら `NodePublishingAware` / `NodeAddressResolver` も。UnitID を持つなら `UnitIDConfigurable` も）
    - `datastore.go`: `DataStore`（レジスタを持たないなら空の実装）
-2. `cmd/<name>-plugin/main.go` で `pluginruntime.RunFactory(factory, debug)` を呼ぶ
-3. `cmd/<name>-plugin/plugin-manifest/main.go` で `pluginruntime.NewManifest()` を出力し、`Taskfile.yaml` の `plugins` タスクに追加
+2. `internal/protocols/protocols.go` の `Factories()` に追加する
+3. `internal/protocols/integration_test.go` に、実際のクライアントからつなぐ確認を足す
 4. **ホスト・フロントエンドの変更不要** - スキーマと能力フラグから自動生成
+
+実装するときの決まり:
+
+- サーバーのオブジェクトは、サーバーを削除するまで使い回される。`Start()` / `Stop()` は何度も呼ばれるので、`Stop()` のあとにもう一度 `Start()` できるようにする
+- `CreateServer()` に渡される DataStore は、変数と同期する包み（`VariableBackedDataStore`）。クライアントの書き込みは、必ず渡された DataStore に書く（自分で作った DataStore に直接書くと、変数に反映されない）
+- プロトコルの処理で panic すると、アプリ全体が落ちる（別プロセスではない）。外から来たデータは長さと範囲を確かめてから使う
 
 ## 重要な実装ポイント
 
@@ -610,8 +555,7 @@ JavaScript（goja）でPLC動作を記述。
 
 - 名前空間 URI は設定の「ネームスペース」（既定 `urn:karakuri:plc`、通常 `ns=2`）。ns 番号は起動時に `AddressSpace.RegisterNamespace()` が割り当てるため固定値を使わない
 - UI に表示する NodeID は `Server.NodeAddresses()`（`NodeAddressResolver`）が返す。起動中は `ns=N;s={変数名}`、停止中は番号が決まらないため `ns=???;s={変数名}`
-  - 経路: フロントエンド → `App.GetNodeAddresses()` → `PLCService.GetNodeAddresses()` → `RemoteProtocolServer` → gRPC `GetNodeAddresses` → `pluginruntime.Server` → `opcua.Server`
-  - 起動していないときは、プラグインがホストの現在の設定（リクエストの `settings_json`）で起動しないサーバーを作って問い合わせる（OPC UA は設定を使わないが、アドレスが設定に依存するプロトコルのため）
+  - 経路: フロントエンド → `App.GetNodeAddresses()` → `PLCService.GetNodeAddresses()` → `opcua.Server.NodeAddresses()`
 - NodeID は変数名から作る（変数名はストア内で一意）。変数名を変えると NodeID も変わり、`rebuild()` が古いノードを消して新しい名前で作り直す。値の読み書きは内部で変数 ID を使う
   - NodeID が他のノードと重なる変数名は公開できない: フォルダと同じ `PLCVariables`、`.` `[` `]` を含む名前（他の変数の子ノード `A.b`、`A[0]` と区別できない）。判定は `publishNameError()`（`nodes.go`）
   - `NodeAddresses()` が該当する変数に `NodeAddress.Error`（理由）を付けて返す。ホストは `UpdateVariableNodePublishing()`（公開を有効にする保存）と `UpdateVariable()`（公開中の変数の改名）を拒否し、UI はマッピングダイアログ・一括マッピング編集で NodeID の代わりに理由を赤字で表示して保存を止める
@@ -641,11 +585,10 @@ JavaScript（goja）でPLC動作を記述。
 
 #### 値の同期
 
-- ホスト → OPC UA: `SubscribeVariableChanges` で変更された変数 ID を受け取り、その変数を読み直してルートと全子ノードに `SetValue()`。取りこぼし対策として 1 秒ごとに全変数を再同期
-- OPC UA → ホスト: `Node.OnWrite` → `WriteVariableValue`（ルート）/ `WriteVariableFieldValue`（子ノード、フィールドパスは外部インデックス）。書き込み後に同じ変数の他ノードも更新
-- 値は MessagePack で運ぶ。変換は `internal/valuecodec`（`Marshal` / `Unmarshal`）に 1 か所だけ定義し、ホスト（`HostGrpcServer`）とプラグイン（`RemoteVariableStoreAccessor`）の両方がこれを使う。設定が食い違うと、文字列が `[]byte`、構造体が `map[interface{}]interface{}` になって書き込みが失敗する
-  - デコードした値は元の Go の型を持たない（整数は `int64` / `uint64`、小数は `float64`）。ホストは `variable.ConvertValue` で変数の型に合わせる
-  - この経路全体（OPC UA クライアント → サーバー → gRPC → ホストの変数ストア）は `cmd/opcua-plugin/internal/opcua/host_integration_test.go` で確認する。他の OPC UA のテストはフェイクの変数ストアを使うため、値の変換を通らない
+- 変数 → OPC UA: accessor の `SubscribeVariableChanges` で変更された変数 ID を受け取り、その変数を読み直してルートと全子ノードに `SetValue()`。取りこぼし対策として 1 秒ごとに全変数を再同期
+- OPC UA → 変数: `Node.OnWrite` → `WriteVariableValue`（ルート）/ `WriteVariableFieldValue`（子ノード、フィールドパスは外部インデックス）。書き込み後に同じ変数の他ノードも更新
+- 変数ストアの値は Go の型をそのまま持つ（INT は `int16`、UINT は `uint16`、配列は `[]interface{}`、構造体は `map[string]interface{}`）。`toVariant()` は `int64` / `float64` などの広い型も受け付ける（テストのフェイクが使う）
+- この経路全体（OPC UA クライアント → サーバー → 変数ストア）は `internal/protocols/opcua/host_integration_test.go` で確認する
 
 #### サーバー設定
 
@@ -668,7 +611,7 @@ JavaScript（goja）でPLC動作を記述。
 #### OPC UA ライブラリ
 
 - **bamchoh/uastack v0.1.1**（`github.com/bamchoh/uastack/server`）
-- セキュリティなし・匿名認証のみ（証明書は作られない。`PKIDir` はプラグイン exe と同じフォルダの `pki`）
+- セキュリティなし・匿名認証のみ（証明書は作られない。`PKIDir` はアプリの exe と同じフォルダの `pki`）
 - `Start()` で `net.Listen` してから `server.Serve(ln)` をゴルーチンで実行（ポート使用中を Start のエラーで返すため）
 - `Stop()` は `server.Close()` を呼んで `Serve` の終了を待つ（v0.1.1 以降は Serve の開始前に Close しても Serve が終了する）
 - `server.Server` は Close 後に再利用できないため、Start のたびに作り直す

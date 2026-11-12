@@ -14,9 +14,9 @@ func newTestService(t *testing.T) *PLCService {
 	svc := NewPLCService()
 
 	// Modbus 互換フェイクファクトリーを登録（プロトコル固有実装に依存しない）
-	svc.RegisterPluginFactory(protocoltest.NewFactory("modbus-tcp", "tcp", "Modbus TCP"))
-	svc.RegisterPluginFactory(protocoltest.NewFactory("modbus-rtu", "rtu", "Modbus RTU"))
-	svc.RegisterPluginFactory(protocoltest.NewFactory("modbus-ascii", "ascii", "Modbus ASCII"))
+	svc.RegisterFactory(protocoltest.NewFactory("modbus-tcp", "tcp", "Modbus TCP"))
+	svc.RegisterFactory(protocoltest.NewFactory("modbus-rtu", "rtu", "Modbus RTU"))
+	svc.RegisterFactory(protocoltest.NewFactory("modbus-ascii", "ascii", "Modbus ASCII"))
 
 	// デフォルトで modbus-tcp を追加（旧 NewPLCService() の初期動作を再現）
 	_ = svc.AddServer("modbus-tcp", "tcp")

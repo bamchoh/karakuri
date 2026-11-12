@@ -31,7 +31,7 @@ func (s *nodeServer) NodeAddresses(vars []protocol.NodeVariable) map[string]prot
 
 func TestNodeAddresses_RejectUnpublishableNames(t *testing.T) {
 	svc := newTestService(t)
-	svc.RegisterPluginFactory(&nodeFactory{protocoltest.NewFactory("node", "", "Node")})
+	svc.RegisterFactory(&nodeFactory{protocoltest.NewFactory("node", "", "Node")})
 	if err := svc.AddServer("node", ""); err != nil {
 		t.Fatalf("AddServer: %v", err)
 	}

@@ -2,7 +2,7 @@ package modbus
 
 import (
 	"fmt"
-	"karakuri/cmd/modbus-plugin/internal/modbus/rtu"
+	"karakuri/internal/protocols/modbus/rtu"
 )
 
 type ASCIITransport struct {

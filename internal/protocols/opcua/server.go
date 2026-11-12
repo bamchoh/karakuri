@@ -44,7 +44,7 @@ func NewServer(config *Config, accessor protocol.VariableStoreAccessor) *Server 
 }
 
 // Start は OPC UA サーバーを起動する。
-// ctx は gRPC リクエストのコンテキストでありすぐにキャンセルされるため、サーバーの寿命には使わない。
+// ctx は呼び出しの間だけ有効なものなので、サーバーの寿命には使わない。
 func (s *Server) Start(_ context.Context) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -196,7 +196,7 @@ func (s *Server) NodeAddresses(variables []protocol.NodeVariable) map[string]pro
 	return result
 }
 
-// pkiDir は証明書ストアの場所（プラグイン exe と同じフォルダの pki）。
+// pkiDir は証明書ストアの場所（アプリの exe と同じフォルダの pki）。
 // 現在はセキュリティなし・匿名認証のみのため証明書は作られない。
 func pkiDir() string {
 	exe, err := os.Executable()

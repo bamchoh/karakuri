@@ -1,20 +1,28 @@
 package adapter
 
 import (
-	"sync"
-
 	"karakuri/internal/domain/protocol"
 	"karakuri/internal/domain/variable"
 )
 
-// VariableBackedDataStore はVariableStoreと連動するDataStoreアダプター
-// 内部に従来のDataStoreを保持し、変数マッピングによる双方向同期を行う
+// VariableBackedDataStore は、プロトコルの DataStore（レジスタ）を包み、変数と双方向に同期する。
+//
+//   - 変数 → レジスタ: 変数が変わると（OnVariableChanged）、マッピング先のレジスタに書く
+//   - レジスタ → 変数: この DataStore に書かれると（Write*）、その範囲にマッピングされた変数に反映する
+//
+// どちらも、呼び出しが戻った時点で反映が終わっている（別のゴルーチンに回さない）。
+// プロトコルのサーバーにはこの DataStore を渡すので、クライアントの書き込みもここを通る。
+//
+// 同期が行き来しないようにする仕組み:
+//   - 変数 → レジスタは内側の DataStore に直接書く（この型の Write* を通らないので、変数へ戻らない）
+//   - レジスタ → 変数は UpdateValueFrom で自分を通知先から外す（レジスタへ書き戻さない）
+//
+// 別々の書き込み元（クライアントとスクリプトなど）が同じ変数を同時に書いた場合、
+// どちらが残るかは決まらない（後から書いた方が残る）。
 type VariableBackedDataStore struct {
 	inner        protocol.DataStore
 	varStore     *variable.VariableStore
 	protocolType string
-	mu           sync.Mutex // 同期ループ防止用
-	syncing      bool
 }
 
 // NewVariableBackedDataStore は新しいVariableBackedDataStoreを作成する
@@ -40,28 +48,17 @@ func (a *VariableBackedDataStore) Unwrap() protocol.DataStore {
 	return a.inner
 }
 
-// Detach はリスナーを解除する（プロトコル切り替え時に呼ぶ）
+// Detach はリスナーを解除する（サーバーを削除するときに呼ぶ）
 func (a *VariableBackedDataStore) Detach() {
 	a.varStore.RemoveListener(a)
 }
 
+// ============================================================
+// 変数 → レジスタ
+// ============================================================
+
 // OnVariableChanged はVariableStoreからの変更通知を処理する
-// 変数値 → DataStoreへの書き込み
 func (a *VariableBackedDataStore) OnVariableChanged(v *variable.Variable, mappings []variable.ProtocolMapping, _ string, _ interface{}) {
-	a.mu.Lock()
-	if a.syncing {
-		a.mu.Unlock()
-		return
-	}
-	a.syncing = true
-	a.mu.Unlock()
-
-	defer func() {
-		a.mu.Lock()
-		a.syncing = false
-		a.mu.Unlock()
-	}()
-
 	for _, m := range mappings {
 		if m.ProtocolType != a.protocolType {
 			continue
@@ -75,29 +72,27 @@ func (a *VariableBackedDataStore) writeVariableToInner(v *variable.Variable, m *
 	if v.DataType.IsBitType() {
 		val := variable.ValueToBool(v.Value, v.DataType)
 		a.inner.WriteBit(m.MemoryArea, m.Address, val)
-	} else if v.DataType.IsArrayType() {
+		return
+	}
+
+	var words []uint16
+	if v.DataType.IsArrayType() {
 		elemType, size, err := variable.ParseArrayType(v.DataType)
 		if err != nil {
 			return
 		}
-		words := variable.ArrayValueToWords(v.Value, elemType, size, m.Endianness, a.varStore)
-		for i, w := range words {
-			a.inner.WriteWord(m.MemoryArea, m.Address+uint32(i), w)
-		}
+		words = variable.ArrayValueToWords(v.Value, elemType, size, m.Endianness, a.varStore)
 	} else if v.DataType.IsStructType() {
 		structDef, err := a.varStore.GetStructType(string(v.DataType))
 		if err != nil || structDef == nil {
 			return
 		}
-		words := variable.StructValueToWords(v.Value, structDef, m.Endianness, a.varStore)
-		for i, w := range words {
-			a.inner.WriteWord(m.MemoryArea, m.Address+uint32(i), w)
-		}
+		words = variable.StructValueToWords(v.Value, structDef, m.Endianness, a.varStore)
 	} else {
-		words := variable.ValueToWords(v.Value, v.DataType, m.Endianness)
-		for i, w := range words {
-			a.inner.WriteWord(m.MemoryArea, m.Address+uint32(i), w)
-		}
+		words = variable.ValueToWords(v.Value, v.DataType, m.Endianness)
+	}
+	for i, w := range words {
+		a.inner.WriteWord(m.MemoryArea, m.Address+uint32(i), w)
 	}
 }
 
@@ -114,83 +109,88 @@ func (a *VariableBackedDataStore) syncAllVariablesToDataStore() {
 	}
 }
 
-// syncDataStoreToVariable はDataStore上のアドレス書き込みを対応する変数に反映する
-func (a *VariableBackedDataStore) syncWordToVariable(area string, address uint32) {
-	a.mu.Lock()
-	if a.syncing {
-		a.mu.Unlock()
-		return
-	}
-	a.syncing = true
-	a.mu.Unlock()
+// ============================================================
+// レジスタ → 変数
+// ============================================================
 
-	defer func() {
-		a.mu.Lock()
-		a.syncing = false
-		a.mu.Unlock()
-	}()
-
-	v, m := a.varStore.FindVariableByMapping(a.protocolType, area, address)
-	if v == nil || m == nil {
-		return
+// readVariableFromInner は、変数のマッピング先のレジスタを読んで変数の値にする
+func (a *VariableBackedDataStore) readVariableFromInner(v *variable.Variable, m *variable.ProtocolMapping) (interface{}, bool) {
+	if v.DataType.IsBitType() {
+		bit, err := a.inner.ReadBit(m.MemoryArea, m.Address)
+		return bit, err == nil
 	}
 
 	wordCount := v.DataType.WordCountWithResolver(a.varStore)
 	words, err := a.inner.ReadWords(m.MemoryArea, m.Address, uint16(wordCount))
 	if err != nil {
-		return
+		return nil, false
 	}
 
-	var newValue interface{}
+	var value interface{}
 	if v.DataType.IsArrayType() {
 		elemType, size, parseErr := variable.ParseArrayType(v.DataType)
 		if parseErr != nil {
-			return
+			return nil, false
 		}
-		newValue, err = variable.WordsToArrayValue(words, elemType, size, m.Endianness, a.varStore)
+		value, err = variable.WordsToArrayValue(words, elemType, size, m.Endianness, a.varStore)
 	} else if v.DataType.IsStructType() {
 		structDef, getErr := a.varStore.GetStructType(string(v.DataType))
 		if getErr != nil || structDef == nil {
-			return
+			return nil, false
 		}
-		newValue, err = variable.WordsToStructValue(words, structDef, m.Endianness, a.varStore)
+		value, err = variable.WordsToStructValue(words, structDef, m.Endianness, a.varStore)
 	} else {
-		newValue, err = variable.WordsToValue(words, v.DataType, m.Endianness)
+		value, err = variable.WordsToValue(words, v.DataType, m.Endianness)
 	}
-	if err != nil {
-		return
-	}
-
-	a.varStore.UpdateValue(v.ID, newValue)
+	return value, err == nil
 }
 
-// syncBitToVariable はDataStore上のビット書き込みを対応する変数に反映する
-func (a *VariableBackedDataStore) syncBitToVariable(area string, address uint32) {
-	a.mu.Lock()
-	if a.syncing {
-		a.mu.Unlock()
-		return
+// syncWordsToVariables は、書き込まれたワードの範囲にマッピングされた変数を、レジスタの値で更新する。
+// 変数ごとに 1 回だけ、変数全体を読み直して更新する（変数の一部のワードだけが書かれた場合も正しい値になる）
+func (a *VariableBackedDataStore) syncWordsToVariables(area string, address uint32, count int) {
+	updated := make(map[string]bool)
+	for i := 0; i < count; i++ {
+		v, m := a.varStore.FindVariableByMapping(a.protocolType, area, address+uint32(i))
+		if v == nil || m == nil || updated[v.ID] {
+			continue
+		}
+		updated[v.ID] = true
+		if value, ok := a.readVariableFromInner(v, m); ok {
+			a.varStore.UpdateValueFrom(v.ID, value, a)
+		}
 	}
-	a.syncing = true
-	a.mu.Unlock()
+}
 
-	defer func() {
-		a.mu.Lock()
-		a.syncing = false
-		a.mu.Unlock()
-	}()
-
-	v, _ := a.varStore.FindVariableByMapping(a.protocolType, area, address)
-	if v == nil {
-		return
+// syncBitsToVariables は、書き込まれたビットの範囲にマッピングされた変数を、ビットの値で更新する
+func (a *VariableBackedDataStore) syncBitsToVariables(area string, address uint32, count int) {
+	for i := 0; i < count; i++ {
+		addr := address + uint32(i)
+		v, _ := a.varStore.FindVariableByMapping(a.protocolType, area, addr)
+		if v == nil {
+			continue
+		}
+		bit, err := a.inner.ReadBit(area, addr)
+		if err != nil {
+			continue
+		}
+		a.varStore.UpdateValueFrom(v.ID, bit, a)
 	}
+}
 
-	bit, err := a.inner.ReadBit(area, address)
-	if err != nil {
-		return
+// syncAllDataStoreToVariables はDataStoreの全マッピング済みアドレスを変数に反映する
+func (a *VariableBackedDataStore) syncAllDataStoreToVariables() {
+	allVars := a.varStore.GetAllVariables()
+	for _, v := range allVars {
+		mappings := a.varStore.GetMappings(v.ID)
+		for _, m := range mappings {
+			if m.ProtocolType != a.protocolType {
+				continue
+			}
+			if value, ok := a.readVariableFromInner(v, &m); ok {
+				a.varStore.UpdateValueFrom(v.ID, value, a)
+			}
+		}
 	}
-
-	a.varStore.UpdateValue(v.ID, bit)
 }
 
 // ============================================================
@@ -223,7 +223,7 @@ func (a *VariableBackedDataStore) WriteBit(area string, address uint32, value bo
 	if err := a.inner.WriteBit(area, address, value); err != nil {
 		return err
 	}
-	go a.syncBitToVariable(area, address)
+	a.syncBitsToVariables(area, address, 1)
 	return nil
 }
 
@@ -231,9 +231,7 @@ func (a *VariableBackedDataStore) WriteBits(area string, address uint32, values 
 	if err := a.inner.WriteBits(area, address, values); err != nil {
 		return err
 	}
-	for i := range values {
-		go a.syncBitToVariable(area, address+uint32(i))
-	}
+	a.syncBitsToVariables(area, address, len(values))
 	return nil
 }
 
@@ -241,7 +239,7 @@ func (a *VariableBackedDataStore) WriteWord(area string, address uint32, value u
 	if err := a.inner.WriteWord(area, address, value); err != nil {
 		return err
 	}
-	go a.syncWordToVariable(area, address)
+	a.syncWordsToVariables(area, address, 1)
 	return nil
 }
 
@@ -249,9 +247,7 @@ func (a *VariableBackedDataStore) WriteWords(area string, address uint32, values
 	if err := a.inner.WriteWords(area, address, values); err != nil {
 		return err
 	}
-	for i := range values {
-		go a.syncWordToVariable(area, address+uint32(i))
-	}
+	a.syncWordsToVariables(area, address, len(values))
 	return nil
 }
 
@@ -271,52 +267,3 @@ func (a *VariableBackedDataStore) Restore(data map[string]interface{}) error {
 func (a *VariableBackedDataStore) ClearAll() {
 	a.inner.ClearAll()
 }
-
-// syncAllDataStoreToVariables はDataStoreの全マッピング済みアドレスを変数に反映する
-func (a *VariableBackedDataStore) syncAllDataStoreToVariables() {
-	allVars := a.varStore.GetAllVariables()
-	for _, v := range allVars {
-		mappings := a.varStore.GetMappings(v.ID)
-		for _, m := range mappings {
-			if m.ProtocolType != a.protocolType {
-				continue
-			}
-
-			if v.DataType.IsBitType() {
-				bit, err := a.inner.ReadBit(m.MemoryArea, m.Address)
-				if err == nil {
-					a.varStore.UpdateValue(v.ID, bit)
-				}
-			} else {
-				wordCount := v.DataType.WordCountWithResolver(a.varStore)
-				words, err := a.inner.ReadWords(m.MemoryArea, m.Address, uint16(wordCount))
-				if err != nil {
-					continue
-				}
-				var newValue interface{}
-				var convErr error
-				if v.DataType.IsArrayType() {
-					elemType, size, parseErr := variable.ParseArrayType(v.DataType)
-					if parseErr != nil {
-						continue
-					}
-					newValue, convErr = variable.WordsToArrayValue(words, elemType, size, m.Endianness, a.varStore)
-				} else if v.DataType.IsStructType() {
-					structDef, getErr := a.varStore.GetStructType(string(v.DataType))
-					if getErr != nil || structDef == nil {
-						continue
-					}
-					newValue, convErr = variable.WordsToStructValue(words, structDef, m.Endianness, a.varStore)
-				} else {
-					newValue, convErr = variable.WordsToValue(words, v.DataType, m.Endianness)
-				}
-				if convErr == nil {
-					a.varStore.UpdateValue(v.ID, newValue)
-				}
-			}
-		}
-	}
-}
-
-// protocol.DataStoreインターフェースを満たすことを確認
-var _ protocol.DataStore = (*VariableBackedDataStore)(nil)

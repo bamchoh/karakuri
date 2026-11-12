@@ -9,14 +9,13 @@ import (
 
 	"karakuri/internal/domain/variable"
 	"karakuri/internal/infrastructure/adapter"
-	hostplugin "karakuri/internal/infrastructure/plugin"
-	"karakuri/internal/pluginruntime"
 )
 
-// OPC UA クライアント → OPC UA サーバー → gRPC → ホストの変数ストア、という実際の経路を通すテスト。
-// 他のテストはフェイクの変数ストアを使うため、ホストとの間の値の変換（MessagePack）を通らない。
+// OPC UA クライアント → OPC UA サーバー → ホストの変数ストア、という実際の経路を通すテスト。
+// 他のテストはフェイクの変数ストアを使うため、変数ストアが持つ値の型（int16、uint16 など）や
+// 変数ストアの型変換を通らない。
 func TestServer_ClientWriteReachesHostVariableStore(t *testing.T) {
-	// ホスト側: 変数ストアと、プラグインが接続する gRPC サーバー
+	// ホスト側の変数ストア
 	vars := variable.NewVariableStore()
 	motor, err := variable.NewStructTypeDef("Motor", []variable.StructField{
 		{Name: "speed", DataType: "UINT"},
@@ -28,11 +27,6 @@ func TestServer_ClientWriteReachesHostVariableStore(t *testing.T) {
 	if err := vars.RegisterStructType(motor); err != nil {
 		t.Fatal(err)
 	}
-	host := hostplugin.NewHostGrpcServer(adapter.NewVariableStoreAccessor(vars), vars)
-	if _, err := host.Start(); err != nil {
-		t.Fatalf("HostGrpcServer.Start: %v", err)
-	}
-
 	ids := map[string]string{}
 	for name, dataType := range map[string]string{
 		"Text": "STRING[20]", "Delay": "TIME", "Small": "USINT", "Count": "UINT", "Total": "UDINT", "Big": "ULINT",
@@ -46,20 +40,12 @@ func TestServer_ClientWriteReachesHostVariableStore(t *testing.T) {
 		ids[name] = v.ID
 	}
 
-	// プラグイン側: ホストに gRPC でつないだ変数ストアで OPC UA サーバーを動かす
-	acc, err := pluginruntime.DialVariableStoreAccessor(host.Addr())
-	if err != nil {
-		t.Fatalf("DialVariableStoreAccessor: %v", err)
-	}
-	srv := NewServer(testConfig(freePort(t)), acc)
+	// アプリと同じ accessor（変数ストアを直接読み書きする）で OPC UA サーバーを動かす
+	srv := NewServer(testConfig(freePort(t)), adapter.NewVariableStoreAccessor(vars))
 	if err := srv.Start(context.Background()); err != nil {
 		t.Fatalf("Start: %v", err)
 	}
-	t.Cleanup(func() {
-		_ = srv.Stop()
-		_ = acc.Close()
-		host.Stop()
-	})
+	t.Cleanup(func() { _ = srv.Stop() })
 	c := dialTestClient(t, srv)
 	ns := srv.nodes.ns
 	ctx := context.Background()

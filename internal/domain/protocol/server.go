@@ -5,7 +5,7 @@ import (
 )
 
 // ProtocolType はプロトコルの種類を表す。
-// 具体的な値（"modbus-tcp", "opcua" 等）は各プラグインが定義し、ホストは値の意味を持たない。
+// 具体的な値（"modbus-tcp", "opcua" 等）は各プロトコルの実装が定義し、ホストは値の意味を持たない。
 type ProtocolType string
 
 // ServerStatus はサーバーの状態を表す
@@ -64,7 +64,7 @@ type ConfigVariant struct {
 	DisplayName string `json:"displayName"`
 }
 
-// ServerFactory はプロトコルサーバーを作成するファクトリーインターフェース(プラグイン作者が実装すること)
+// ServerFactory はプロトコルサーバーを作成するファクトリーインターフェース(プロトコルの実装者が実装すること)
 type ServerFactory interface {
 	// Version はファクトリーのバージョンを表す
 	Version() string
@@ -171,7 +171,7 @@ type StructFieldInfo struct {
 }
 
 // VariableStoreAccessor はプロトコルが VariableStore にアクセスするための汎用インターフェース。
-// plugin 化時はこのインターフェースを gRPC 越しに提供することを想定している。
+// ノード公開型のプロトコル（OPC UA など）が使う。実装は adapter.NewVariableStoreAccessor。
 type VariableStoreAccessor interface {
 	GetEnabledNodePublishings(protocolType string) []NodePublishingInfo
 	ReadVariableValue(variableID string) (interface{}, error)

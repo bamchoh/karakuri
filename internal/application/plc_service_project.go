@@ -137,16 +137,12 @@ func (s *PLCService) ImportProject(data *ProjectDataDTO) error {
 	}
 
 	// 全サーバーを停止・削除（RemoveServer と同じ後始末をする）。
-	// プラグインのプロセスも止める。止めないと、読み込む前のレジスタの値や UnitID の設定が
-	// プラグインに残り、読み込んだプロジェクトに含まれないプロトコルのプロセスも動き続ける
+	// サーバーと DataStore は作り直すので、読み込む前のレジスタの値や UnitID の設定は残らない
 	for _, inst := range s.servers {
 		if inst.server != nil {
 			inst.server.Stop()
 		}
 		inst.detachSync()
-		if stopper, ok := inst.factory.(pluginStopper); ok {
-			stopper.StopProcess()
-		}
 	}
 	s.servers = make(map[protocol.ProtocolType]*serverInstance)
 

@@ -388,6 +388,13 @@ func (s *VariableStore) GetAllVariables() []*Variable {
 
 // UpdateValue は変数の値を更新する
 func (s *VariableStore) UpdateValue(id string, value interface{}) error {
+	return s.UpdateValueFrom(id, value, nil)
+}
+
+// UpdateValueFrom は変数の値を更新し、origin 以外のリスナーに通知する。
+// 変数と外部の値（レジスタなど）を同期するリスナーが、自分が持ち込んだ変更を
+// 自分に通知させない（書き戻さない）ために使う。origin が nil なら全リスナーに通知する。
+func (s *VariableStore) UpdateValueFrom(id string, value interface{}, origin ChangeListener) error {
 	s.mu.Lock()
 	v, exists := s.variables[id]
 	if !exists {
@@ -409,6 +416,9 @@ func (s *VariableStore) UpdateValue(id string, value interface{}) error {
 
 	// ロック外でリスナーに通知
 	for _, l := range listeners {
+		if origin != nil && l == origin {
+			continue
+		}
 		l.OnVariableChanged(v, mappings, "", nil)
 	}
 

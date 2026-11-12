@@ -1,57 +1,13 @@
 version: "3"
 
-vars:
-  PLUGINS_DIR: plugins
-
 tasks:
-  proto:
-    desc: proto ファイルから Go コードを生成する
-    cmds:
-      - powershell -Command "Remove-Item 'pb/pluginpb/*.pb.go' -Force -ErrorAction SilentlyContinue"
-      - >
-        protoc -I proto
-        --go_out=pb/pluginpb --go_opt=paths=source_relative
-        --go-grpc_out=pb/pluginpb --go-grpc_opt=paths=source_relative
-        proto/common.proto
-        proto/plugin_service.proto
-        proto/datastore_service.proto
-        proto/variable_accessor_service.proto
-
-  plugins:
-    desc: プラグインをビルド
-    cmds:
-      - powershell -Command "New-Item -ItemType Directory -Path '{{.PLUGINS_DIR}}' -Force | Out-Null"
-
-      - powershell -Command "if (Test-Path '{{.PLUGINS_DIR}}/*') { Remove-Item '{{.PLUGINS_DIR}}/*' -Recurse -Force }"
-
-      - go build -o {{.PLUGINS_DIR}}/modbus-plugin.exe ./cmd/modbus-plugin
-
-      - for:
-          - modbus-tcp
-          - modbus-rtu
-          - modbus-ascii
-        cmd: |
-          powershell -Command "New-Item -ItemType Directory -Path '{{.PLUGINS_DIR}}/{{.ITEM}}-plugin' -Force | Out-Null"
-          powershell -Command "Copy-Item '{{.PLUGINS_DIR}}/modbus-plugin.exe' '{{.PLUGINS_DIR}}/{{.ITEM}}-plugin/modbus-plugin.exe'"
-          go run ./cmd/modbus-plugin/plugin-manifest -protocol-type {{.ITEM}} > {{.PLUGINS_DIR}}/{{.ITEM}}-plugin/plugin.json
-
-      - powershell -Command "New-Item -ItemType Directory -Path '{{.PLUGINS_DIR}}/opcua-plugin' -Force | Out-Null"
-      - go build -o {{.PLUGINS_DIR}}/opcua-plugin/opcua-plugin.exe ./cmd/opcua-plugin
-      - go run ./cmd/opcua-plugin/plugin-manifest > {{.PLUGINS_DIR}}/opcua-plugin/plugin.json
-
-      - powershell -Command "if (Test-Path build/bin/plugins) { Remove-Item build/bin/plugins -Recurse -Force }"
-
-      - powershell -Command "Copy-Item '{{.PLUGINS_DIR}}' build/bin/plugins -Recurse"
-
   dev:
-    desc: プラグインをビルドしてから wails dev を起動する
-    deps: [plugins]
+    desc: 開発モードで起動する（画面はホットリロード。Go 側を変更したら起動し直す）
     cmds:
       - wails dev
 
   build:
-    desc: プラグインをビルドしてから wails build を実行する
-    deps: [plugins]
+    desc: プロダクションビルド（build/bin に exe を作る）
     cmds:
       - wails build
 
@@ -69,4 +25,4 @@ tasks:
   clean:
     desc: ビルド成果物を削除する
     cmds:
-      - rm -rf {{.PLUGINS_DIR}}/modbus-tcp-plugin {{.PLUGINS_DIR}}/modbus-rtu-plugin {{.PLUGINS_DIR}}/modbus-ascii-plugin {{.PLUGINS_DIR}}/opcua-plugin
+      - rm -rf build/bin

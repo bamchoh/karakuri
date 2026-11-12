@@ -70,14 +70,10 @@ Karakuri は Modbus（TCP/RTU/ASCII）と OPC UA に対応した PLC シミュ�
   - ヘッダーに API URL を常時表示。✎ ボタンでポートを変更可能（次回起動時も反映）
   - 対応操作: サーバーの起動/停止/設定、レジスタの読み書き、変数のCRUD、プロジェクトのエクスポート/インポート
 
-- **プラグインアーキテクチャ（v0.0.17〜）**
-  - Modbus / OPC UA の各プロトコルを別プロセスのプラグインとして実装
-  - gRPC（protobuf）による高速・型安全なプロセス間通信
-  - `plugins/<プラグイン名>/plugin.json` マニフェストでプラグインを管理
-  - Go 以外の言語（C# 等）でもプラグインを実装可能
-  - プラグインプロセスのクラッシュがホストアプリに影響しない
-  - v0.0.18 以降: プラグインプロセスのコンソールウィンドウを非表示化（Windows）
-  - v0.0.19 以降: Modbus / OPC UA の実装を `cmd/*/internal/` に移動し、ホスト側からプロトコル固有の依存を完全排除
+- **プロトコルの組み込み**
+  - Modbus / OPC UA の実装はアプリ本体に組み込まれています（exe は 1 つ）
+  - プロトコルごとのコードは `internal/protocols/<名前>/` に分かれていて、本体側はプロトコル固有の値を持ちません
+  - 以前のバージョン（v0.0.17〜）は、プロトコルごとに別プロセスのプラグインにして gRPC で通信していました
 
 - **プロジェクト管理**
   - 設定・レジスタ・スクリプト・変数・モニタリング項目を JSON ファイルにエクスポート/インポート（GUI またはHTTP API経由）
@@ -97,10 +93,7 @@ Karakuri は Modbus（TCP/RTU/ASCII）と OPC UA に対応した PLC シミュ�
 go mod tidy
 cd frontend && npm install && cd ..
 
-# プラグインバイナリをビルド（初回および変更時に必要）
-task plugins
-
-# プロダクションビルド（プラグインビルドを含む）
+# プロダクションビルド
 task build
 ```
 
@@ -109,7 +102,7 @@ task build
 ## 開発
 
 ```bash
-# 開発モード（プラグインビルド → ホットリロード起動）
+# 開発モード（画面はホットリロード。Go 側を変更したら起動し直す）
 task dev
 
 # Go バインディングの再生成
@@ -384,58 +377,42 @@ Invoke-WebRequest -Method Post "http://localhost:8765/api/project/import" `
 ## アーキテクチャ
 
 ```
-┌──────────────────────────────────────────────────────────┐
-│  ホストプロセス（Wails アプリ）                           │
-│  PLCService / HostGrpcServer / PluginProcessManager      │
-└─────────────┬──────────────────────────┬─────────────────┘
-              │ gRPC (localhost)          │ gRPC (localhost)
-              ▼                          ▼
-┌─────────────────────┐   ┌─────────────────────────────┐
-│ modbus-plugin.exe   │   │ opcua-plugin.exe             │
-│ PluginService       │   │ PluginService                │
-│ DataStoreService    │   │ DataStoreService（空実装）   │
-└─────────────────────┘   └─────────────────────────────┘
+┌──────────────────────────────────────────────────────────────┐
+│  Karakuri（1 つのプロセス）                                   │
+│                                                              │
+│  画面（React） ⇄ PLCService ⇄ 変数ストア                      │
+│                      │                                       │
+│        protocol.ServerFactory などのインターフェース          │
+│                      │                                       │
+│   ┌──────────────────┴───────────────────┐                   │
+│   │ internal/protocols/modbus            │ Modbus TCP / RTU / ASCII
+│   │ internal/protocols/opcua             │ OPC UA            │
+│   └──────────────────────────────────────┘                   │
+└──────────────────────────────────────────────────────────────┘
 ```
 
 ```
-cmd/
-├── modbus-plugin/        # Modbus プラグインバイナリ
-│   ├── internal/modbus/  # Modbus プロトコル実装（ホスト側から Go internal/ 制約で隔離）
-│   └── server/           # gRPC サーバー実装
-└── opcua-plugin/         # OPC UA プラグインバイナリ
-    ├── internal/opcua/   # OPC UA プロトコル実装（ホスト側から Go internal/ 制約で隔離）
-    └── server/           # gRPC サーバー実装
 internal/
 ├── domain/           # ドメイン層
 │   ├── protocol/     # プロトコル共通インターフェース
 │   ├── variable/     # 変数エンティティ（IEC 61131-3データ型）
-│   ├── script/       # スクリプトエンティティ
-│   └── datastore/    # DataStore 共通定義
+│   └── script/       # スクリプトエンティティ
 ├── application/      # アプリケーション層（プロトコル固有実装に依存しない）
-│   ├── plc_service.go  # メインサービス（複数サーバー管理・モニタリング・変数管理含む）
+│   ├── plc_service*.go # メインサービス（複数サーバー管理・モニタリング・変数管理含む）
 │   └── dto.go          # DTO 定義（ServerInstanceDTO, ServerConfigDTO 等）
-└── infrastructure/   # インフラ層（ホスト側のみ。プロトコル固有実装は含まない）
-    ├── plugin/       # プラグインインフラ（HostGrpcServer, RemoteFactory 等）
+├── protocols/        # プロトコルの実装
+│   ├── protocols.go  # 組み込むプロトコルの一覧
+│   ├── modbus/       # Modbus TCP / RTU / ASCII
+│   └── opcua/        # OPC UA
+└── infrastructure/   # インフラ層（プロトコル固有実装は含まない）
     ├── httpapi/      # REST HTTP API サーバー（net/http、デフォルトポート 8765）
     ├── adapter/      # 変数とDataStoreのアダプタ・VariableStoreAccessor
     └── scripting/    # JavaScript エンジン（goja）
 ```
 
-PLCService は `servers map[protocol.ProtocolType]*serverInstance` で複数のサーバーインスタンスを管理します。各プロトコル（`"modbus-tcp"`, `"modbus-rtu"`, `"modbus-ascii"`, `"opcua"`）は gRPC プラグインプロセスとして別プロセスで動作し、ホストは `RemoteServerFactory` / `RemoteProtocolServer` / `RemoteDataStore` を通じて gRPC 経由で操作します。
+PLCService は `servers map[protocol.ProtocolType]*serverInstance` で複数のサーバーインスタンスを管理します。各プロトコル（`"modbus-tcp"`, `"modbus-rtu"`, `"modbus-ascii"`, `"opcua"`）の実装は `protocol.ServerFactory` として起動時に登録され、PLCService はインターフェースを通じて操作します。
 
-### プラグイン仕様（他言語での実装向け）
-
-`plugins/<name>/plugin.json` の形式:
-
-```json
-{
-  "name": "My Plugin",
-  "entrypoint": "my-plugin.exe",
-  "version": "1.0.0"
-}
-```
-
-プラグインは起動時にランダムポートで gRPC サーバーを起動し、stdout に `GRPC_PORT=<port>` を出力します。ホストがこれを読み取って gRPC 接続を確立します。`PluginService` と `DataStoreService` を同一ポートで実装する必要があります（proto 定義: `proto/plugin.proto`）。
+プロトコルを追加する手順は [docs/protocol-developer-guide.md](docs/protocol-developer-guide.md) を参照してください。
 
 ## 設定ファイル
 
@@ -456,9 +433,8 @@ PLCService は `servers map[protocol.ProtocolType]*serverInstance` で複数の�
 
 - **バックエンド**: Go + [Wails v2](https://wails.io/)
 - **フロントエンド**: React + TypeScript + Vite（ビルドターゲット: Chrome 87+, Edge 88+, Firefox 78+, **Safari 14+**）
-- **プラグイン IPC**: gRPC + protobuf（[google.golang.org/grpc](https://pkg.go.dev/google.golang.org/grpc)）
 - **Modbus**: [simonvetter/modbus](https://github.com/simonvetter/modbus)
-- **OPC UA**: [gopcua](https://github.com/gopcua/opcua) v0.8.0
+- **OPC UA**: [bamchoh/uastack](https://github.com/bamchoh/uastack)
 - **JavaScript エンジン**: [goja](https://github.com/dop251/goja)
 - **タスクランナー**: [go-task](https://taskfile.dev/)
 

@@ -218,6 +218,10 @@ export const ServerPanel = forwardRef<ServerPanelHandle, ServerPanelProps>(
       (p) => !addedProtocolTypes.has(p.type),
     );
 
+    const hasVariantChoice = (instance: application.ServerInstanceDTO) =>
+      (protocols.find((p) => p.type === instance.protocolType)?.variants
+        .length ?? 0) > 1;
+
     const handleOpenAddDialog = () => {
       if (availableProtocols.length === 0) return;
       setIsAddDialogOpen(true);
@@ -283,7 +287,8 @@ export const ServerPanel = forwardRef<ServerPanelHandle, ServerPanelProps>(
                     <span className="server-tab-name">
                       {instance.displayName}
                     </span>
-                    {instance.variant && (
+                    {/* バリアントは、選べるプロトコル（2 つ以上ある）のときだけ出す */}
+                    {instance.variant && hasVariantChoice(instance) && (
                       <span className="server-instance-variant">
                         {instance.variant}
                       </span>

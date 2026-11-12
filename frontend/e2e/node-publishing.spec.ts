@@ -148,7 +148,7 @@ test("一括マッピング編集でも NodeID と理由を表示し、保存を
   }
 });
 
-test("Modbus のマッピング列は、プラグインが返すエリアの略称で表示する", async ({
+test("Modbus のマッピング列は、プロトコルの実装が返すエリアの略称で表示する", async ({
   page,
 }) => {
   await api(page, "AddServer", "modbus-tcp", "");

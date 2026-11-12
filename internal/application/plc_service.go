@@ -1,7 +1,6 @@
 package application
 
 import (
-	"context"
 	"fmt"
 	"sort"
 	"sync"
@@ -11,21 +10,18 @@ import (
 	"karakuri/internal/domain/script"
 	"karakuri/internal/domain/variable"
 	"karakuri/internal/infrastructure/adapter"
-	plugininfra "karakuri/internal/infrastructure/plugin"
 	"karakuri/internal/infrastructure/scripting"
 )
 
 // serverInstance はサーバーインスタンスの内部表現
 type serverInstance struct {
-	protocolType   protocol.ProtocolType
-	variant        string
-	factory        protocol.ServerFactory
-	dataStore      protocol.DataStore
-	config         protocol.ProtocolConfig
-	server         protocol.ProtocolServer
-	changeListener *plugininfra.RemoteVariableChangeListener
-	cancelChange   context.CancelFunc
-	addedOrder     int // サーバー登録順（表示順の固定化に使用）
+	protocolType protocol.ProtocolType
+	variant      string
+	factory      protocol.ServerFactory
+	dataStore    protocol.DataStore // 変数と同期する DataStore（adapter.VariableBackedDataStore）
+	config       protocol.ProtocolConfig
+	server       protocol.ProtocolServer
+	addedOrder   int // サーバー登録順（表示順の固定化に使用）
 }
 
 // PLCService はPLCシミュレーターのメインサービス
@@ -44,12 +40,6 @@ type PLCService struct {
 	// 複数サーバーインスタンス（protocolType → instance）
 	servers   map[protocol.ProtocolType]*serverInstance
 	serverSeq int // AddServer 呼び出しごとに増加する登録順カウンター
-
-	// ホスト側 gRPC サーバー（OPC UA 等のプラグインから変数アクセスに使用）
-	hostGrpcServer *plugininfra.HostGrpcServer
-
-	// プラグインプロセスマネージャー
-	pluginManager *plugininfra.PluginProcessManager
 
 	// スクリプト
 	scriptEngine *scripting.ScriptEngine
@@ -89,58 +79,11 @@ func NewPLCService() *PLCService {
 	return service
 }
 
-// RegisterPluginFactory はプラグインプロセスから取得したファクトリーを登録する
-func (s *PLCService) RegisterPluginFactory(factory protocol.ServerFactory) {
+// RegisterFactory はプロトコルのファクトリーを登録する（起動時に、組み込むプロトコルの分だけ呼ぶ）
+func (s *PLCService) RegisterFactory(factory protocol.ServerFactory) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.factories[factory.ProtocolType()] = factory
-}
-
-// StartHostGrpcServer はホスト側 gRPC サーバーを起動してアドレスを返す
-func (s *PLCService) StartHostGrpcServer() (string, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	srv := plugininfra.NewHostGrpcServer(s.vsAccessor, s.variableStore)
-	port, err := srv.Start()
-	if err != nil {
-		return "", fmt.Errorf("HostGrpcServer 起動失敗: %w", err)
-	}
-	s.hostGrpcServer = srv
-	return fmt.Sprintf("127.0.0.1:%d", port), nil
-}
-
-// GetHostGrpcAddr はホスト側 gRPC サーバーのアドレスを返す
-func (s *PLCService) GetHostGrpcAddr() string {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	if s.hostGrpcServer == nil {
-		return ""
-	}
-	return s.hostGrpcServer.Addr()
-}
-
-// InitPlugins はプラグインディレクトリを検索してマニフェストを読み込み、
-// LazyRemoteServerFactory を登録する。プロセスはこの時点では起動しない。
-func (s *PLCService) InitPlugins(pluginsDir string) error {
-	hostAddr := s.GetHostGrpcAddr()
-
-	mgr := plugininfra.NewPluginProcessManager(hostAddr)
-	entries, err := mgr.DiscoverManifests(pluginsDir)
-	if err != nil {
-		return err
-	}
-
-	s.mu.Lock()
-	s.pluginManager = mgr
-	s.mu.Unlock()
-
-	for _, entry := range entries {
-		factory := plugininfra.NewLazyRemoteServerFactory(entry, mgr)
-		s.RegisterPluginFactory(factory)
-	}
-
-	return nil
 }
 
 // === サーバーインスタンス管理 ===
@@ -192,10 +135,10 @@ func (s *PLCService) AddServer(protocolType string, variantID string) error {
 		return fmt.Errorf("protocol not found: %s", protocolType)
 	}
 
-	// プラグインプロセスをオンデマンドで起動（LazyRemoteServerFactory の場合）
-	if starter, ok := factory.(pluginStarter); ok {
-		if err := starter.EnsureStarted(); err != nil {
-			return fmt.Errorf("プラグイン起動失敗: %w", err)
+	// バリアントの指定がなければ、そのプロトコルの最初のバリアントにする
+	if variantID == "" {
+		if variants := factory.ConfigVariants(); len(variants) > 0 {
+			variantID = variants[0].ID
 		}
 	}
 
@@ -237,21 +180,12 @@ func (s *PLCService) RemoveServer(protocolType string) error {
 
 	if inst.server != nil {
 		if err := inst.server.Stop(); err != nil {
-			if checker, ok := inst.factory.(pluginCrashChecker); ok && checker.IsProcessCrashed() {
-				// プラグインプロセスがクラッシュしている場合、gRPC Stop は失敗する可能性がある。
-				// その場合でも後続のプロセスクリーンアップを続行する。
-			} else {
-				return fmt.Errorf("failed to stop server: %w", err)
-			}
+			return fmt.Errorf("failed to stop server: %w", err)
 		}
 	}
 
 	// 変数と DataStore の同期を止める
 	inst.detachSync()
-
-	if stopper, ok := inst.factory.(pluginStopper); ok {
-		stopper.StopProcess()
-	}
 
 	delete(s.servers, pt)
 
@@ -286,12 +220,6 @@ func (s *PLCService) Shutdown() {
 		if inst.server != nil {
 			inst.server.Stop()
 		}
-	}
-	if s.hostGrpcServer != nil {
-		s.hostGrpcServer.Stop()
-	}
-	if s.pluginManager != nil {
-		s.pluginManager.Shutdown()
 	}
 }
 

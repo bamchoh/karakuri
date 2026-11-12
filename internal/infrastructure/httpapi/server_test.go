@@ -40,8 +40,8 @@ type testAPI struct {
 func newTestAPI(t *testing.T) *testAPI {
 	t.Helper()
 	svc := application.NewPLCService()
-	svc.RegisterPluginFactory(protocoltest.NewFactory("fake-a", "va", "Fake A"))
-	svc.RegisterPluginFactory(protocoltest.NewFactory("fake-b", "vb", "Fake B"))
+	svc.RegisterFactory(protocoltest.NewFactory("fake-a", "va", "Fake A"))
+	svc.RegisterFactory(protocoltest.NewFactory("fake-b", "vb", "Fake B"))
 	svc.ClearMonitoringItems()
 	t.Cleanup(func() {
 		for _, inst := range svc.GetServerInstances() {

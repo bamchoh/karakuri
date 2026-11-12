@@ -53,11 +53,6 @@ func (s *PLCService) WriteBit(protocolType, area string, address int, value bool
 	if err := inst.dataStore.WriteBit(area, uint32(address), value); err != nil {
 		return err
 	}
-	// リモートプラグイン DataStore の場合、ホスト書き込みはプラグインから通知が来ないため
-	// 自分で変数を同期する（VariableBackedDataStore の場合は WriteWord 内で自動的に同期済み）
-	if inst.changeListener != nil {
-		go inst.changeListener.SyncHostBitWriteToVariable(area, uint32(address))
-	}
 	return nil
 }
 
@@ -93,11 +88,6 @@ func (s *PLCService) WriteWord(protocolType, area string, address int, value int
 	}
 	if err := inst.dataStore.WriteWord(area, uint32(address), uint16(value)); err != nil {
 		return err
-	}
-	// リモートプラグイン DataStore の場合、ホスト書き込みはプラグインから通知が来ないため
-	// 自分で変数を同期する（VariableBackedDataStore の場合は WriteWord 内で自動的に同期済み）
-	if inst.changeListener != nil {
-		go inst.changeListener.SyncHostWordWriteToVariable(area, uint32(address))
 	}
 	return nil
 }

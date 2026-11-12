@@ -17,7 +17,7 @@ import { Trash2 } from "lucide-react";
 import { DynamicField } from "./DynamicField";
 import { serverStatusClass } from "./serverStatus";
 
-// サーバー画面の右側: 選択したサーバーの設定（プラグインのスキーマから作るフォーム・UnitID の応答設定）。
+// サーバー画面の右側: 選択したサーバーの設定（プロトコルのスキーマから作るフォーム・UnitID の応答設定）。
 // 親からは ref の save() / revert() で、保存していない変更を保存・破棄できる。
 export interface ServerConfigPaneHandle {
   save: () => Promise<void>;

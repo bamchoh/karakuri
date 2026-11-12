@@ -5,7 +5,6 @@ import (
 	"sync"
 
 	"karakuri/internal/domain/protocol"
-	"karakuri/internal/pluginruntime"
 )
 
 // ModbusDataStore はModbusプロトコル用のデータストア
@@ -15,9 +14,6 @@ type ModbusDataStore struct {
 	discreteInputs []bool
 	holdingRegs    []uint16
 	inputRegs      []uint16
-
-	hookMu     sync.RWMutex
-	changeHook pluginruntime.DataChangeHook
 }
 
 // エリアID定数
@@ -27,25 +23,6 @@ const (
 	AreaHoldingRegs    = "holdingRegisters"
 	AreaInputRegs      = "inputRegisters"
 )
-
-// SetChangeHook はデータ変更時に呼ばれるフックを設定する。
-// nil を渡すとフックを解除する。
-// フックは Modbus クライアントの書き込み時にのみ呼び出すこと（ホストからの書き込み時は呼び出さない）。
-func (s *ModbusDataStore) SetChangeHook(hook pluginruntime.DataChangeHook) {
-	s.hookMu.Lock()
-	s.changeHook = hook
-	s.hookMu.Unlock()
-}
-
-// callChangeHook はフックを安全に呼び出す（ロック外で呼ぶこと）
-func (s *ModbusDataStore) callChangeHook(area string, address uint32, values []uint16, isBit bool, bitValues []bool) {
-	s.hookMu.RLock()
-	hook := s.changeHook
-	s.hookMu.RUnlock()
-	if hook != nil {
-		hook(area, address, values, isBit, bitValues)
-	}
-}
 
 // NewModbusDataStore は新しいModbusDataStoreを作成する
 func NewModbusDataStore(coilCount, discreteCount, holdingCount, inputCount int) *ModbusDataStore {
@@ -204,8 +181,6 @@ func (s *ModbusDataStore) WriteBits(area string, address uint32, values []bool) 
 
 	s.mu.Unlock()
 
-	s.callChangeHook(area, address, nil, true, values)
-
 	return nil
 }
 
@@ -272,8 +247,6 @@ func (s *ModbusDataStore) ReadWords(area string, address uint32, count uint16) (
 func (s *ModbusDataStore) WriteWords(area string, address uint32, values []uint16) error {
 	s.mu.Lock()
 
-	var changeBits []bool
-
 	switch area {
 	case AreaHoldingRegs:
 		if int(address)+len(values) > len(s.holdingRegs) {
@@ -294,29 +267,19 @@ func (s *ModbusDataStore) WriteWords(area string, address uint32, values []uint1
 			return ErrAddressOutOfRange
 		}
 
-		changeBits = unpackWordsToBits(values)
-		copy(s.coils[address:], changeBits)
+		copy(s.coils[address:], unpackWordsToBits(values))
 	case AreaDiscreteInputs:
 		if int(address)+len(values)*16 > len(s.discreteInputs) {
 			s.mu.Unlock()
 			return ErrAddressOutOfRange
 		}
 
-		changeBits = unpackWordsToBits(values)
-		copy(s.discreteInputs[address:], changeBits)
+		copy(s.discreteInputs[address:], unpackWordsToBits(values))
 	default:
 		s.mu.Unlock()
 		return ErrAreaNotFound
 	}
 	s.mu.Unlock()
-
-	switch area {
-	case AreaHoldingRegs, AreaInputRegs:
-		s.callChangeHook(area, address, values, false, nil)
-
-	case AreaCoils, AreaDiscreteInputs:
-		s.callChangeHook(area, address, nil, true, changeBits)
-	}
 	return nil
 }
 

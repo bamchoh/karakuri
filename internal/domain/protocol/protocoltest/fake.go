@@ -1,5 +1,5 @@
 // Package protocoltest はテスト用のフェイクのプロトコル実装（ファクトリー・サーバー・DataStore）を提供する。
-// プロトコル固有の実装（プラグイン）に依存せずに、ホスト側の処理を確認するために使う。
+// プロトコル固有の実装（internal/protocols）に依存せずに、ホスト側の処理を確認するために使う。
 package protocoltest
 
 import (

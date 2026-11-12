@@ -1,7 +1,7 @@
 package modbus
 
 import (
-	"karakuri/cmd/modbus-plugin/internal/modbus/rtu"
+	"karakuri/internal/protocols/modbus/rtu"
 
 	"github.com/simonvetter/modbus"
 )
