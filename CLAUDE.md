@@ -51,6 +51,17 @@ go build ./...
 
 タスクランナーは [go-task](https://taskfile.dev/) を使用。`Taskfile.yaml` に定義。
 
+### CI（GitHub Actions）
+
+`.github/workflows/ci.yml` が、Pull Request と main への push のたびに実行する。
+
+- **ビルドとテスト（Windows）**: 画面の型検査とビルド（`npm run build`）、`go vet ./...`、`go test ./...`
+- **整形と競合検出（Linux）**: `gofmt -l .`、`go test -race ./internal/...`
+  - 開発 PC には C コンパイラがなく `go test -race` を実行できないので、データ競合は CI で見つける
+  - Windows の実行環境は改行を CRLF に変えるため、`gofmt` の検査は Linux で行う
+  - アプリ本体（`main.go` / `app.go`）は Wails が Linux 用のライブラリを必要とするので、Linux では `internal` だけを対象にする
+- 画面の確認用テスト（Playwright）は対象外（開発サーバーと WebView2 が要る）。画面を変更したら手元で `task e2e` を実行する
+
 ### 画面の確認用テスト（Playwright）
 
 `frontend/e2e/` に、ブラウザで画面を操作して確認するテストがある。`task dev` が立てる開発用サーバー（`http://localhost:34115`）に接続するため、Go 側の API とプロトコルの実装を含めた動作を確認できる。手順と注意は `frontend/e2e/README.md` を参照。
@@ -460,6 +471,9 @@ JavaScript（goja）でPLC動作を記述。
   - `{"port": 8765}` 形式で保存。UI または `SetHTTPAPIPort()` で変更すると自動更新
 
 ## テストの構成
+
+- **データ競合を作らない**: テストは CI で競合検出（`-race`）を有効にして実行される。ゴルーチンに渡す値は、あとで書き換えられるオブジェクトのポインタではなく、その時点の値のコピーにする
+  - 変数ストア（`VariableStore`）が返す変数と、リスナーに渡す変数は、その時点の内容のコピー。ストアの中の変数は、ロックの中でしか読み書きしない。値（配列・構造体）は書き換えず、更新のたびに新しい値に差し替える
 
 - **ホスト側のテストはフェイクのプロトコルで動かす**: `protocoltest.NewFactory()` を `PLCService.RegisterFactory()` に登録する。`internal/application` と `internal/infrastructure` のテストは、実際のプロトコルの実装を使わない
 - **REST API**（`internal/infrastructure/httpapi/server_test.go`）: `httptest` でハンドラーを直接呼ぶ。エンドポイントを追加・変更したらここに足す
