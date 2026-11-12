@@ -2,6 +2,7 @@ package variable
 
 import (
 	"math"
+	"strings"
 	"testing"
 )
 
@@ -666,5 +667,80 @@ func TestConvertValue_FromUint64(t *testing.T) {
 	}
 	if got, _ := ConvertValue(uint64(4294967295), TypeUDINT); got != uint32(4294967295) {
 		t.Errorf("UDINT 4294967295 → %v", got)
+	}
+}
+
+// 構造体の値で、変換できないフィールドがあればエラーにする
+// （以前は黙って既定値にしていて、書き込みが成功したように見えていた）
+func TestConvertValueWithResolver_StructFieldError(t *testing.T) {
+	store := NewVariableStore()
+	inner, err := NewStructTypeDef("Inner", []StructField{{Name: "n", DataType: TypeINT}}, store)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := store.RegisterStructType(inner); err != nil {
+		t.Fatal(err)
+	}
+	outer, err := NewStructTypeDef("Outer", []StructField{
+		{Name: "count", DataType: TypeINT},
+		{Name: "label", DataType: TypeSTRING},
+		{Name: "inner", DataType: "Inner"},
+		{Name: "list", DataType: "ARRAY[0..1] OF INT"},
+	}, store)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := store.RegisterStructType(outer); err != nil {
+		t.Fatal(err)
+	}
+
+	// 変換できる値はそのまま通る。ないフィールドは既定値になる
+	got, err := ConvertValueWithResolver(map[string]interface{}{"count": float64(5), "label": "a"}, "Outer", store)
+	if err != nil {
+		t.Fatalf("変換できる値がエラーになった: %v", err)
+	}
+	if m := got.(map[string]interface{}); m["count"] != int16(5) || m["label"] != "a" {
+		t.Errorf("変換結果 = %v", m)
+	}
+
+	// 変換できないフィールドは、どのフィールドかが分かるエラーになる
+	cases := map[string]map[string]interface{}{
+		"field count":          {"count": "数値ではない"},
+		"field label":          {"label": float64(1)},
+		"field inner: field n": {"inner": map[string]interface{}{"n": "x"}},
+		"field list":           {"list": []interface{}{float64(1), "x"}},
+		"field inner":          {"inner": "構造体ではない"},
+	}
+	for want, value := range cases {
+		_, err := ConvertValueWithResolver(value, "Outer", store)
+		if err == nil {
+			t.Errorf("%v がエラーにならなかった", value)
+			continue
+		}
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("%v のエラー = %q, %q を含むはず", value, err, want)
+		}
+	}
+}
+
+// 変数への書き込みでも、変換できないフィールドがあれば失敗し、値は変わらない
+func TestUpdateValue_StructFieldErrorKeepsValue(t *testing.T) {
+	store := NewVariableStore()
+	point, _ := NewStructTypeDef("Point", []StructField{{Name: "x", DataType: TypeINT}, {Name: "y", DataType: TypeINT}}, store)
+	_ = store.RegisterStructType(point)
+	v, err := store.CreateVariable("P", "Point", map[string]interface{}{"x": float64(1), "y": float64(2)})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if err := store.UpdateValue(v.ID, map[string]interface{}{"x": float64(10), "y": "数値ではない"}); err == nil {
+		t.Error("変換できないフィールドのある UpdateValue がエラーにならなかった")
+	}
+	if err := store.UpdateFieldValue(v.ID, "y", "数値ではない"); err == nil {
+		t.Error("変換できない値の UpdateFieldValue がエラーにならなかった")
+	}
+	got, _ := store.GetVariable(v.ID)
+	if m := got.Value.(map[string]interface{}); m["x"] != int16(1) || m["y"] != int16(2) {
+		t.Errorf("失敗した書き込みで値が変わった: %v", m)
 	}
 }
