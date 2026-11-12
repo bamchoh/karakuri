@@ -47,6 +47,12 @@ export function FocusTrap({ children, className, onConfirm }: FocusTrapProps) {
     };
   }, []);
 
+  // 呼び出し側は描画のたびに新しい onConfirm を渡すので、ref に入れて最新のものを呼ぶ。
+  // （キーボードの effect を onConfirm に依存させると、入力のたびに effect がやり直され、
+  //   下の「開いた直後の Enter を無視する」判定が入力の直後にも効いてしまう）
+  const onConfirmRef = useRef(onConfirm);
+  onConfirmRef.current = onConfirm;
+
   // キーボードイベント処理
   useEffect(() => {
     // マウント時刻を記録。ダイアログを開いた Enter キーイベント（timeStamp がこれ以前）を無視するため
@@ -82,20 +88,20 @@ export function FocusTrap({ children, className, onConfirm }: FocusTrapProps) {
       }
 
       // Enter で確定
-      if (e.key === "Enter" && onConfirm) {
+      if (e.key === "Enter" && onConfirmRef.current) {
         // マウント前後 100ms 以内のイベントは「ダイアログを開いた Enter」として無視
         if (e.timeStamp < mountedAt + 100) return;
         const tag = (document.activeElement as HTMLElement)?.tagName;
         // ボタン（Enter = click）・textarea（Enter = 改行）は除外
         if (tag === "BUTTON" || tag === "TEXTAREA") return;
         e.preventDefault();
-        onConfirm();
+        onConfirmRef.current();
       }
     };
 
     document.addEventListener("keydown", handleKeyDown);
     return () => document.removeEventListener("keydown", handleKeyDown);
-  }, [onConfirm]);
+  }, []);
 
   return (
     <div ref={ref} className={className ?? "dialog-overlay"}>
