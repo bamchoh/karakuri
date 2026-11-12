@@ -29,7 +29,6 @@ func (f *Factory) InjectVariableStore(accessor protocol.VariableStoreAccessor) {
 	f.accessor = accessor
 }
 
-func (f *Factory) Version() string                     { return VERSION }
 func (f *Factory) ProtocolType() protocol.ProtocolType { return ProtocolOPCUA }
 func (f *Factory) DisplayName() string                 { return "OPC UA" }
 
@@ -38,7 +37,6 @@ func (f *Factory) ConfigVariants() []protocol.ConfigVariant {
 }
 
 func (f *Factory) CreateConfigFromVariant(_ string) protocol.ProtocolConfig { return DefaultConfig() }
-func (f *Factory) DefaultConfig() protocol.ProtocolConfig                   { return DefaultConfig() }
 
 // 設定のキー。アプリケーション情報は旧 C# 版 opcua-plugin と同じキー名（manufacture_name の綴りも同じ）
 const (

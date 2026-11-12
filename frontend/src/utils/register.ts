@@ -1,6 +1,5 @@
 import type { DisplayFormat, BitWidth, Endianness } from "../types/register";
 import {
-  DISPLAY_FORMATS,
   BIT_WIDTHS,
   ENDIANNESS_OPTIONS,
 } from "../constants/register";

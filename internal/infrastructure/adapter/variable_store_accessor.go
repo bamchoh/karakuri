@@ -84,6 +84,6 @@ type changeNotifier struct {
 	onChange func(variableID string)
 }
 
-func (n *changeNotifier) OnVariableChanged(v *variable.Variable, _ []variable.ProtocolMapping, _ string, _ interface{}) {
+func (n *changeNotifier) OnVariableChanged(v *variable.Variable, _ []variable.ProtocolMapping) {
 	n.onChange(v.ID)
 }

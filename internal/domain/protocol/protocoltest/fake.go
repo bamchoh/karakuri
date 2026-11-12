@@ -159,51 +159,6 @@ func (d *DataStore) WriteWords(area string, address uint32, values []uint16) err
 	return nil
 }
 
-// Snapshot は書き込まれたワードを {エリア: {アドレス: 値}} の形で返す（JSON にできる形）
-func (d *DataStore) Snapshot() map[string]interface{} {
-	d.mu.Lock()
-	defer d.mu.Unlock()
-	snap := map[string]interface{}{}
-	for area, words := range d.words {
-		m := map[string]interface{}{}
-		for addr, v := range words {
-			m[fmt.Sprint(addr)] = float64(v)
-		}
-		snap[area] = m
-	}
-	return snap
-}
-
-// Restore は Snapshot の形のデータを書き戻す
-func (d *DataStore) Restore(data map[string]interface{}) error {
-	d.mu.Lock()
-	defer d.mu.Unlock()
-	d.words = make(map[string]map[uint32]uint16)
-	for area, raw := range data {
-		m, ok := raw.(map[string]interface{})
-		if !ok {
-			continue
-		}
-		d.words[area] = make(map[uint32]uint16)
-		for addrStr, v := range m {
-			var addr uint32
-			if _, err := fmt.Sscan(addrStr, &addr); err != nil {
-				return err
-			}
-			f, _ := v.(float64)
-			d.words[area][addr] = uint16(f)
-		}
-	}
-	return nil
-}
-
-func (d *DataStore) ClearAll() {
-	d.mu.Lock()
-	defer d.mu.Unlock()
-	d.bits = make(map[string]map[uint32]bool)
-	d.words = make(map[string]map[uint32]uint16)
-}
-
 // ===== Server =====
 
 // Server はフェイクのサーバー。Start / Stop で状態だけが変わる
@@ -300,7 +255,6 @@ func NewFactory(protocolType protocol.ProtocolType, variantID, displayName strin
 	return &Factory{Type: protocolType, Name: displayName, Variant: variantID}
 }
 
-func (f *Factory) Version() string                     { return "1.0.0" }
 func (f *Factory) ProtocolType() protocol.ProtocolType { return f.Type }
 func (f *Factory) DisplayName() string                 { return f.Name }
 
@@ -309,10 +263,6 @@ func (f *Factory) CreateServer(config protocol.ProtocolConfig, _ protocol.DataSt
 }
 
 func (f *Factory) CreateDataStore() protocol.DataStore { return NewDataStore() }
-
-func (f *Factory) DefaultConfig() protocol.ProtocolConfig {
-	return f.CreateConfigFromVariant(f.Variant)
-}
 
 func (f *Factory) ConfigVariants() []protocol.ConfigVariant {
 	return []protocol.ConfigVariant{{ID: f.Variant, DisplayName: f.Name}}
