@@ -155,7 +155,7 @@ export const MappingDialog = forwardRef<MappingDialogHandle, Props>(
     if (!isOpen || !mappingVariable) return null;
     return (
       <FocusTrap onConfirm={handleSaveMappings}>
-        <div className="dialog" style={{ minWidth: "500px" }}>
+        <div className="dialog dialog-w500">
           <h3>マッピング設定: {mappingVariable.name}</h3>
           <div className="dialog-content">
             <p className="dialog-description">
@@ -166,15 +166,16 @@ export const MappingDialog = forwardRef<MappingDialogHandle, Props>(
               <div key={index} className="dialog-section">
                 {/* ヘッダ行 */}
                 <div className="dialog-row">
-                  <label style={{ flex: 1 }}>プロトコル</label>
-                  <label style={{ flex: 1 }}>メモリエリア</label>
-                  <label style={{ flex: 1 }}>アドレス</label>
-                  <label style={{ flex: 1 }}>エンディアン</label>
-                  <span style={{ width: "60px" }}></span>
+                  <label className="mapping-col">プロトコル</label>
+                  <label className="mapping-col">メモリエリア</label>
+                  <label className="mapping-col">アドレス</label>
+                  <label className="mapping-col">エンディアン</label>
+                  <span className="mapping-col-spacer"></span>
                 </div>
                 {/* コントロール行 */}
                 <div className="dialog-row">
                   <select
+                    className="mapping-col"
                     value={m.protocolType}
                     onChange={(e) => {
                       const updated = [...editMappings];
@@ -189,7 +190,6 @@ export const MappingDialog = forwardRef<MappingDialogHandle, Props>(
                       };
                       setEditMappings(updated);
                     }}
-                    style={{ flex: 1 }}
                   >
                     {serverInstances.map((inst) => (
                       <option
@@ -202,6 +202,7 @@ export const MappingDialog = forwardRef<MappingDialogHandle, Props>(
                   </select>
 
                   <select
+                    className="mapping-col"
                     value={m.memoryArea}
                     onChange={(e) => {
                       const updated = [...editMappings];
@@ -211,7 +212,6 @@ export const MappingDialog = forwardRef<MappingDialogHandle, Props>(
                       };
                       setEditMappings(updated);
                     }}
-                    style={{ flex: 1 }}
                   >
                     {(memoryAreasByProtocol[m.protocolType] || []).map(
                       (a) => (
@@ -223,6 +223,7 @@ export const MappingDialog = forwardRef<MappingDialogHandle, Props>(
                   </select>
 
                   <input
+                    className="mapping-col"
                     type="number"
                     value={
                       isOneOriginArea(m.protocolType, m.memoryArea)
@@ -246,10 +247,10 @@ export const MappingDialog = forwardRef<MappingDialogHandle, Props>(
                     min={
                       isOneOriginArea(m.protocolType, m.memoryArea) ? 1 : 0
                     }
-                    style={{ flex: 1 }}
                   />
 
                   <select
+                    className="mapping-col"
                     value={m.endianness}
                     onChange={(e) => {
                       const updated = [...editMappings];
@@ -259,7 +260,6 @@ export const MappingDialog = forwardRef<MappingDialogHandle, Props>(
                       };
                       setEditMappings(updated);
                     }}
-                    style={{ flex: 1 }}
                   >
                     <option value="big">Big</option>
                     <option value="little">Little</option>
@@ -295,8 +295,8 @@ export const MappingDialog = forwardRef<MappingDialogHandle, Props>(
               );
               if (publishableServers.length === 0) return null;
               return (
-                <div className="dialog-section" style={{ marginTop: "16px" }}>
-                  <h4 style={{ margin: "0 0 8px 0" }}>プロトコル公開設定</h4>
+                <div className="dialog-section publish-section">
+                  <h4 className="publish-title">プロトコル公開設定</h4>
                   {publishableServers.map((server) => {
                     const pub = editNodePublishings.find(
                       (p) => p.protocolType === server.protocolType,
@@ -319,19 +319,12 @@ export const MappingDialog = forwardRef<MappingDialogHandle, Props>(
                     return (
                       <div
                         key={server.protocolType}
-                        className="dialog-row"
-                        style={{ alignItems: "center", gap: "8px" }}
+                        className="dialog-row publish-row"
                       >
-                        <label style={{ minWidth: "80px" }}>
+                        <label className="publish-protocol">
                           {server.displayName}
                         </label>
-                        <label
-                          style={{
-                            display: "flex",
-                            alignItems: "center",
-                            gap: "4px",
-                          }}
-                        >
+                        <label className="publish-check">
                           <input
                             type="checkbox"
                             checked={pub.enabled}
@@ -364,9 +357,7 @@ export const MappingDialog = forwardRef<MappingDialogHandle, Props>(
                                 ⚠ {addr.error}
                               </span>
                             ) : (
-                              <span
-                                style={{ fontSize: "11px", color: "#888" }}
-                              >
+                              <span className="publish-nodeid">
                                 {addr?.address ?? ""}
                               </span>
                             );

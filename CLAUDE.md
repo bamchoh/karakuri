@@ -518,7 +518,9 @@ JavaScript（goja）でPLC動作を記述。
 
 すべてのダイアログ（変数編集、マッピング設定、構造体型管理、モニタリング追加、レジスタ書き込み）は統一されたスタイルパターンを使用：
 - **`.dialog-row`**: ラベルとコントロールを横並びに配置
-- **インラインスタイル削除**: すべての `<select>` と `<input>` からインラインスタイルを削除
+- **インラインスタイルを書かない**: 見た目は `App.css` のクラスで指定する（末尾の「コンポーネントのインラインスタイルから移したもの」に、画面ごとにまとめてある）。`style` で指定するのは、値が実行時に決まるものだけ（変数一覧・値の編集の字下げ、右クリックメニューの位置、モニタリングのドラッグ中の移動）
+  - 既存のルール（`.dialog-row label`、`.variable-table th`、`.dialog .variable-table td input` など）より弱いセレクタでは効かない。クラスを足すときは、`.variable-table th.col-name` のように既存のルールより強いセレクタにする
+  - 行の色をクラスで指定するときは、`:hover` のルール（`.variable-table tbody tr:hover`）に負けないよう、`:hover` も並べて書く
 - **スクロール対応**: ダイアログ全体に `maxHeight: '80vh'` を設定し、コンテンツ領域で `overflowY: 'auto'`
 - **flexboxレイアウト**: ダイアログ全体を `display: flex, flexDirection: 'column'` でレイアウト
 - **テーブル内コンポーネント**: ダイアログ内の `variable-table` の `td` に含まれる `select` / `input` は `.dialog-row` が適用されないため、`App.css` の `.dialog .variable-table td select/input` セレクタで同等のスタイル（`padding: 0.5rem`, `border`, `border-radius`, `background`, `color`, `font-size`, `width: 100%`, `box-sizing: border-box`）を別途定義している

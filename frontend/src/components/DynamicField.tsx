@@ -62,12 +62,12 @@ export function DynamicField({
         );
       case "serialport":
         return (
-          <div style={{ display: "flex", gap: "8px" }}>
+          <div className="serial-port-field">
             <select
+              className="serial-port-select"
               value={displayValue || ""}
               onChange={(e) => onChange(e.target.value)}
               disabled={disabled}
-              style={{ flex: 1 }}
             >
               {serialPorts.length === 0 && (
                 <option value="">ポートが見つかりません</option>
@@ -84,9 +84,8 @@ export function DynamicField({
             <button
               onClick={onRefreshPorts}
               disabled={disabled}
-              className="btn-secondary"
+              className="btn-secondary serial-port-refresh"
               title="ポート一覧を更新"
-              style={{ padding: "4px 8px" }}
             >
               ↻
             </button>

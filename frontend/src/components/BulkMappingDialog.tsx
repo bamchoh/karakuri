@@ -275,20 +275,12 @@ export const BulkMappingDialog = forwardRef<BulkMappingDialogHandle, Props>(
     return (
       <FocusTrap>
         <div
-          className="dialog"
-          style={{
-            minWidth: "700px",
-            maxWidth: "95vw",
-            maxHeight: "80vh",
-            display: "flex",
-            flexDirection: "column",
-          }}
+          className="dialog dialog-scrollable dialog-bulk"
         >
           <h3>一括マッピング編集</h3>
           {/* プロトコル選択 */}
           <div
-            className="dialog-content"
-            style={{ flex: "none", paddingBottom: 0 }}
+            className="dialog-content dialog-content-fixed"
           >
             <div className="dialog-row">
               <label>プロトコル:</label>
@@ -306,11 +298,10 @@ export const BulkMappingDialog = forwardRef<BulkMappingDialogHandle, Props>(
           </div>
           {/* テーブル本体 */}
           <div
-            className="dialog-content"
-            style={{ flex: 1, overflowY: "auto", paddingTop: "8px" }}
+            className="dialog-content dialog-content-scroll bulk-table-area"
           >
             {bulkRows.length === 0 ? (
-              <p style={{ color: "#888", textAlign: "center" }}>
+              <p className="empty-note">
                 変数がありません
               </p>
             ) : isNodePublishingProtocol(bulkProtocol) ? (
@@ -318,26 +309,20 @@ export const BulkMappingDialog = forwardRef<BulkMappingDialogHandle, Props>(
               <table className="variable-table">
                 <thead>
                   <tr>
-                    <th style={{ textAlign: "left", minWidth: "140px" }}>
+                    <th className="col-name">
                       変数名
                     </th>
-                    <th style={{ textAlign: "left", minWidth: "100px" }}>
+                    <th className="col-type">
                       データ型
                     </th>
-                    <th style={{ textAlign: "center", minWidth: "60px" }}>
+                    <th className="col-words">
                       W数
                     </th>
-                    <th style={{ textAlign: "center", minWidth: "80px" }}>
+                    <th className="col-publish">
                       公開する
                     </th>
-                    <th style={{ minWidth: "130px" }}>アクセスモード</th>
-                    <th
-                      style={{
-                        minWidth: "100px",
-                        fontSize: "0.8em",
-                        color: "#888",
-                      }}
-                    >
+                    <th className="col-access">アクセスモード</th>
+                    <th className="col-nodeid">
                       NodeID
                     </th>
                   </tr>
@@ -345,14 +330,14 @@ export const BulkMappingDialog = forwardRef<BulkMappingDialogHandle, Props>(
                 <tbody>
                   {bulkRows.map((row) => (
                     <tr key={row.variableId}>
-                      <td style={{ fontWeight: "bold" }}>
+                      <td className="cell-name">
                         {row.variableName}
                       </td>
-                      <td style={{ fontSize: "0.85em", color: "#aaa" }}>
+                      <td className="cell-type">
                         {row.dataType}
                       </td>
-                      <td style={{ textAlign: "center" }}>{row.wordCount}</td>
-                      <td style={{ textAlign: "center" }}>
+                      <td className="cell-center">{row.wordCount}</td>
+                      <td className="cell-center">
                         <input
                           type="checkbox"
                           checked={row.nodeEnabled}
@@ -372,14 +357,13 @@ export const BulkMappingDialog = forwardRef<BulkMappingDialogHandle, Props>(
                               accessMode: e.target.value,
                             })
                           }
-                          style={{ width: "100%" }}
                         >
                           <option value="read">Read Only</option>
                           <option value="write">Write Only</option>
                           <option value="readwrite">Read / Write</option>
                         </select>
                       </td>
-                      <td style={{ fontSize: "0.8em", color: "#888" }}>
+                      <td className="cell-nodeid">
                         {(() => {
                           if (!row.nodeEnabled) return "-";
                           const addr =
@@ -409,35 +393,23 @@ export const BulkMappingDialog = forwardRef<BulkMappingDialogHandle, Props>(
                     <table className="variable-table">
                       <thead>
                         <tr>
-                          <th
-                            style={{ textAlign: "left", minWidth: "140px" }}
-                          >
+                          <th className="col-name">
                             変数名
                           </th>
-                          <th
-                            style={{ textAlign: "left", minWidth: "100px" }}
-                          >
+                          <th className="col-type">
                             データ型
                           </th>
-                          <th
-                            style={{ textAlign: "center", minWidth: "60px" }}
-                          >
+                          <th className="col-words">
                             W数
                           </th>
-                          <th style={{ minWidth: "140px" }}>メモリエリア</th>
-                          <th style={{ minWidth: "110px" }}>
+                          <th className="col-area">メモリエリア</th>
+                          <th className="col-address">
                             アドレス
-                            <span
-                              style={{
-                                fontSize: "0.75em",
-                                color: "#888",
-                                marginLeft: "4px",
-                              }}
-                            >
+                            <span className="th-note">
                               (空=削除)
                             </span>
                           </th>
-                          <th style={{ minWidth: "100px" }}>エンディアン</th>
+                          <th className="col-endian">エンディアン</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -452,21 +424,17 @@ export const BulkMappingDialog = forwardRef<BulkMappingDialogHandle, Props>(
                           return (
                             <tr
                               key={row.variableId}
-                              style={
-                                hasConflict
-                                  ? { background: "rgba(255, 150, 0, 0.08)" }
-                                  : undefined
+                              className={
+                                hasConflict ? "bulk-row-conflict" : undefined
                               }
                             >
-                              <td style={{ fontWeight: "bold" }}>
+                              <td className="cell-name">
                                 {row.variableName}
                               </td>
-                              <td
-                                style={{ fontSize: "0.85em", color: "#aaa" }}
-                              >
+                              <td className="cell-type">
                                 {row.dataType}
                               </td>
-                              <td style={{ textAlign: "center" }}>
+                              <td className="cell-center">
                                 {row.wordCount}
                               </td>
                               <td>
@@ -478,7 +446,6 @@ export const BulkMappingDialog = forwardRef<BulkMappingDialogHandle, Props>(
                                       e.target.value,
                                     )
                                   }
-                                  style={{ width: "100%" }}
                                 >
                                   {areas.map((a) => (
                                     <option key={a.id} value={a.id}>
@@ -488,13 +455,7 @@ export const BulkMappingDialog = forwardRef<BulkMappingDialogHandle, Props>(
                                 </select>
                               </td>
                               <td>
-                                <div
-                                  style={{
-                                    display: "flex",
-                                    alignItems: "center",
-                                    gap: "4px",
-                                  }}
-                                >
+                                <div className="bulk-address-cell">
                                   <input
                                     type="number"
                                     value={row.addressStr}
@@ -505,17 +466,12 @@ export const BulkMappingDialog = forwardRef<BulkMappingDialogHandle, Props>(
                                         addressStr: e.target.value,
                                       })
                                     }
-                                    style={{
-                                      width: "80px",
-                                      ...(hasConflict
-                                        ? { borderColor: "#ffa500" }
-                                        : {}),
-                                    }}
+                                    className={`bulk-address-input${hasConflict ? " conflict" : ""}`}
                                   />
                                   {hasConflict && (
                                     <span
+                                      className="bulk-conflict-icon"
                                       title="アドレスが他の変数と重複しています"
-                                      style={{ color: "#ffa500" }}
                                     >
                                       ⚠
                                     </span>
@@ -530,7 +486,6 @@ export const BulkMappingDialog = forwardRef<BulkMappingDialogHandle, Props>(
                                       endianness: e.target.value,
                                     })
                                   }
-                                  style={{ width: "100%" }}
                                 >
                                   <option value="big">Big</option>
                                   <option value="little">Little</option>
@@ -553,16 +508,7 @@ export const BulkMappingDialog = forwardRef<BulkMappingDialogHandle, Props>(
                 bulkProtocol,
               );
               return conflictIds.size > 0 ? (
-                <div
-                  style={{
-                    padding: "6px 16px",
-                    background: "rgba(255, 150, 0, 0.15)",
-                    borderTop: "1px solid rgba(255, 150, 0, 0.4)",
-                    color: "#ffa500",
-                    fontSize: "0.85em",
-                    flexShrink: 0,
-                  }}
-                >
+                <div className="bulk-conflict-banner">
                   ⚠ アドレスが重複している変数が {conflictIds.size} 件あります
                 </div>
               ) : null;

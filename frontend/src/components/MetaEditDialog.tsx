@@ -85,7 +85,7 @@ export const MetaEditDialog = forwardRef<MetaEditDialogHandle, Props>(
               dataTypes={dataTypes}
               structTypes={structTypes}
             />
-            <p style={{ fontSize: "0.85em", color: "#aaa", margin: "8px 0 0" }}>
+            <p className="dialog-note">
               ※ データタイプを変更すると値はデフォルト値にリセットされます
             </p>
           </div>

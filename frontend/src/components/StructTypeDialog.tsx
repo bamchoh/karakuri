@@ -140,18 +140,11 @@ export const StructTypeDialog = forwardRef<StructTypeDialogHandle, Props>(
     return (
       <FocusTrap onConfirm={handleRegisterStructType}>
         <div
-          className="dialog"
-          style={{
-            minWidth: "500px",
-            maxHeight: "80vh",
-            display: "flex",
-            flexDirection: "column",
-          }}
+          className="dialog dialog-scrollable dialog-w500"
         >
           <h3>構造体型管理</h3>
           <div
-            className="dialog-content"
-            style={{ flex: 1, overflowY: "auto" }}
+            className="dialog-content dialog-content-scroll"
           >
             {/* 既存の構造体型一覧 */}
             {structTypes.length > 0 && (
@@ -179,8 +172,7 @@ export const StructTypeDialog = forwardRef<StructTypeDialogHandle, Props>(
                         <td>
                           <button
                             onClick={() => handleEditStructType(st)}
-                            className="btn-small btn-secondary"
-                            style={{ marginRight: "0.5rem" }}
+                            className="btn-small btn-secondary struct-edit-button"
                           >
                             編集
                           </button>
@@ -216,13 +208,7 @@ export const StructTypeDialog = forwardRef<StructTypeDialogHandle, Props>(
               <label>フィールド:</label>
               {fields.map((field, index) => (
                 <div key={index} className="dialog-field-editor">
-                  <div
-                    style={{
-                      display: "flex",
-                      justifyContent: "space-between",
-                      marginBottom: "0.5rem",
-                    }}
-                  >
+                  <div className="struct-fields-header">
                     <strong>フィールド {index + 1}</strong>
                     <button
                       onClick={() =>
@@ -258,8 +244,7 @@ export const StructTypeDialog = forwardRef<StructTypeDialogHandle, Props>(
               ))}
               <button
                 onClick={() => setFields([...fields, emptyField()])}
-                className="btn-secondary"
-                style={{ marginTop: "0.5rem" }}
+                className="btn-secondary struct-add-field"
               >
                 + フィールド追加
               </button>

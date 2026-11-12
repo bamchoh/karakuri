@@ -245,10 +245,7 @@ export const ServerPanel = forwardRef<ServerPanelHandle, ServerPanelProps>(
       null;
 
     return (
-      <div
-        className="panel"
-        style={{ display: "flex", flexDirection: "column", height: "100%" }}
-      >
+      <div className="panel panel-fill">
         {error && <div className="error-message">{error}</div>}
 
         <div className="server-vertical-tabs">
@@ -256,9 +253,7 @@ export const ServerPanel = forwardRef<ServerPanelHandle, ServerPanelProps>(
           <div className="server-tab-list">
             <div className="server-panel-header">
               <span>SERVERS</span>
-              <div
-                style={{ display: "flex", gap: "8px", alignItems: "center" }}
-              >
+              <div className="panel-header-actions">
                 <button
                   onClick={handleOpenAddDialog}
                   disabled={availableProtocols.length === 0}
@@ -317,7 +312,7 @@ export const ServerPanel = forwardRef<ServerPanelHandle, ServerPanelProps>(
           {serverInstances.length === 0 ? (
             <div className="server-instance-empty">
               サーバーが登録されていません。
-              <SquarePlus size={14} style={{ marginRight: "0.5rem" }} />
+              <SquarePlus className="icon-left" size={14} />
               ボタンでサーバーを追加してください。
             </div>
           ) : (

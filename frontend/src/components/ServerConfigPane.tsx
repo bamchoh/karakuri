@@ -185,9 +185,7 @@ export const ServerConfigPane = forwardRef<
       </div>
 
       {paneError && (
-        <div className="error-message" style={{ margin: "0.5rem 1rem" }}>
-          {paneError}
-        </div>
+        <div className="error-message config-error">{paneError}</div>
       )}
 
       <div className="vscode-settings-list">
