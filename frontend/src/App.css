@@ -740,6 +740,14 @@ button:disabled {
   color: #d4d4d4;
 }
 
+.console-entry.warn .console-message {
+  color: #fbbf24;
+}
+
+.console-entry.error .console-message {
+  color: #f87171;
+}
+
 .register-navigation {
   display: flex;
   align-items: center;
@@ -845,29 +853,6 @@ button:disabled {
 }
 
 /* Test Output */
-.test-output {
-  margin-top: 1rem;
-  padding: 1rem;
-  background: #020f06;
-  border-radius: 4px;
-  border: 1px solid #1a3d22;
-}
-
-.test-output label {
-  display: block;
-  margin-bottom: 0.5rem;
-  font-size: 0.75rem;
-  color: #9ca3af;
-}
-
-.test-output pre {
-  font-family: "Consolas", "Monaco", monospace;
-  font-size: 0.875rem;
-  color: #10b981;
-  white-space: pre-wrap;
-  word-break: break-all;
-}
-
 /* UnitID Toggle Grid */
 .config-section h3 {
   grid-column: 1 / -1;
@@ -1627,6 +1612,11 @@ button:disabled {
   border-top: 1px solid var(--border);
   position: sticky;
   bottom: 0;
+}
+
+.editor-footer-left {
+  display: flex;
+  gap: 0.5rem;
 }
 
 .editor-card {

@@ -10,8 +10,6 @@ export function ClearConsoleLogs():Promise<void>;
 
 export function ClearMonitoringItems():Promise<void>;
 
-export function ClearScriptError(arg1:string):Promise<void>;
-
 export function CreateScript(arg1:string,arg2:string,arg3:number):Promise<application.ScriptDTO>;
 
 export function CreateVariable(arg1:string,arg2:string,arg3:any):Promise<application.VariableDTO>;

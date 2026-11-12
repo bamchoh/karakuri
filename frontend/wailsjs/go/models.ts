@@ -47,6 +47,7 @@ export namespace application {
 	export class ConsoleLogDTO {
 	    scriptId: string;
 	    scriptName: string;
+	    level: string;
 	    message: string;
 	    at: number;
 	
@@ -58,6 +59,7 @@ export namespace application {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.scriptId = source["scriptId"];
 	        this.scriptName = source["scriptName"];
+	        this.level = source["level"];
 	        this.message = source["message"];
 	        this.at = source["at"];
 	    }
@@ -453,8 +455,6 @@ export namespace application {
 	    code: string;
 	    intervalMs: number;
 	    isRunning: boolean;
-	    lastError: string;
-	    errorAt: number;
 	    order: number;
 	
 	    static createFrom(source: any = {}) {
@@ -468,8 +468,6 @@ export namespace application {
 	        this.code = source["code"];
 	        this.intervalMs = source["intervalMs"];
 	        this.isRunning = source["isRunning"];
-	        this.lastError = source["lastError"];
-	        this.errorAt = source["errorAt"];
 	        this.order = source["order"];
 	    }
 	}

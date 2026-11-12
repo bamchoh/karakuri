@@ -19,10 +19,21 @@ const jsMaxSafeInt = int64(1) << 53 // 9007199254740992
 
 const maxConsoleLogs = 500
 
-// ConsoleLogEntry はconsole.logの1エントリ
+// コンソールログの種類
+const (
+	LogLevelLog   = "log"   // console.log() の出力、1 回実行の結果
+	LogLevelWarn  = "warn"  // 警告（メッセージの先頭に [WARN] が付く）
+	LogLevelError = "error" // スクリプトのエラー（メッセージの先頭に [ERROR] が付く）
+)
+
+// OnceScriptName は、1 回実行の出力に付けるスクリプト名
+const OnceScriptName = "1 回実行"
+
+// ConsoleLogEntry はコンソールログの1エントリ
 type ConsoleLogEntry struct {
 	ScriptID   string
 	ScriptName string
+	Level      string
 	Message    string
 	At         time.Time
 }
@@ -37,11 +48,9 @@ type ScriptEngine struct {
 }
 
 type runningScript struct {
-	script    *script.Script
-	cancel    context.CancelFunc
-	vm        *goja.Runtime
-	lastError string
-	errorAt   time.Time
+	script *script.Script
+	cancel context.CancelFunc
+	vm     *goja.Runtime
 }
 
 // NewScriptEngine は新しいスクリプトエンジンを作成する
@@ -59,6 +68,34 @@ func (e *ScriptEngine) SetOnLogAdded(cb func(ConsoleLogEntry)) {
 	e.mu.Unlock()
 }
 
+// addLog はコンソールログに 1 件追加し、コールバックで通知する（mu をロックしていない状態で呼ぶ）
+func (e *ScriptEngine) addLog(scriptID, scriptName, level, message string) {
+	switch level {
+	case LogLevelWarn:
+		message = "[WARN] " + message
+	case LogLevelError:
+		message = "[ERROR] " + message
+	}
+	fmt.Printf("[%s] %s\n", scriptName, message)
+	entry := ConsoleLogEntry{
+		ScriptID:   scriptID,
+		ScriptName: scriptName,
+		Level:      level,
+		Message:    message,
+		At:         time.Now(),
+	}
+	e.mu.Lock()
+	e.consoleLogs = append(e.consoleLogs, entry)
+	if len(e.consoleLogs) > maxConsoleLogs {
+		e.consoleLogs = e.consoleLogs[len(e.consoleLogs)-maxConsoleLogs:]
+	}
+	cb := e.onLogAdded
+	e.mu.Unlock()
+	if cb != nil {
+		cb(entry)
+	}
+}
+
 // createVM は新しいJavaScript VMを作成し、変数アクセス関数を登録する
 func (e *ScriptEngine) createVM(scriptID, scriptName string) *goja.Runtime {
 	vm := goja.New()
@@ -70,24 +107,7 @@ func (e *ScriptEngine) createVM(scriptID, scriptName string) *goja.Runtime {
 		for i, arg := range call.Arguments {
 			parts[i] = fmt.Sprintf("%v", arg.Export())
 		}
-		message := strings.Join(parts, " ")
-		fmt.Printf("[%s] %s\n", scriptName, message)
-		entry := ConsoleLogEntry{
-			ScriptID:   scriptID,
-			ScriptName: scriptName,
-			Message:    message,
-			At:         time.Now(),
-		}
-		e.mu.Lock()
-		e.consoleLogs = append(e.consoleLogs, entry)
-		if len(e.consoleLogs) > maxConsoleLogs {
-			e.consoleLogs = e.consoleLogs[len(e.consoleLogs)-maxConsoleLogs:]
-		}
-		cb := e.onLogAdded
-		e.mu.Unlock()
-		if cb != nil {
-			go cb(entry)
-		}
+		e.addLog(scriptID, scriptName, LogLevelLog, strings.Join(parts, " "))
 		return goja.Undefined()
 	})
 	vm.Set("console", console)
@@ -97,19 +117,7 @@ func (e *ScriptEngine) createVM(scriptID, scriptName string) *goja.Runtime {
 
 	// addConsoleWarn はコンソールログに警告を追加するヘルパー
 	addConsoleWarn := func(msg string) {
-		fmt.Printf("[WARN][%s] %s\n", scriptName, msg)
-		entry := ConsoleLogEntry{
-			ScriptID:   scriptID,
-			ScriptName: scriptName,
-			Message:    "[WARN] " + msg,
-			At:         time.Now(),
-		}
-		e.mu.Lock()
-		e.consoleLogs = append(e.consoleLogs, entry)
-		if len(e.consoleLogs) > maxConsoleLogs {
-			e.consoleLogs = e.consoleLogs[len(e.consoleLogs)-maxConsoleLogs:]
-		}
-		e.mu.Unlock()
+		e.addLog(scriptID, scriptName, LogLevelWarn, msg)
 	}
 
 	if e.variableStore != nil {
@@ -469,8 +477,18 @@ func toJSCompatibleValue(value any) any {
 	}
 }
 
-// StartScript はスクリプトを開始する
+// StartScript はスクリプトを開始する。
+// コンパイルできなければ、エラーを返し、コンソールにも出す。
+// 実行中のエラーはコンソールに出す（同じエラーが続く間は、最初の 1 回だけ）。
 func (e *ScriptEngine) StartScript(s *script.Script) error {
+	err := e.startScript(s)
+	if err != nil {
+		e.addLog(s.ID, s.Name, LogLevelError, err.Error())
+	}
+	return err
+}
+
+func (e *ScriptEngine) startScript(s *script.Script) error {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 
@@ -486,7 +504,7 @@ func (e *ScriptEngine) StartScript(s *script.Script) error {
 	wrappedCode := "(function(){\n" + s.Code + "\n})();"
 	program, err := goja.Compile(s.Name, wrappedCode, false)
 	if err != nil {
-		return fmt.Errorf("failed to compile script: %w", err)
+		return fmt.Errorf("スクリプトをコンパイルできません: %w", err)
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -503,40 +521,39 @@ func (e *ScriptEngine) StartScript(s *script.Script) error {
 		ticker := time.NewTicker(s.Interval)
 		defer ticker.Stop()
 
+		// 直前の実行のエラー（成功なら空）。同じエラーが続く間は、コンソールに出し直さない
+		lastErr := ""
 		for {
 			select {
 			case <-ctx.Done():
 				return
 			case <-ticker.C:
-				func() {
-					defer func() {
-						if r := recover(); r != nil {
-							errMsg := fmt.Sprintf("panic: %v", r)
-							fmt.Printf("Script %s panicked: %v\n", s.Name, r)
-							e.mu.Lock()
-							if cur, ok := e.scripts[s.ID]; ok {
-								cur.lastError = errMsg
-								cur.errorAt = time.Now()
-							}
-							e.mu.Unlock()
-						}
-					}()
-					_, runErr := vm.RunProgram(program)
-					if runErr != nil {
-						fmt.Printf("Script %s error: %v\n", s.Name, runErr)
-						e.mu.Lock()
-						if cur, ok := e.scripts[s.ID]; ok {
-							cur.lastError = runErr.Error()
-							cur.errorAt = time.Now()
-						}
-						e.mu.Unlock()
-					}
-				}()
+				errMsg := runProgram(vm, program)
+				if ctx.Err() != nil {
+					return // 実行中に停止された
+				}
+				if errMsg != "" && errMsg != lastErr {
+					e.addLog(s.ID, s.Name, LogLevelError, errMsg)
+				}
+				lastErr = errMsg
 			}
 		}
 	}()
 
 	return nil
+}
+
+// runProgram はプログラムを 1 回実行し、エラーの内容を返す（成功なら空）。panic もエラーとして返す
+func runProgram(vm *goja.Runtime, program *goja.Program) (errMsg string) {
+	defer func() {
+		if r := recover(); r != nil {
+			errMsg = fmt.Sprintf("panic: %v", r)
+		}
+	}()
+	if _, err := vm.RunProgram(program); err != nil {
+		return err.Error()
+	}
+	return ""
 }
 
 // StopScript はスクリプトを停止する
@@ -585,29 +602,6 @@ func (e *ScriptEngine) GetRunningScripts() []string {
 	return ids
 }
 
-// GetLastError はスクリプトの最新エラー情報を返す
-func (e *ScriptEngine) GetLastError(scriptID string) (string, time.Time) {
-	e.mu.Lock()
-	defer e.mu.Unlock()
-
-	rs, ok := e.scripts[scriptID]
-	if !ok {
-		return "", time.Time{}
-	}
-	return rs.lastError, rs.errorAt
-}
-
-// ClearError はスクリプトのエラー情報をクリアする
-func (e *ScriptEngine) ClearError(scriptID string) {
-	e.mu.Lock()
-	defer e.mu.Unlock()
-
-	if rs, ok := e.scripts[scriptID]; ok {
-		rs.lastError = ""
-		rs.errorAt = time.Time{}
-	}
-}
-
 // GetConsoleLogs はコンソールログの一覧を返す
 func (e *ScriptEngine) GetConsoleLogs() []ConsoleLogEntry {
 	e.mu.Lock()
@@ -624,12 +618,43 @@ func (e *ScriptEngine) ClearConsoleLogs() {
 	e.consoleLogs = nil
 }
 
-// RunOnce はスクリプトを1回だけ実行する（テスト用）
+// RunOnce はコードを 1 回だけ実行し、最後の式の値を返す（保存も周期実行もしない）。
+// 結果とエラーは、コンソールにも OnceScriptName の名前で出す。
+//
+// 周期実行のスクリプトは関数で包んで実行するので、トップレベルに return を書ける。
+// 同じコードを 1 回実行でも動かせるよう、そのままコンパイルできなければ関数で包んで実行する。
 func (e *ScriptEngine) RunOnce(code string) (any, error) {
-	vm := e.createVM("", "テスト実行")
-	result, err := vm.RunString(code)
+	result, err := e.runOnce(code)
+	switch {
+	case err != nil:
+		e.addLog("", OnceScriptName, LogLevelError, err.Error())
+	case result != nil:
+		e.addLog("", OnceScriptName, LogLevelLog, fmt.Sprintf("=> %v", result))
+	default:
+		e.addLog("", OnceScriptName, LogLevelLog, "完了")
+	}
+	return result, err
+}
+
+func (e *ScriptEngine) runOnce(code string) (result any, err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			result, err = nil, fmt.Errorf("panic: %v", r)
+		}
+	}()
+
+	program, err := goja.Compile(OnceScriptName, code, false)
+	if err != nil {
+		wrapped, wrapErr := goja.Compile(OnceScriptName, "(function(){\n"+code+"\n})();", false)
+		if wrapErr != nil {
+			return nil, err // 包んでもコンパイルできないなら、元のエラーを返す
+		}
+		program = wrapped
+	}
+
+	value, err := e.createVM("", OnceScriptName).RunProgram(program)
 	if err != nil {
 		return nil, err
 	}
-	return result.Export(), nil
+	return value.Export(), nil
 }

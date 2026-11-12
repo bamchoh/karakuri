@@ -1006,3 +1006,36 @@ func TestPLCService_ExportImport_RoundTrip(t *testing.T) {
 		t.Errorf("expected 1 monitoring item, got %d", len(items))
 	}
 }
+
+// 実行中のスクリプトを、コンパイルできないコードで保存すると、エラーが返り、スクリプトは停止する（変更は保存される）
+func TestPLCService_UpdateScript_CompileErrorWhileRunning(t *testing.T) {
+	svc := newTestService(t)
+
+	created, _ := svc.CreateScript("runner", `1+1`, 50)
+	if err := svc.StartScript(created.ID); err != nil {
+		t.Fatalf("StartScript failed: %v", err)
+	}
+
+	if err := svc.UpdateScript(created.ID, "runner", `invalid syntax {{{`, 50); err == nil {
+		t.Fatal("コンパイルできないコードの保存はエラーになるはず")
+	}
+
+	got, _ := svc.GetScript(created.ID)
+	if got.IsRunning {
+		t.Error("スクリプトは停止しているはず")
+	}
+	if got.Code != `invalid syntax {{{` {
+		t.Errorf("変更は保存されているはず: %q", got.Code)
+	}
+
+	// エラーはコンソールログにも出る
+	logs := svc.GetConsoleLogs()
+	if len(logs) != 1 || logs[0].Level != "error" || logs[0].ScriptName != "runner" {
+		t.Errorf("コンソールログ = %+v", logs)
+	}
+
+	// 止まっているスクリプトの保存は、コンパイルできなくてもエラーにしない（開始するときにエラーになる）
+	if err := svc.UpdateScript(created.ID, "runner", `still invalid {{{`, 50); err != nil {
+		t.Errorf("停止中の保存はエラーにしない: %v", err)
+	}
+}

@@ -1,6 +1,9 @@
 package scripting
 
 import (
+	"reflect"
+	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -362,5 +365,174 @@ func TestScriptEngine_IsRunning(t *testing.T) {
 
 	if engine.IsRunning("test-1") {
 		t.Error("expected false after stop")
+	}
+}
+
+// ===== コンソールログ（エラー・警告・1 回実行の結果） =====
+
+// logRecorder は、コンソールログの通知（SetOnLogAdded）を記録する
+type logRecorder struct {
+	mu      sync.Mutex
+	entries []ConsoleLogEntry
+}
+
+func recordLogs(engine *ScriptEngine) *logRecorder {
+	r := &logRecorder{}
+	engine.SetOnLogAdded(func(e ConsoleLogEntry) {
+		r.mu.Lock()
+		r.entries = append(r.entries, e)
+		r.mu.Unlock()
+	})
+	return r
+}
+
+// messages は、指定した種類のログのメッセージを返す
+func (r *logRecorder) messages(level string) []string {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	var result []string
+	for _, e := range r.entries {
+		if e.Level == level {
+			result = append(result, e.Message)
+		}
+	}
+	return result
+}
+
+// 1 回実行の結果とエラーは、コンソールに「1 回実行」の名前で出る
+func TestScriptEngine_RunOnce_LogsResultAndError(t *testing.T) {
+	engine, _ := newTestEngine()
+	rec := recordLogs(engine)
+
+	if _, err := engine.RunOnce(`console.log("hello"); 1 + 2`); err != nil {
+		t.Fatal(err)
+	}
+	if got, want := rec.messages(LogLevelLog), []string{"hello", "=> 3"}; !reflect.DeepEqual(got, want) {
+		t.Errorf("ログ = %q, want %q", got, want)
+	}
+
+	// 値を返さないコードは「完了」
+	if _, err := engine.RunOnce(`var x = 1;`); err != nil {
+		t.Fatal(err)
+	}
+	if got := rec.messages(LogLevelLog); got[len(got)-1] != "完了" {
+		t.Errorf("最後のログ = %q, want 完了", got[len(got)-1])
+	}
+
+	// エラーは [ERROR] として出る（実行時のエラーと構文エラー）
+	if _, err := engine.RunOnce(`throw new Error("boom")`); err == nil {
+		t.Fatal("エラーになるはず")
+	}
+	if _, err := engine.RunOnce(`invalid syntax {{{`); err == nil {
+		t.Fatal("エラーになるはず")
+	}
+	errs := rec.messages(LogLevelError)
+	if len(errs) != 2 || !strings.HasPrefix(errs[0], "[ERROR] ") || !strings.Contains(errs[0], "boom") || !strings.HasPrefix(errs[1], "[ERROR] ") {
+		t.Errorf("エラーのログ = %q", errs)
+	}
+
+	// バッファにも同じ内容が入り、スクリプト名は「1 回実行」
+	for _, e := range engine.GetConsoleLogs() {
+		if e.ScriptName != OnceScriptName {
+			t.Errorf("ScriptName = %q, want %q", e.ScriptName, OnceScriptName)
+		}
+	}
+	if got, want := len(engine.GetConsoleLogs()), 5; got != want {
+		t.Errorf("バッファの件数 = %d, want %d", got, want)
+	}
+}
+
+// 周期実行のスクリプトと同じく、トップレベルに return を書いたコードも 1 回実行できる
+func TestScriptEngine_RunOnce_TopLevelReturn(t *testing.T) {
+	engine, vs := newTestEngine()
+	if _, err := vs.CreateVariable("Counter", variable.TypeINT, int16(0)); err != nil {
+		t.Fatal(err)
+	}
+
+	result, err := engine.RunOnce(`
+		plc.writeVariable("Counter", 5);
+		if (plc.readVariable("Counter") === 5) { return 42; }
+		plc.writeVariable("Counter", 9);
+	`)
+	if err != nil {
+		t.Fatalf("RunOnce: %v", err)
+	}
+	if result != int64(42) {
+		t.Errorf("result = %v (%T), want 42", result, result)
+	}
+	if v, _ := vs.GetVariableByName("Counter"); v.Value != int16(5) {
+		t.Errorf("Counter = %v, want 5", v.Value)
+	}
+}
+
+// 周期実行のエラーはコンソールに出る。同じエラーが続く間は最初の 1 回だけで、直ったあとにまた起きたら出し直す
+func TestScriptEngine_RuntimeError_LoggedOncePerStreak(t *testing.T) {
+	engine, vs := newTestEngine()
+	rec := recordLogs(engine)
+	if _, err := vs.CreateVariable("Fail", variable.TypeBOOL, true); err != nil {
+		t.Fatal(err)
+	}
+
+	s := script.NewScript("err-1", "failing", `if (plc.readVariable("Fail")) { throw new Error("boom"); }`, 10*time.Millisecond, 0)
+	if err := engine.StartScript(s); err != nil {
+		t.Fatal(err)
+	}
+	defer engine.StopAll()
+
+	// 何周期も失敗しても、ログは 1 件
+	time.Sleep(150 * time.Millisecond)
+	errs := rec.messages(LogLevelError)
+	if len(errs) != 1 || !strings.Contains(errs[0], "boom") {
+		t.Fatalf("エラーのログ = %q, want 1 件", errs)
+	}
+	if !engine.IsRunning("err-1") {
+		t.Error("エラーが出ても実行は続くはず")
+	}
+
+	// 直ってから、また失敗すると出し直す
+	vs.UpdateValueByName("Fail", false)
+	time.Sleep(80 * time.Millisecond)
+	vs.UpdateValueByName("Fail", true)
+	time.Sleep(150 * time.Millisecond)
+	if got := len(rec.messages(LogLevelError)); got != 2 {
+		t.Errorf("エラーのログ = %d 件, want 2", got)
+	}
+}
+
+// コンパイルできないスクリプトは開始できず、エラーがコンソールに出る
+func TestScriptEngine_StartScript_CompileError_Logged(t *testing.T) {
+	engine, _ := newTestEngine()
+	rec := recordLogs(engine)
+
+	s := script.NewScript("bad-1", "bad", `invalid syntax {{{`, 100*time.Millisecond, 0)
+	if err := engine.StartScript(s); err == nil {
+		t.Fatal("エラーになるはず")
+	}
+	if engine.IsRunning("bad-1") {
+		t.Error("開始されていないはず")
+	}
+	errs := rec.messages(LogLevelError)
+	if len(errs) != 1 || !strings.HasPrefix(errs[0], "[ERROR] ") {
+		t.Errorf("エラーのログ = %q", errs)
+	}
+	if logs := engine.GetConsoleLogs(); len(logs) != 1 || logs[0].ScriptName != "bad" || logs[0].ScriptID != "bad-1" {
+		t.Errorf("バッファ = %+v", logs)
+	}
+}
+
+// 警告（2^53 を超える LINT の読み取り）も、コンソールへの追加が通知される
+func TestScriptEngine_Warn_Notified(t *testing.T) {
+	engine, vs := newTestEngine()
+	rec := recordLogs(engine)
+	if _, err := vs.CreateVariable("Big", variable.TypeLINT, int64(1)<<60); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := engine.RunOnce(`plc.readVariable("Big"); undefined`); err != nil {
+		t.Fatal(err)
+	}
+	warns := rec.messages(LogLevelWarn)
+	if len(warns) != 1 || !strings.HasPrefix(warns[0], "[WARN] ") {
+		t.Errorf("警告のログ = %q", warns)
 	}
 }

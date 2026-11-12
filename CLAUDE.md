@@ -15,7 +15,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **マルチプロトコル対応**: Modbus TCP / Modbus RTU / Modbus ASCII / OPC UA を個別のサーバーとして起動可能
 - **複数サーバー同時実行**: 異なるプロトコル（例: Modbus TCP + OPC UA）を同時に起動可能。各サーバーは独立したメモリ空間を持つ
 - **変数管理**: IEC 61131-3準拠のデータ型（スカラー、配列、構造体、STRING[n]）をサポート。OPC UA でノードとして公開可能
-- **スクリプト機能**: JavaScriptで周期処理を記述。const/let対応（IIFE wrapping）、実行エラーのGUI表示
+- **スクリプト機能**: JavaScriptで周期処理を記述。const/let対応（IIFE wrapping）、結果とエラーはコンソールに表示
 - **レジスタ操作**: GUIからメモリエリアの値を直接操作可能
 - **モニタリング**: 任意のレジスタをリアルタイム監視・書き込み（ドラッグ&ドロップ並べ替え対応）
 - **プロトコルマッピング**: 変数を複数プロトコルのメモリアドレスにマッピング可能
@@ -55,10 +55,10 @@ go build ./...
 
 `frontend/e2e/` に、ブラウザで画面を操作して確認するテストがある。`task dev` が立てる開発用サーバー（`http://localhost:34115`）に接続するため、Go 側の API とプロトコルの実装を含めた動作を確認できる。手順と注意は `frontend/e2e/README.md` を参照。
 
-- 画面ごとのテスト: サーバー画面 `server-panel.spec.ts`、変数画面 `variable-dialogs.spec.ts` / `node-publishing.spec.ts`、レジスタ画面 `register-panel.spec.ts` / `monitoring.spec.ts`
+- 画面ごとのテスト: サーバー画面 `server-panel.spec.ts`、変数画面 `variable-dialogs.spec.ts` / `node-publishing.spec.ts`、レジスタ画面 `register-panel.spec.ts` / `monitoring.spec.ts`、スクリプト画面 `script-panel.spec.ts`
 - 画面を変更したら、該当するテストを実行する（なければ追加する）。`shot()` で撮ったスクリーンショット（`frontend/e2e/.screenshots/`）で見た目も確認する
 - データの準備は `api(page, "メソッド名", ...)` で Go 側の API を直接呼び、確認したい操作だけを画面で行う
-- **テストはアプリのサーバー・変数・モニタリング項目をすべて削除する。** 開発サーバーは `KARAKURI_CONFIG_DIR` を一時フォルダに向けて起動する
+- **テストはアプリのサーバー・変数・モニタリング項目・スクリプトをすべて削除する。** 開発サーバーは `KARAKURI_CONFIG_DIR` を一時フォルダに向けて起動する
 - Playwright のバージョンは固定（インストール済みの Chromium と対応させるため）
 
 ### フロントエンドビルドターゲット
@@ -208,8 +208,7 @@ internal/
 - **ScriptEngine** (`internal/infrastructure/scripting/engine.go`): gojaベースのJavaScript実行エンジン
   - `plc`オブジェクトでDataStoreおよびVariableStoreにアクセス可能
   - スクリプトコードをIIFE `(function(){...})();` でラップして、const/let再宣言エラーを回避
-  - 実行時エラーを保存して`GetLastError()`で取得可能
-  - 周期実行中のpanicをキャッチしてエラーとして記録
+  - エラー（コンパイルエラー・実行時のエラー・panic）はコンソールログに `[ERROR]` として出す。周期実行では、同じエラーが続く間は最初の 1 回だけ出す
   - TIME/DATE型シンタックスシュガー: `plc.readTimeMs(name)`, `plc.writeTimeMs(name, ms)` など、変数の読み取り〜数値変換〜書き込みをワンステップで実行（内部でparse/formatを自動適用）
   - LINT/ULINT BigInt API: `plc.readLintBig(name)`, `plc.writeLintBig(name, val)`, `plc.readUlintBig(name)`, `plc.writeUlintBig(name, val)`（2^53超の値をJavaScript BigInt型で精度損失なく操作。`readVariable()` で±2^53超の値を読んだ場合はコンソールに `[WARN]` を出力）
 
@@ -244,7 +243,7 @@ frontend/src/
 │   ├── variableTypes.ts    # 変数のデータ型・値の純粋関数と行の型定義（state に依存しない）
 │   ├── useNodeAddresses.ts # ノードアドレス（OPC UA の NodeID 等）の取得と保持（マッピングの 2 つのダイアログで使用）
 │   ├── useEscapeKey.ts     # Esc キーでダイアログを閉じるためのフック
-│   └── ScriptPanel.tsx     # スクリプト管理（エラー表示機能付き）
+│   └── ScriptPanel.tsx     # スクリプト管理（一覧・編集・1 回実行・コンソール）
 └── App.tsx                 # タブベースのメインUI
 ```
 
@@ -330,11 +329,16 @@ frontend/src/
 
 #### ScriptPanel.tsx
 JavaScript（goja）でPLC動作を記述。
-- **エラー表示**: 実行時エラーをGUIに表示（タイムスタンプ付き、クリアボタン）
-- **コンソールログ表示**: スクリプト一覧の下に「コンソール」セクションを常時表示
-  - `console.log()` の出力をタイムスタンプ・スクリプト名付きで一覧表示
-  - 新しいログ追加時に自動スクロール、クリアボタン付き
-  - テスト実行（「テスト実行」ボタン）時の出力もスクリプト名「テスト実行」で表示
+- **構成**: 左にスクリプトの一覧（開始・停止ボタン）、右に選択したスクリプトの編集欄（`ScriptEditPanel`）、その下にコンソール
+  - 選択は ID（`selectedId`）で持ち、表示するスクリプトは一覧から引く（実行中かどうかなどが古くならないようにするため）
+  - 編集欄は入力中の内容を自分で持ち、`key` にスクリプトの ID を渡して選び直すたびに作り直す
+- **コンソール**: スクリプトの出力はすべてここに出る（タイムスタンプ・スクリプト名付き、自動スクロール、クリアボタン）
+  - `console.log()` の出力、警告（`[WARN]`、黄色）、エラー（`[ERROR]`、赤）。種類は `ConsoleLogDTO.level`（`log` / `warn` / `error`）
+  - スクリプトごとの「最後のエラー」の表示はない（エラーはコンソールで見る）
+  - Wails イベント `plc:console-log-added` で 1 件ずつ受け取る（ポーリングしない）
+- **1 回実行**: 編集欄の「1 回実行」ボタンで、入力中のコードを保存せずに 1 回だけ実行する（`RunScriptOnce`）。結果（`=> 値` または `完了`）とエラーは、スクリプト名「1 回実行」でコンソールに出る
+- **操作のエラー**: 保存・削除・開始・停止に失敗したときは、コンソールの上にエラーを表示する（次の操作が成功すると消える）
+- **画面のテスト**: `frontend/e2e/script-panel.spec.ts`
 - **const/let対応**: スクリプトコードをIIFEでラップして再宣言エラーを回避
 - **plcオブジェクト**:
   - メモリアクセス: `plc.readBit()`, `plc.writeBit()`, `plc.readWord()`, `plc.writeWord()`
@@ -380,9 +384,8 @@ JavaScript（goja）でPLC動作を記述。
   - `UpdateVariableNodePublishing(variableID, protocolType, dto)`: ノード公開設定（公開するか・アクセスモード）
 - **スクリプト**:
   - `GetScripts()`, `GetScript()`, `CreateScript()`, `UpdateScript()`, `DeleteScript()`: スクリプトCRUD操作
-  - `StartScript()`, `StopScript()`, `RunScriptOnce()`: スクリプト実行制御（`RunScriptOnce` はテスト実行）
+  - `StartScript()`, `StopScript()`, `RunScriptOnce(code)`: スクリプト実行制御（`RunScriptOnce` は、渡したコードを保存せずに 1 回だけ実行する）
   - `GetIntervalPresets()`: 実行周期の選択肢
-  - `ClearScriptError()`: スクリプトエラーをクリア
   - `GetConsoleLogs()`, `ClearConsoleLogs()`: コンソールログの取得・クリア
 - **プロジェクト**:
   - `ExportProject()`, `ImportProject()`: プロジェクトのファイルへの保存・読み込み
@@ -503,10 +506,13 @@ JavaScript（goja）でPLC動作を記述。
 ### スクリプトエンジン
 
 - **const/let対応**: goja VMで同じプログラムを周期的に実行すると再宣言エラーが発生するため、IIFEでラップ
-- **エラーハンドリング**: runtime panic をキャッチして`lastError`フィールドに保存し、GUI表示可能に
-- **コンソールログ**: `console.log()` はバッファ（最大500件）に蓄積。`ConsoleLogEntry` に scriptID・scriptName・message・At を保存。フロントエンドは1秒ポーリングで `GetConsoleLogs()` を取得して表示。ミューテックスで保護
+- **コンソールログ**: 出力はすべて `ScriptEngine.addLog()` を通る。バッファ（最大500件）に入れ、コールバック（`SetOnLogAdded`）で通知する。`ConsoleLogEntry` は scriptID・scriptName・Level・Message・At を持つ
+  - 画面は、開いたときに `GetConsoleLogs()` でバッファを読み、以後は Wails イベント `plc:console-log-added` で受け取る
   - `createVM(scriptID, scriptName string)` にスクリプト識別子を渡すことで、どのスクリプトの出力かを記録
-  - テスト実行（`RunOnce`）は scriptID="" / scriptName="テスト実行" でバッファに追加
+- **エラー**: コンパイルエラー・実行時のエラー・panic は、`[ERROR]` としてコンソールログに出す（スクリプトごとに保存はしない）
+  - 周期実行では、同じエラーが続く間は最初の 1 回だけ出す（毎周期出すとコンソールが埋まるため）。成功を挟んでまた起きたら出し直す。エラーが出ても実行は続ける
+  - 実行中のスクリプトを保存して新しいコードがコンパイルできなかった場合、スクリプトは停止し、`UpdateScript()` はエラーを返す（変更は保存される）
+- **1 回実行（`RunOnce`）**: scriptID="" / scriptName="1 回実行" で、結果とエラーをコンソールログに出す。そのままコンパイルできないコード（トップレベルの `return` など）は、周期実行と同じように関数で包んで実行する
 
 ### ダイアログスタイルの統一
 

@@ -100,10 +100,11 @@ type UnitIDSettingsDTO struct {
 
 // === スクリプトDTO ===
 
-// ConsoleLogDTO はconsole.logの1エントリのDTO
+// ConsoleLogDTO はコンソールログの1エントリのDTO
 type ConsoleLogDTO struct {
 	ScriptID   string `json:"scriptId"`
 	ScriptName string `json:"scriptName"`
+	Level      string `json:"level"` // "log" | "warn" | "error"
 	Message    string `json:"message"`
 	At         int64  `json:"at"` // Unix ミリ秒
 }
@@ -115,8 +116,6 @@ type ScriptDTO struct {
 	Code       string `json:"code"`
 	IntervalMs int    `json:"intervalMs"`
 	IsRunning  bool   `json:"isRunning"`
-	LastError  string `json:"lastError"`
-	ErrorAt    int64  `json:"errorAt"`
 	Order      int    `json:"order"`
 }
 
