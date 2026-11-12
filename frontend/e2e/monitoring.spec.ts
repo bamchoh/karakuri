@@ -267,6 +267,27 @@ test.describe("モニタリング", () => {
     await expect(value(rows(page).nth(1))).toHaveText("0xDEADBEEF");
   });
 
+  test("書き込みダイアログを開くと、入力欄の値が選択された状態になる", async ({
+    page,
+  }) => {
+    await addItem(page, 0);
+    await writeWord(page, 0, 1234);
+    await openRegisters(page, "モニタリング");
+    await expect(value(rows(page).first())).toHaveText("1234");
+    await value(rows(page).first()).click();
+    const dialog = writeDialog(page);
+    const input = dialog.locator("input.dialog-input");
+    await expect(input).toBeFocused();
+
+    // そのまま打つと、元の値を置き換える
+    await page.waitForTimeout(150);
+    await page.keyboard.type("56");
+    await expect(input).toHaveValue("56");
+    await page.keyboard.press("Enter");
+    await expect(dialog).toBeHidden();
+    expect(await readWords(page, 0)).toEqual([56]);
+  });
+
   test("ビットの項目は ON / OFF で表示し、文字で書き込む", async ({
     page,
   }) => {

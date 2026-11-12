@@ -116,6 +116,25 @@ test.describe("レジスタの一覧表示", () => {
     await shot(page, "register-list");
   });
 
+  test("書き込みダイアログを開くと、入力欄の値が選択された状態になる", async ({
+    page,
+  }) => {
+    await writeWord(page, 0, 1234);
+    await expect(cells(page).first()).toHaveText("1234");
+    await cells(page).first().click();
+    const dialog = writeDialog(page);
+    const input = dialog.locator("input.dialog-input");
+    await expect(input).toBeFocused();
+
+    // そのまま打つと、元の値を置き換える
+    await page.waitForTimeout(150);
+    await page.keyboard.type("56");
+    await expect(input).toHaveValue("56");
+    await page.keyboard.press("Enter");
+    await expect(dialog).toBeHidden();
+    expect(await readWords(page, 0)).toEqual([56]);
+  });
+
   test("表示形式を変えられ、ダイアログの入力形式で値を変換できる", async ({
     page,
   }) => {
