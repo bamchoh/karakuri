@@ -41,6 +41,42 @@ export async function resetApp(page: Page) {
     await api(page, "StopServer", s.protocolType).catch(() => {});
     await api(page, "RemoveServer", s.protocolType);
   }
+  await api(page, "ClearMonitoringItems");
+}
+
+// ===== サーバー画面・レジスタ画面の操作 =====
+
+export async function openServers(page: Page) {
+  await page.getByTitle("Server", { exact: true }).click();
+  await expect(page.locator(".server-vertical-tabs")).toBeVisible();
+}
+
+// レジスタ画面を開く。tab を渡すとサブタブ（一覧表示 / モニタリング）も切り替える
+export async function openRegisters(
+  page: Page,
+  tab?: "一覧表示" | "モニタリング",
+) {
+  await page.getByTitle("Registers").click();
+  await expect(page.locator(".sub-tab-nav")).toBeVisible();
+  if (tab) {
+    await page.locator(".sub-tab-button", { hasText: tab }).click();
+  }
+}
+
+// 保持レジスタ（0 始まりのアドレス）を読む・書く
+export async function readWords(page: Page, address: number, count = 1) {
+  return api<number[]>(
+    page,
+    "ReadWords",
+    "modbus-tcp",
+    "holdingRegisters",
+    address,
+    count,
+  );
+}
+
+export async function writeWord(page: Page, address: number, value: number) {
+  await api(page, "WriteWord", "modbus-tcp", "holdingRegisters", address, value);
 }
 
 // ===== 変数画面の操作 =====

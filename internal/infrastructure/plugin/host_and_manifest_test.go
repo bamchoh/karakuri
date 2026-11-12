@@ -174,6 +174,50 @@ func TestHost_WriteValues(t *testing.T) {
 	})
 }
 
+// 符号なし整数の大きな値・文字列・構造体の書き込み（#43: 以前はホストが拒否していた）
+func TestHost_WriteValues_UnsignedStringsAndStructs(t *testing.T) {
+	vars, acc := startHost(t)
+	registerPoint(t, vars)
+	checkWrites(t, vars, acc, []writeCase{
+		// 128 以上の符号なし整数は、MessagePack から uint64 で届く
+		{"USINT", uint8(200), "200"},
+		{"UINT", uint16(60000), "60000"},
+		{"UDINT", uint32(4000000000), "4000000000"},
+		{"ARRAY[0..1] OF UINT", []interface{}{uint16(1), uint16(60000)}, "[1 60000]"},
+		// 文字列
+		{"STRING", "hello", "hello"},
+		{"STRING[3]", "hello", "hel"},
+		{"STRING", "日本語", "日本語"},
+		{"TIME", "T#1s", "T#1s"},
+		{"DATE", "D#2024-01-01", "D#2024-01-01"},
+		{"TIME_OF_DAY", "TOD#12:30:15", "TOD#12:30:15"},
+		{"DATE_AND_TIME", "DT#2024-01-01-12:30:15", "DT#2024-01-01-12:30:15"},
+		{"ARRAY[0..1] OF STRING[5]", []interface{}{"a", "b"}, "[a b]"},
+		// 構造体（OPC UA プラグインは JSON を map にして渡す）
+		{"Point", map[string]interface{}{"x": float64(7), "y": 0.5}, "map[x:7 y:0.5]"},
+		{"ARRAY[0..1] OF Point", []interface{}{
+			map[string]interface{}{"x": float64(1), "y": 1.5},
+			map[string]interface{}{"x": float64(2), "y": 2.5},
+		}, "[map[x:1 y:1.5] map[x:2 y:2.5]]"},
+	})
+
+	// フィールド・要素への書き込みでも同じ
+	s, _ := vars.CreateVariable("Names", "ARRAY[0..1] OF STRING[5]", nil)
+	if err := acc.WriteVariableFieldValue(s.ID, "[1]", "abc"); err != nil {
+		t.Errorf("文字列の要素への書き込み: %v", err)
+	}
+	if got, _ := vars.GetVariable(s.ID); fmt.Sprint(got.Value) != "[ abc]" {
+		t.Errorf("文字列の要素への書き込み後 = %v", got.Value)
+	}
+	u, _ := vars.CreateVariable("Counts", "ARRAY[0..1] OF UINT", nil)
+	if err := acc.WriteVariableFieldValue(u.ID, "[0]", uint16(60000)); err != nil {
+		t.Errorf("符号なし整数の要素への書き込み: %v", err)
+	}
+	if got, _ := vars.GetVariable(u.ID); fmt.Sprint(got.Value) != "[60000 0]" {
+		t.Errorf("符号なし整数の要素への書き込み後 = %v", got.Value)
+	}
+}
+
 func TestHost_WriteFieldAndStructFields(t *testing.T) {
 	vars, acc := startHost(t)
 	registerPoint(t, vars)

@@ -629,3 +629,42 @@ func TestWordsToValue_UnsupportedType(t *testing.T) {
 		t.Error("WordsToValue with unknown type should return error")
 	}
 }
+
+// MessagePack から読んだ符号なし整数は uint64 で届く（プラグインからの書き込み）
+func TestConvertValue_FromUint64(t *testing.T) {
+	cases := []struct {
+		dataType DataType
+		want     interface{}
+	}{
+		{TypeSINT, int8(100)},
+		{TypeINT, int16(100)},
+		{TypeDINT, int32(100)},
+		{TypeLINT, int64(100)},
+		{TypeUSINT, uint8(100)},
+		{TypeUINT, uint16(100)},
+		{TypeUDINT, uint32(100)},
+		{TypeULINT, uint64(100)},
+		{TypeREAL, float32(100)},
+		{TypeLREAL, float64(100)},
+	}
+	for _, c := range cases {
+		got, err := ConvertValue(uint64(100), c.dataType)
+		if err != nil {
+			t.Errorf("%s: %v", c.dataType, err)
+			continue
+		}
+		if got != c.want {
+			t.Errorf("%s: got %v (%T), want %v (%T)", c.dataType, got, got, c.want, c.want)
+		}
+	}
+	// 型の最大値まで入る
+	if got, _ := ConvertValue(uint64(255), TypeUSINT); got != uint8(255) {
+		t.Errorf("USINT 255 → %v", got)
+	}
+	if got, _ := ConvertValue(uint64(65535), TypeUINT); got != uint16(65535) {
+		t.Errorf("UINT 65535 → %v", got)
+	}
+	if got, _ := ConvertValue(uint64(4294967295), TypeUDINT); got != uint32(4294967295) {
+		t.Errorf("UDINT 4294967295 → %v", got)
+	}
+}

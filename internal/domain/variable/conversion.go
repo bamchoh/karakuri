@@ -34,6 +34,8 @@ func ConvertValue(value interface{}, dataType DataType) (interface{}, error) {
 			return int8(v), nil
 		case int64:
 			return int8(v), nil
+		case uint64:
+			return int8(v), nil
 		}
 	case TypeINT:
 		switch v := value.(type) {
@@ -44,6 +46,8 @@ func ConvertValue(value interface{}, dataType DataType) (interface{}, error) {
 		case int:
 			return int16(v), nil
 		case int64:
+			return int16(v), nil
+		case uint64:
 			return int16(v), nil
 		}
 	case TypeDINT:
@@ -56,6 +60,8 @@ func ConvertValue(value interface{}, dataType DataType) (interface{}, error) {
 			return int32(v), nil
 		case int64:
 			return int32(v), nil
+		case uint64:
+			return int32(v), nil
 		}
 	case TypeUSINT:
 		switch v := value.(type) {
@@ -66,6 +72,8 @@ func ConvertValue(value interface{}, dataType DataType) (interface{}, error) {
 		case int:
 			return uint8(v), nil
 		case int64:
+			return uint8(v), nil
+		case uint64:
 			return uint8(v), nil
 		}
 	case TypeUINT:
@@ -78,6 +86,8 @@ func ConvertValue(value interface{}, dataType DataType) (interface{}, error) {
 			return uint16(v), nil
 		case int64:
 			return uint16(v), nil
+		case uint64:
+			return uint16(v), nil
 		}
 	case TypeUDINT:
 		switch v := value.(type) {
@@ -88,6 +98,8 @@ func ConvertValue(value interface{}, dataType DataType) (interface{}, error) {
 		case int:
 			return uint32(v), nil
 		case int64:
+			return uint32(v), nil
+		case uint64:
 			return uint32(v), nil
 		}
 	case TypeLINT:
@@ -136,6 +148,8 @@ func ConvertValue(value interface{}, dataType DataType) (interface{}, error) {
 			return float32(v), nil
 		case int64:
 			return float32(v), nil
+		case uint64:
+			return float32(v), nil
 		}
 	case TypeLREAL:
 		switch v := value.(type) {
@@ -146,6 +160,8 @@ func ConvertValue(value interface{}, dataType DataType) (interface{}, error) {
 		case int:
 			return float64(v), nil
 		case int64:
+			return float64(v), nil
+		case uint64:
 			return float64(v), nil
 		}
 	case TypeSTRING:

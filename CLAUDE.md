@@ -61,9 +61,10 @@ go build ./...
 
 `frontend/e2e/` に、ブラウザで画面を操作して確認するテストがある。`task dev` が立てる開発用サーバー（`http://localhost:34115`）に接続するため、Go 側の API とプラグインを含めた動作を確認できる。手順と注意は `frontend/e2e/README.md` を参照。
 
+- 画面ごとのテスト: サーバー画面 `server-panel.spec.ts`、変数画面 `variable-dialogs.spec.ts` / `node-publishing.spec.ts`、レジスタ画面 `register-panel.spec.ts` / `monitoring.spec.ts`、通信ランプ `communication-indicator.spec.ts`
 - 画面を変更したら、該当するテストを実行する（なければ追加する）。`shot()` で撮ったスクリーンショット（`frontend/e2e/.screenshots/`）で見た目も確認する
 - データの準備は `api(page, "メソッド名", ...)` で Go 側の API を直接呼び、確認したい操作だけを画面で行う
-- **テストはアプリのサーバーと変数をすべて削除する。** 開発サーバーは `KARAKURI_CONFIG_DIR` を一時フォルダに向けて起動する
+- **テストはアプリのサーバー・変数・モニタリング項目をすべて削除する。** 開発サーバーは `KARAKURI_CONFIG_DIR` を一時フォルダに向けて起動する
 - Playwright のバージョンは固定（インストール済みの Chromium と対応させるため）
 
 ### フロントエンドビルドターゲット
@@ -162,6 +163,7 @@ internal/
 │   ├── plc_service_variables.go  # 変数・マッピング・ノード公開設定・構造体型
 │   ├── app_events.go             # Wails イベントの送信（WailsAppStateEmitter / WailsEventEmitter）
 │   └── dto.go                    # DTO定義（ProtocolSchemaDTO, MonitoringItemDTO等）
+├── valuecodec/       # ホストとプラグインの間で変数の値を運ぶ MessagePack の変換（両側で共通）
 ├── pluginruntime/    # プラグイン側の共通実装（各プラグインの main から使う。Wails に依存しない）
 │   ├── runtime.go            # RunFactory（gRPC サーバー起動・GRPC_PORT 出力）
 │   ├── server.go             # PluginService + DataStoreService の実装
@@ -287,9 +289,20 @@ internal/
 ```
 frontend/src/
 ├── components/
-│   ├── ServerPanel.tsx     # スキーマ駆動のサーバー設定UI
-│   ├── RegisterPanel.tsx   # 汎用メモリ操作UI（サブタブで一覧/モニタリング切替）
-│   ├── MonitoringView.tsx  # カスタムレジスタモニタリング
+│   ├── ServerPanel.tsx     # サーバー画面（サーバーの一覧・起動と停止・保存していない変更の確認の流れ）
+│   ├── ServerConfigPane.tsx    # 選択したサーバーの設定（スキーマ駆動のフォーム・UnitID の応答設定）
+│   ├── DynamicField.tsx        # サーバー設定の 1 項目（種類ごとの入力欄）
+│   ├── AddServerDialog.tsx     # サーバー追加ダイアログ
+│   ├── UnsavedChangesDialog.tsx # 保存していない変更の確認ダイアログ（サーバーの切り替え・起動・画面の移動で共通）
+│   ├── serverStatus.ts         # サーバーの状態に対応する CSS クラス
+│   ├── RegisterPanel.tsx   # レジスタ画面（サブタブの切り替えとサーバー一覧の読み込み）
+│   ├── RegisterListView.tsx    # レジスタの一覧表示（操作欄・10 列の表・キーボード操作）
+│   ├── registerList.ts         # 一覧表示の純粋関数（行の組み立て・選択の移動・値の書式）
+│   ├── RegisterWriteDialog.tsx # レジスタの書き込みダイアログ（一覧表示とモニタリングで共通）
+│   ├── MonitoringView.tsx  # モニタリング（項目の追加・設定変更・並べ替え・削除）
+│   ├── MonitoringRow.tsx       # モニタリングの 1 行（ドラッグで並べ替え）
+│   ├── useMonitoringItems.ts   # モニタリング項目と現在値の読み込み・自動更新
+│   ├── AddMonitoringDialog.tsx # モニタリング項目の追加ダイアログ
 │   ├── VariableView.tsx    # 変数管理UI（変数一覧・行のキーボード操作・右クリックメニュー。ダイアログは下の各ファイル）
 │   ├── AddVariableDialog.tsx   # 変数追加ダイアログ
 │   ├── MetaEditDialog.tsx      # 変数の名前・データ型の編集ダイアログ
@@ -307,29 +320,40 @@ frontend/src/
 ```
 
 #### ServerPanel.tsx
-サーバーインスタンスの一覧を表示・管理します。
-- **サーバー一覧**: `GetServerInstances()` と `GetAvailableProtocols()` を1秒ポーリングして全サーバーのステータスと利用可能プロトコルを更新（プラグイン起動タイミングのずれに対応）
-- **サーバー追加**: 「サーバーを追加」ダイアログで未追加のプロトコルから選択して追加（`AddServer(protocolType, variant)`）
-- **個別操作**: 各サーバーの開始/停止/設定変更/削除が独立して可能
-- **設定パネル**: `GetProtocolSchema(protocolType)` から取得したスキーマに基づき `DynamicField` で動的フォームを生成
-- `ServerInstanceRow` と `DynamicField` は `ServerPanel` 関数の外部に定義（state リセット防止）
+サーバーインスタンスの一覧を表示・管理します。左に一覧、右に選択したサーバーの設定（`ServerConfigPane`）を並べる。
+- **サーバー一覧**: マウント時に `GetServerInstances()` / `GetAvailableProtocols()` を読み、以後は Wails イベント `plc:server-changed` / `plc:protocols-changed` で更新する
+- **サーバー追加**: `AddServerDialog` で未追加のプロトコルから選択して追加（`AddServer(protocolType, variant)`）。ダイアログは開くたびにマウントし、選択中のプロトコルを自分で持つ
+- **個別操作**: 一覧の再生・停止ボタンで起動と停止、設定の右上のごみ箱で削除（起動中は削除できない）
+- **設定（`ServerConfigPane`）**: `GetProtocolSchema(protocolType)` のスキーマから `DynamicField` でフォームを作る。項目はカテゴリごとにまとめる。起動中は変更できない
+  - UnitID をサポートするプロトコルでは「UnitID 応答設定」を出す。切り替えは保存ボタンを押さなくてもすぐ反映する
+  - 親からは ref の `save()` / `revert()` で、保存していない変更を保存・破棄できる
+- **保存していない変更の確認**: 設定を変更したまま、別のサーバーへの切り替え・選択中のサーバーの起動・別の画面への移動（`App.tsx`）をしようとすると `UnsavedChangesDialog` を出す。`ServerPanel` の `requestAction()` が「変更があれば確認してから実行する」をまとめている
+- **画面のテスト**: `frontend/e2e/server-panel.spec.ts`
 
 #### RegisterPanel.tsx
-「一覧表示」と「モニタリング」のサブタブを持ちます。
-- **プロトコル選択**: 複数サーバー起動時は上部にプロトコル選択セレクトを表示
+「一覧表示」（`RegisterListView`）と「モニタリング」（`MonitoringView`）のサブタブを持ちます。サーバーの一覧は `RegisterPanel` が 1 秒ごとに読み、両方に渡す。
+- `RegisterListView` は、タブを切り替えても設定（エリア・表示形式・表示範囲など）を保つため常にマウントし、`active` が false の間は描画と読み取りを止める。`MonitoringView` はタブを開いている間だけマウントする
+- **プロトコル選択**: レジスタを持つサーバーが複数あるときだけ、上部にプロトコル選択セレクトを表示
   - `supportsNodePublishing=true` のサーバー（OPC UA 等）はレジスタを持たないため除外
-- **一覧表示**: 選択中プロトコルのメモリエリアごとのレジスタ値を表示・編集
-- **モニタリング**: 任意のレジスタを登録してリアルタイム監視・書き込み可能
-  - ドラッグ＆ドロップで並び替え可能（@dnd-kit使用）
+- **一覧表示**: 選択中プロトコルのメモリエリアごとのレジスタ値を 10 列の表で表示（100ms ごとに読み直す）。セルのクリックか Enter で書き込みダイアログを開く
+  - ビット幅が 32bit / 64bit のときは、複数ワードを 1 つのセルにまとめて表示する
+  - 行の組み立て・キーによる選択の移動・値の書式は `registerList.ts` の純粋関数
+- **書き込みダイアログ（`RegisterWriteDialog`）**: 一覧表示とモニタリングで共通。入力形式（10 進・16 進・8 進・2 進）を変えると入力中の値を変換する。32bit / 64bit はエンディアンに従って複数ワードに分けて書く
+  - ビットの値の入れ方だけが違う: 一覧表示は ON / OFF のボタン（`bitInput="buttons"`）、モニタリングは文字（`bitInput="text"`）
 - **1オリジンアドレス表示**: `area.oneOrigin` が true のエリアはアドレス表示を+1（内部値は0ベースを維持）
+- **数値の変換**: ワードの結合・分解・書式は `frontend/src/utils/register.ts`、選択肢は `frontend/src/constants/register.ts`。画面ごとに書かない
+- **画面のテスト**: `frontend/e2e/register-panel.spec.ts`
 
 #### MonitoringView.tsx
-プロトコルを横断したレジスタモニタリング。
+プロトコルを横断したレジスタモニタリング。任意のレジスタを登録してリアルタイム監視・書き込みができる。
 - **Props**: `serverInstances: ServerInstanceDTO[]`（RegisterPanel から渡す）
+- **項目と現在値**: `useMonitoringItems(memoryAreasByProtocol, autoRefresh)` が持つ。自動更新が有効な間は 100ms ごとに読み直す
 - **プロトコル別メモリエリア**: `memoryAreasByProtocol: Record<string, MemoryAreaDTO[]>` でプロトコルごとにエリア一覧をキャッシュ
-- **項目追加ダイアログ**: 複数サーバー時はプロトコル選択セレクトを表示
+- **項目追加ダイアログ（`AddMonitoringDialog`）**: 開始アドレスと個数を指定してまとめて追加できる。複数サーバー時はプロトコル選択セレクトを表示
+- **行（`MonitoringRow`）**: ビット幅・エンディアン・表示形式を行ごとに変更できる。左端のつまみをドラッグして並べ替える（@dnd-kit 使用）
 - **サーバー変化の検出**: `protocolTypesKey = serverInstances.map(i => i.protocolType).join(',')` でサーバー構成変化を効率的に検出してエリアを再取得
 - **API 呼び出し**: `ReadWords(item.protocolType, item.memoryArea, ...)` など全 API に `protocolType` を渡す
+- **画面のテスト**: `frontend/e2e/monitoring.spec.ts`
 
 #### VariableView.tsx
 `VariableView.tsx` は変数一覧と行の操作だけを持ち、各ダイアログは別ファイルのコンポーネントに分かれている（以下の説明は、ダイアログの分も含めた変数画面全体のもの）。
@@ -627,7 +651,9 @@ JavaScript（goja）でPLC動作を記述。
 
 - ホスト → OPC UA: `SubscribeVariableChanges` で変更された変数 ID を受け取り、その変数を読み直してルートと全子ノードに `SetValue()`。取りこぼし対策として 1 秒ごとに全変数を再同期
 - OPC UA → ホスト: `Node.OnWrite` → `WriteVariableValue`（ルート）/ `WriteVariableFieldValue`（子ノード、フィールドパスは外部インデックス）。書き込み後に同じ変数の他ノードも更新
-- msgpack は `MapType=map[string]interface{}` でデコードし、構造体値を JSON 化できるようにする
+- 値は MessagePack で運ぶ。変換は `internal/valuecodec`（`Marshal` / `Unmarshal`）に 1 か所だけ定義し、ホスト（`HostGrpcServer`）とプラグイン（`RemoteVariableStoreAccessor`）の両方がこれを使う。設定が食い違うと、文字列が `[]byte`、構造体が `map[interface{}]interface{}` になって書き込みが失敗する
+  - デコードした値は元の Go の型を持たない（整数は `int64` / `uint64`、小数は `float64`）。ホストは `variable.ConvertValue` で変数の型に合わせる
+  - この経路全体（OPC UA クライアント → サーバー → gRPC → ホストの変数ストア）は `cmd/opcua-plugin/internal/opcua/host_integration_test.go` で確認する。他の OPC UA のテストはフェイクの変数ストアを使うため、値の変換を通らない
 
 #### サーバー設定
 

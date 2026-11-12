@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import "./App.css";
 import { ServerPanel, ServerPanelHandle } from "./components/ServerPanel";
-import { FocusTrap } from "./components/FocusTrap";
+import { UnsavedChangesDialog } from "./components/UnsavedChangesDialog";
 import { VariableView } from "./components/VariableView";
 import { RegisterPanel, RegisterTab } from "./components/RegisterPanel";
 import { ScriptPanel } from "./components/ScriptPanel";
@@ -186,34 +186,13 @@ function App() {
           {activeTab === "scripts" && <ScriptPanel />}
         </main>{" "}
         {pendingTab && (
-          <FocusTrap onConfirm={handleConfirmSaveAndNavigate}>
-            <div className="dialog">
-              <h3>設定が保存されていません</h3>
-              <div className="dialog-content">
-                <p>通信設定が変更されています。</p>
-              </div>
-              <div className="dialog-buttons">
-                <button
-                  onClick={() => setPendingTab(null)}
-                  className="btn-secondary"
-                >
-                  キャンセル
-                </button>
-                <button
-                  onClick={handleConfirmDiscardAndNavigate}
-                  className="btn-secondary"
-                >
-                  保存せずに移動
-                </button>
-                <button
-                  onClick={handleConfirmSaveAndNavigate}
-                  className="btn-primary"
-                >
-                  保存してから移動
-                </button>
-              </div>
-            </div>
-          </FocusTrap>
+          <UnsavedChangesDialog
+            discardLabel="保存せずに移動"
+            saveLabel="保存してから移動"
+            onCancel={() => setPendingTab(null)}
+            onDiscard={handleConfirmDiscardAndNavigate}
+            onSave={handleConfirmSaveAndNavigate}
+          />
         )}
       </div>
     </div>
