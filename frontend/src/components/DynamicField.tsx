@@ -41,6 +41,16 @@ export function DynamicField({
             autoComplete="off"
           />
         );
+      case "textarea":
+        return (
+          <textarea
+            rows={3}
+            value={displayValue || ""}
+            onChange={(e) => onChange(e.target.value)}
+            disabled={disabled}
+            spellCheck={false}
+          />
+        );
       case "number":
         return (
           <input

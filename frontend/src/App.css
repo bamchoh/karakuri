@@ -1317,7 +1317,8 @@ button:disabled {
 }
 
 .vscode-setting-control input,
-.vscode-setting-control select {
+.vscode-setting-control select,
+.vscode-setting-control textarea {
   width: 100%;
   padding: 0.4rem 0.5rem;
   border: 1px solid #1a3d22;
@@ -1329,13 +1330,22 @@ button:disabled {
 }
 
 .vscode-setting-control input:focus,
-.vscode-setting-control select:focus {
+.vscode-setting-control select:focus,
+.vscode-setting-control textarea:focus {
   outline: none;
   border-color: #22c55e;
 }
 
+.vscode-setting-control textarea {
+  display: block;
+  resize: vertical;
+  font-family: inherit;
+  line-height: 1.4;
+}
+
 .vscode-setting-control input:disabled,
-.vscode-setting-control select:disabled {
+.vscode-setting-control select:disabled,
+.vscode-setting-control textarea:disabled {
   opacity: 0.5;
   cursor: not-allowed;
 }

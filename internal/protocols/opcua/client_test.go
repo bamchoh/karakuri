@@ -88,11 +88,17 @@ func TestClientFactory_BuildAndDescribe(t *testing.T) {
 		for _, field := range cmd.Fields {
 			params[field.Name] = field.Default
 		}
-		if cmd.ID == cmdWrite {
+		switch cmd.ID {
+		case cmdWrite:
 			if _, err := f.BuildRequest(cmd.ID, params); err == nil {
 				t.Errorf("%s: NodeId が空なのに組み立てられた", cmd.ID)
 			}
 			params["nodeId"] = "ns=2;s=X"
+		case cmdWriteMulti:
+			if _, err := f.BuildRequest(cmd.ID, params); err == nil {
+				t.Errorf("%s: 書き込む内容が空なのに組み立てられた", cmd.ID)
+			}
+			params["items"] = "ns=2;s=X := 1"
 		}
 		if _, err := f.BuildRequest(cmd.ID, params); err != nil {
 			t.Errorf("%s: 既定値で組み立てられない: %v", cmd.ID, err)
@@ -111,6 +117,11 @@ func TestClientFactory_BuildAndDescribe(t *testing.T) {
 		{cmdWrite, map[string]interface{}{"nodeId": "ns=2;s=A", "dataType": "Byte", "rank": "array", "value": "1, 2,3"}, "Write ns=2;s=A = [1, 2, 3]（Byte の配列（3 個））"},
 		{cmdWrite, map[string]interface{}{"nodeId": "ns=2;s=S", "dataType": "String", "rank": "scalar", "value": " a b "}, "Write ns=2;s=S =  a b （String）"},
 		{cmdBrowse, map[string]interface{}{"nodeId": "i=85"}, "Browse i=85"},
+		// 複数のノード（1 行に 1 つ。空の行は読み飛ばす）
+		{cmdRead, map[string]interface{}{"nodeId": "ns=2;s=A\r\n\n  ns=2;s=B  \n", "attribute": "Value"}, "Read 2 ノード（ns=2;s=A、ns=2;s=B）"},
+		{cmdRead, map[string]interface{}{"nodeId": "i=1\ni=2\ni=3\ni=4", "attribute": "DataType"}, "Read 4 ノード（i=1、i=2、i=3、…）"},
+		{cmdWriteMulti, map[string]interface{}{"items": "ns=2;s=A := 5", "dataType": "Int16"}, "Write ns=2;s=A = 5（Int16）"},
+		{cmdWriteMulti, map[string]interface{}{"items": "ns=2;s=A := 5\n\nns=2;s=B : String := a := b\nns=2;s=C:Int32[]:=1, 2", "dataType": "Int16"}, "Write 3 ノード（ns=2;s=A、ns=2;s=B、ns=2;s=C）"},
 	}
 	for _, c := range cases {
 		req := buildRequest(t, c.cmd, c.params)
@@ -123,16 +134,57 @@ func TestClientFactory_BuildAndDescribe(t *testing.T) {
 		cmd    string
 		params map[string]interface{}
 	}{
-		"NodeId が読めない": {cmdRead, map[string]interface{}{"nodeId": "Motor1"}},
-		"知らない属性":       {cmdRead, map[string]interface{}{"nodeId": "i=1", "attribute": "Foo"}},
-		"型に入らない値":      {cmdWrite, map[string]interface{}{"nodeId": "i=1", "dataType": "SByte", "rank": "scalar", "value": "200"}},
-		"数値でない値":       {cmdWrite, map[string]interface{}{"nodeId": "i=1", "dataType": "Double", "rank": "scalar", "value": "abc"}},
-		"配列の 2 個目が不正":  {cmdWrite, map[string]interface{}{"nodeId": "i=1", "dataType": "Boolean", "rank": "array", "value": "true, maybe"}},
-		"知らない型":        {cmdWrite, map[string]interface{}{"nodeId": "i=1", "dataType": "Guid", "rank": "scalar", "value": "x"}},
-		"知らないコマンド":     {"call", map[string]interface{}{}},
+		"NodeId が読めない":       {cmdRead, map[string]interface{}{"nodeId": "Motor1"}},
+		"知らない属性":             {cmdRead, map[string]interface{}{"nodeId": "i=1", "attribute": "Foo"}},
+		"型に入らない値":            {cmdWrite, map[string]interface{}{"nodeId": "i=1", "dataType": "SByte", "rank": "scalar", "value": "200"}},
+		"数値でない値":             {cmdWrite, map[string]interface{}{"nodeId": "i=1", "dataType": "Double", "rank": "scalar", "value": "abc"}},
+		"配列の 2 個目が不正":        {cmdWrite, map[string]interface{}{"nodeId": "i=1", "dataType": "Boolean", "rank": "array", "value": "true, maybe"}},
+		"知らない型":              {cmdWrite, map[string]interface{}{"nodeId": "i=1", "dataType": "Guid", "rank": "scalar", "value": "x"}},
+		"知らないコマンド":           {"call", map[string]interface{}{}},
+		"2 行目の NodeId が読めない": {cmdRead, map[string]interface{}{"nodeId": "i=1\nMotor1", "attribute": "Value"}},
+		"NodeId が空の行だけ":      {cmdRead, map[string]interface{}{"nodeId": " \n ", "attribute": "Value"}},
+		":= がない":             {cmdWriteMulti, map[string]interface{}{"items": "ns=2;s=A = 5", "dataType": "Int16"}},
+		"複数書き込みの値が型に入らない":    {cmdWriteMulti, map[string]interface{}{"items": "ns=2;s=A := 1\nns=2;s=B := 70000", "dataType": "Int16"}},
+		"複数書き込みの NodeId が不正": {cmdWriteMulti, map[string]interface{}{"items": "Motor1 := 1", "dataType": "Int16"}},
 	} {
 		if _, err := f.BuildRequest(c.cmd, c.params); err == nil {
 			t.Errorf("%s: エラーにならない", name)
+		}
+	}
+}
+
+// 複数書き込みの 1 行の読み方（型の指定・配列・NodeId の中の ":"）
+func TestParseWriteLine(t *testing.T) {
+	cases := []struct {
+		line     string
+		wantNode string
+		wantType string
+		wantText string
+	}{
+		{"ns=2;s=A := 5", "ns=2;s=A", "Int16", "5"},
+		{"ns=2;s=A:=0x10", "ns=2;s=A", "Int16", "16"},
+		{"ns=2;s=A : Double := 1.5", "ns=2;s=A", "Double", "1.5"},
+		{"ns=2;s=A:Boolean:=true", "ns=2;s=A", "Boolean", "true"},
+		{"ns=2;s=S : String :=  a := b ", "ns=2;s=S", "String", "a := b"},
+		{"ns=2;s=V : Int32[] := 1, 2, 3", "ns=2;s=V", "Int32 の配列（3 個）", "[1, 2, 3]"},
+		// 型の名前でないものは、NodeId の一部として読む
+		{"ns=2;s=Line:Motor := 7", "ns=2;s=Line:Motor", "Int16", "7"},
+		{"ns=2;s=Line:Motor : UInt16 := 7", "ns=2;s=Line:Motor", "UInt16", "7"},
+	}
+	for _, c := range cases {
+		wv, err := parseWriteLine(c.line, ua.TypeInt16)
+		if err != nil {
+			t.Errorf("%q: %v", c.line, err)
+			continue
+		}
+		if got := wv.NodeId.String(); got != c.wantNode {
+			t.Errorf("%q: NodeId = %q, want %q", c.line, got, c.wantNode)
+		}
+		if got := variantTypeText(wv.Value.Value); got != c.wantType {
+			t.Errorf("%q: 型 = %q, want %q", c.line, got, c.wantType)
+		}
+		if got := variantText(wv.Value.Value); got != c.wantText {
+			t.Errorf("%q: 値 = %q, want %q", c.line, got, c.wantText)
 		}
 	}
 }
@@ -264,15 +316,43 @@ func TestClient_ReadWriteBrowse(t *testing.T) {
 		t.Errorf("ないノードのブラウズ: %+v", res)
 	}
 
-	// 組み立てられないリクエスト（ここでは 2 ノードの読み取り）も、16 進で入れれば送れる
-	raw := encodeMessage(&ua.ReadRequest{NodesToRead: []ua.ReadValueId{
-		{NodeId: ua.NewStringNodeId(ns, "Counter"), AttributeId: ua.AttributeIdValue},
-		{NodeId: ua.NewStringNodeId(ns, "Temp"), AttributeId: ua.AttributeIdValue},
-	}})
-	res = c.Send(ctx, raw)
-	if res.Status != protocol.CommandOK || res.Summary != "Read 2 ノード" ||
+	// 複数のノードを 1 回のリクエストで読む
+	res = send(cmdRead, map[string]interface{}{"nodeId": node("Counter") + "\n" + node("Temp"), "attribute": "Value"})
+	if res.Status != protocol.CommandOK || res.Summary != "Read 2 ノード（"+node("Counter")+"、"+node("Temp")+"）" ||
 		valueOf(res.Values, node("Counter")+" Value（Int16）") != "-7" || valueOf(res.Values, node("Temp")+" Value（Float）") != "1.5" {
 		t.Errorf("2 ノードの読み取り: %+v", res)
+	}
+	// 1 つでも読めなければ例外応答にする。読めたノードの値と、読めなかったノードのステータスは出す
+	res = send(cmdRead, map[string]interface{}{"nodeId": node("Counter") + "\n" + node("NoSuchNode"), "attribute": "Value"})
+	if res.Status != protocol.CommandException || !strings.Contains(res.Error, node("NoSuchNode")) ||
+		valueOf(res.Values, node("Counter")+" Value（Int16）") != "-7" || !strings.Contains(valueOf(res.Values, node("NoSuchNode")+" ステータス"), "BadNodeIdUnknown") {
+		t.Errorf("読めないノードを含む読み取り: %+v", res)
+	}
+
+	// 複数のノードへ 1 回のリクエストで書く（型の違うノードは行に型を書く）
+	res = send(cmdWriteMulti, map[string]interface{}{
+		"items":    node("Counter") + " := 11\n" + node("Values") + " : Int32[] := 7, 8, 9",
+		"dataType": "Int16",
+	})
+	if res.Status != protocol.CommandOK || len(res.Values) != 2 || !strings.HasPrefix(valueOf(res.Values, node("Values")), "Good") {
+		t.Fatalf("複数の書き込み: %+v", res)
+	}
+	if got := toInt64(acc.mustRead("v-int")); got != 11 {
+		t.Errorf("ホストの値 = %v, want 11", got)
+	}
+	if got := fmt.Sprint(acc.mustRead("v-arr")); got != "[7 8 9]" {
+		t.Errorf("ホストの配列 = %v", got)
+	}
+	// 一部が書けなければ例外応答にする。書けたノードは書かれている
+	res = send(cmdWriteMulti, map[string]interface{}{
+		"items":    node("Counter") + " := 12\n" + node("Temp") + " : Float := 2",
+		"dataType": "Int16",
+	})
+	if res.Status != protocol.CommandException || !strings.Contains(res.Error, node("Temp")) || !strings.HasPrefix(valueOf(res.Values, node("Counter")), "Good") {
+		t.Errorf("一部が書けない書き込み: %+v", res)
+	}
+	if got := toInt64(acc.mustRead("v-int")); got != 12 {
+		t.Errorf("ホストの値 = %v, want 12", got)
 	}
 	// 解釈を持たないサービスは、応答の型だけ出す
 	res = c.Send(ctx, encodeMessage(&ua.RegisterNodesRequest{NodesToRegister: []ua.NodeId{ua.NewStringNodeId(ns, "Counter")}}))

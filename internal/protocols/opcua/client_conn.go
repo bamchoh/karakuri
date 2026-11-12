@@ -209,7 +209,8 @@ func describeResponse(req ua.Request, resp ua.Response) (protocol.CommandStatus,
 		rr, _ := req.(*ua.ReadRequest)
 		return describeRead(rr, r)
 	case *ua.WriteResponse:
-		return describeWrite(r)
+		wr, _ := req.(*ua.WriteRequest)
+		return describeWrite(wr, r)
 	case *ua.BrowseResponse:
 		return describeBrowse(r)
 	}
@@ -235,6 +236,9 @@ func describeRead(req *ua.ReadRequest, resp *ua.ReadResponse) (protocol.CommandS
 		if dv.Status.IsBad() {
 			if errMsg == "" {
 				errMsg = "読めませんでした: " + statusText(dv.Status)
+				if prefix != "" {
+					errMsg = fmt.Sprintf("読めませんでした（%s）: %s", strings.TrimSpace(prefix), statusText(dv.Status))
+				}
 			}
 			status = protocol.CommandException
 			values = append(values, protocol.ResultValue{Label: prefix + "ステータス", Value: statusText(dv.Status)})
@@ -248,7 +252,7 @@ func describeRead(req *ua.ReadRequest, resp *ua.ReadResponse) (protocol.CommandS
 	return status, values, errMsg
 }
 
-func describeWrite(resp *ua.WriteResponse) (protocol.CommandStatus, []protocol.ResultValue, string) {
+func describeWrite(req *ua.WriteRequest, resp *ua.WriteResponse) (protocol.CommandStatus, []protocol.ResultValue, string) {
 	if len(resp.Results) == 0 {
 		return protocol.CommandError, nil, "応答に結果がありません"
 	}
@@ -259,12 +263,18 @@ func describeWrite(resp *ua.WriteResponse) (protocol.CommandStatus, []protocol.R
 		label := "結果"
 		if len(resp.Results) > 1 {
 			label = fmt.Sprintf("結果 %d", i+1)
+			if req != nil && i < len(req.NodesToWrite) {
+				label = req.NodesToWrite[i].NodeId.String()
+			}
 		}
 		values[i] = protocol.ResultValue{Label: label, Value: statusText(st)}
 		if st.IsBad() {
 			status = protocol.CommandException
 			if errMsg == "" {
 				errMsg = "書けませんでした: " + statusText(st)
+				if len(resp.Results) > 1 {
+					errMsg = fmt.Sprintf("書けませんでした（%s）: %s", label, statusText(st))
+				}
 			}
 		}
 	}

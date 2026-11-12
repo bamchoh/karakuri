@@ -33,9 +33,10 @@ const (
 	modeSign   = "Sign"
 	modeSignEn = "SignAndEncrypt"
 
-	cmdRead   = "read"
-	cmdWrite  = "write"
-	cmdBrowse = "browse"
+	cmdRead       = "read"
+	cmdWrite      = "write"
+	cmdWriteMulti = "writeMulti"
+	cmdBrowse     = "browse"
 
 	rankScalar = "scalar"
 	rankArray  = "array"
@@ -233,11 +234,29 @@ var writableTypes = []ua.TypeID{
 	ua.TypeInt64, ua.TypeUInt64, ua.TypeFloat, ua.TypeDouble, ua.TypeString, ua.TypeDateTime,
 }
 
+func writableType(name string) (ua.TypeID, bool) {
+	for _, t := range writableTypes {
+		if t.String() == name {
+			return t, true
+		}
+	}
+	return ua.TypeNull, false
+}
+
 const nodeIDDescription = "NodeId（例: ns=2;s=Motor1、i=2258）。ns= の番号はサーバーごとに決まります（ブラウズで調べられます）。"
 
 func nodeIDField(def string) protocol.ConfigField {
 	return protocol.ConfigField{Name: "nodeId", Label: "NodeId", Description: nodeIDDescription, Type: "text", Required: true, Default: def}
 }
+
+// nodeIDsField は、NodeId をいくつも入れられる欄（1 行に 1 つ）
+func nodeIDsField(def string) protocol.ConfigField {
+	return protocol.ConfigField{Name: "nodeId", Label: "NodeId", Description: nodeIDDescription + "いくつも読むときは、1 行に 1 つずつ入れます（1 回のリクエストでまとめて読みます）。", Type: "textarea", Required: true, Default: def}
+}
+
+const writeItemsDescription = "1 行に 1 つ、「NodeId := 値」の形で入れます（例: ns=2;s=Counter := 5）。" +
+	"下の「データ型」と違う型のノードは「NodeId : 型 := 値」（例: ns=2;s=Label : String := abc）、" +
+	"配列は型に [] を付けて値をカンマで区切ります（例: ns=2;s=Values : Int32[] := 1, 2, 3）。1 回のリクエストでまとめて書きます。"
 
 // Commands は組み立てられるコマンドの一覧を返す
 func (f *ClientFactory) Commands() []protocol.CommandDefinition {
@@ -253,7 +272,7 @@ func (f *ClientFactory) Commands() []protocol.CommandDefinition {
 		{
 			ID: cmdRead, DisplayName: "Read（ノードの読み取り）", Pollable: true,
 			Fields: []protocol.ConfigField{
-				nodeIDField("i=2258"), // Server_ServerStatus_CurrentTime（どのサーバーにもある）
+				nodeIDsField("i=2258"), // Server_ServerStatus_CurrentTime（どのサーバーにもある）
 				{Name: "attribute", Label: "属性", Type: "select", Required: true, Default: "Value", Options: attrOptions},
 			},
 		},
@@ -267,6 +286,13 @@ func (f *ClientFactory) Commands() []protocol.CommandDefinition {
 					{Value: rankArray, Label: "配列（値をカンマで区切る）"},
 				}},
 				{Name: "value", Label: "値", Description: "整数は 0x で始めると 16 進、0b で始めると 2 進。Boolean は true / false。DateTime は 2026-01-02T03:04:05Z の形。", Type: "text", Required: true, Default: "0"},
+			},
+		},
+		{
+			ID: cmdWriteMulti, DisplayName: "Write（複数のノードへの書き込み）",
+			Fields: []protocol.ConfigField{
+				{Name: "items", Label: "書き込む内容", Description: writeItemsDescription, Type: "textarea", Required: true, Default: ""},
+				{Name: "dataType", Label: "データ型", Description: "行に型を書かなかったノードの型。", Type: "select", Required: true, Default: ua.TypeInt16.String(), Options: typeOptions},
 			},
 		},
 		{
@@ -303,11 +329,60 @@ func nodeIDParam(params map[string]interface{}) (ua.NodeId, error) {
 	return n, nil
 }
 
+// nodeIDsParam は、1 行に 1 つずつ入れた NodeId を読む（空の行は読み飛ばす）
+func nodeIDsParam(params map[string]interface{}) ([]ua.NodeId, error) {
+	var ids []ua.NodeId
+	for i, line := range strings.Split(textParam(params, "nodeId"), "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		n, err := ua.ParseNodeId(line)
+		if err != nil {
+			return nil, fmt.Errorf("%d 行目: NodeId として読めません: %q（例: ns=2;s=Motor1、i=2258）", i+1, line)
+		}
+		ids = append(ids, n)
+	}
+	if len(ids) == 0 {
+		return nil, fmt.Errorf("NodeId を入力してください")
+	}
+	return ids, nil
+}
+
+// parseWriteLine は「NodeId := 値」「NodeId : 型 := 値」「NodeId : 型[] := 値, 値」の 1 行を読む。
+// 型を書いていなければ defaultType のスカラーにする
+func parseWriteLine(line string, defaultType ua.TypeID) (ua.WriteValue, error) {
+	left, value, ok := strings.Cut(line, ":=")
+	if !ok {
+		return ua.WriteValue{}, fmt.Errorf("「NodeId := 値」の形で入れてください")
+	}
+	left = strings.TrimSpace(left)
+	typ, isArray := defaultType, false
+	// NodeId の中にも ":" がありうるので、最後の ":" のあとが型の名前のときだけ、型の指定として読む
+	if i := strings.LastIndex(left, ":"); i >= 0 {
+		name := strings.TrimSpace(left[i+1:])
+		arr := strings.HasSuffix(name, "[]")
+		if t, known := writableType(strings.TrimSpace(strings.TrimSuffix(name, "[]"))); known {
+			typ, isArray = t, arr
+			left = strings.TrimSpace(left[:i])
+		}
+	}
+	nodeID, err := ua.ParseNodeId(left)
+	if err != nil {
+		return ua.WriteValue{}, fmt.Errorf("NodeId として読めません: %q（例: ns=2;s=Motor1）", left)
+	}
+	v, err := parseVariant(typ, isArray, strings.TrimSpace(value))
+	if err != nil {
+		return ua.WriteValue{}, fmt.Errorf("値: %w", err)
+	}
+	return ua.WriteValue{NodeId: nodeID, AttributeId: ua.AttributeIdValue, Value: ua.NewDataValue(v)}, nil
+}
+
 // BuildRequest は、コマンドと項目の値からリクエスト本体を作る
 func (f *ClientFactory) BuildRequest(commandID string, params map[string]interface{}) ([]byte, error) {
 	switch commandID {
 	case cmdRead:
-		nodeID, err := nodeIDParam(params)
+		nodeIDs, err := nodeIDsParam(params)
 		if err != nil {
 			return nil, err
 		}
@@ -324,25 +399,20 @@ func (f *ClientFactory) BuildRequest(commandID string, params map[string]interfa
 		if attr == 0 {
 			return nil, fmt.Errorf("不明な属性です: %s", name)
 		}
-		return encodeMessage(&ua.ReadRequest{
-			TimestampsToReturn: ua.TimestampsToReturnNeither,
-			NodesToRead:        []ua.ReadValueId{{NodeId: nodeID, AttributeId: attr}},
-		}), nil
+		nodes := make([]ua.ReadValueId, len(nodeIDs))
+		for i, id := range nodeIDs {
+			nodes[i] = ua.ReadValueId{NodeId: id, AttributeId: attr}
+		}
+		return encodeMessage(&ua.ReadRequest{TimestampsToReturn: ua.TimestampsToReturnNeither, NodesToRead: nodes}), nil
 
 	case cmdWrite:
 		nodeID, err := nodeIDParam(params)
 		if err != nil {
 			return nil, err
 		}
-		typeName := textParam(params, "dataType")
-		var typ ua.TypeID
-		for _, t := range writableTypes {
-			if t.String() == typeName {
-				typ = t
-			}
-		}
-		if typ == ua.TypeNull {
-			return nil, fmt.Errorf("不明なデータ型です: %s", typeName)
+		typ, ok := writableType(textParam(params, "dataType"))
+		if !ok {
+			return nil, fmt.Errorf("不明なデータ型です: %s", textParam(params, "dataType"))
 		}
 		v, err := parseVariant(typ, textParam(params, "rank") == rankArray, textParam(params, "value"))
 		if err != nil {
@@ -351,6 +421,27 @@ func (f *ClientFactory) BuildRequest(commandID string, params map[string]interfa
 		return encodeMessage(&ua.WriteRequest{NodesToWrite: []ua.WriteValue{
 			{NodeId: nodeID, AttributeId: ua.AttributeIdValue, Value: ua.NewDataValue(v)},
 		}}), nil
+
+	case cmdWriteMulti:
+		typ, ok := writableType(textParam(params, "dataType"))
+		if !ok {
+			return nil, fmt.Errorf("不明なデータ型です: %s", textParam(params, "dataType"))
+		}
+		var nodes []ua.WriteValue
+		for i, line := range strings.Split(textParam(params, "items"), "\n") {
+			if strings.TrimSpace(line) == "" {
+				continue
+			}
+			wv, err := parseWriteLine(line, typ)
+			if err != nil {
+				return nil, fmt.Errorf("%d 行目: %w", i+1, err)
+			}
+			nodes = append(nodes, wv)
+		}
+		if len(nodes) == 0 {
+			return nil, fmt.Errorf("書き込む内容を入力してください（例: ns=2;s=Counter := 5）")
+		}
+		return encodeMessage(&ua.WriteRequest{NodesToWrite: nodes}), nil
 
 	case cmdBrowse:
 		nodeID, err := nodeIDParam(params)
@@ -545,7 +636,11 @@ func describeRequest(req ua.Request) string {
 			n := r.NodesToRead[0]
 			return fmt.Sprintf("Read %s の %s", n.NodeId, attributeName(n.AttributeId))
 		}
-		return fmt.Sprintf("Read %d ノード", len(r.NodesToRead))
+		ids := make([]ua.NodeId, len(r.NodesToRead))
+		for i, n := range r.NodesToRead {
+			ids[i] = n.NodeId
+		}
+		return fmt.Sprintf("Read %d ノード（%s）", len(ids), nodeList(ids))
 	case *ua.WriteRequest:
 		if len(r.NodesToWrite) == 1 {
 			n := r.NodesToWrite[0]
@@ -555,7 +650,11 @@ func describeRequest(req ua.Request) string {
 			}
 			return fmt.Sprintf("%s = %s（%s）", text, shorten(variantText(n.Value.Value), 60), variantTypeText(n.Value.Value))
 		}
-		return fmt.Sprintf("Write %d ノード", len(r.NodesToWrite))
+		ids := make([]ua.NodeId, len(r.NodesToWrite))
+		for i, n := range r.NodesToWrite {
+			ids[i] = n.NodeId
+		}
+		return fmt.Sprintf("Write %d ノード（%s）", len(ids), nodeList(ids))
 	case *ua.BrowseRequest:
 		if len(r.NodesToBrowse) == 1 {
 			return fmt.Sprintf("Browse %s", r.NodesToBrowse[0].NodeId)
@@ -563,6 +662,19 @@ func describeRequest(req ua.Request) string {
 		return fmt.Sprintf("Browse %d ノード", len(r.NodesToBrowse))
 	}
 	return strings.TrimSuffix(structName(req), "Request")
+}
+
+// nodeList は NodeId を「、」で並べる（3 つまで。残りは「…」）
+func nodeList(ids []ua.NodeId) string {
+	parts := make([]string, 0, 4)
+	for i, id := range ids {
+		if i == 3 {
+			parts = append(parts, "…")
+			break
+		}
+		parts = append(parts, id.String())
+	}
+	return strings.Join(parts, "、")
 }
 
 func shorten(s string, max int) string {

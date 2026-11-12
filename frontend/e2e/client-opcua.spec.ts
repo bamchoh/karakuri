@@ -71,7 +71,7 @@ function setting(scope: Page | Locator, label: string) {
         hasText: new RegExp("^" + escapeRegExp(label) + "$"),
       }),
     })
-    .locator("input, select")
+    .locator("input, select, textarea")
     .first();
 }
 
@@ -206,6 +206,63 @@ test("Read・Write・Browse を組み立てて送れる", async ({ page }) => {
     `${nodeId}（Variable）`,
   );
   await shot(page, "client-opcua-browse");
+});
+
+test("複数のノードをまとめて読み書きできる", async ({ page }) => {
+  const label = await api<{ id: string }>(
+    page,
+    "CreateVariable",
+    "Label",
+    "STRING[10]",
+    "abc",
+  );
+  await api(page, "UpdateVariableNodePublishing", label.id, "opcua", {
+    protocolType: "opcua",
+    enabled: true,
+    accessMode: "readwrite",
+  });
+  const labelNode = nodeId.replace(";s=Counter", ";s=Label");
+  await addClient(page);
+
+  // Read: NodeId を 1 行に 1 つ入れる
+  await setting(composer(page), "NodeId").fill(`${nodeId}\n${labelNode}`);
+  await sendButton(page).click();
+  await expect(result(page).locator(".client-status")).toHaveText("正常");
+  await expect(result(page)).toContainText(
+    `Read 2 ノード（${nodeId}、${labelNode}）`,
+  );
+  await expect(valueRow(page, `${nodeId} Value（Int16）`)).toContainText("5");
+  await expect(valueRow(page, `${labelNode} Value（String）`)).toContainText(
+    "abc",
+  );
+  await shot(page, "client-opcua-read-multi");
+
+  // Write: 「NodeId := 値」を 1 行に 1 つ。型の違うノードは行に型を書く
+  await setting(composer(page), "コマンド").selectOption({
+    label: "Write（複数のノードへの書き込み）",
+  });
+  await setting(composer(page), "書き込む内容").fill(
+    `${nodeId} := 21\n${labelNode} : String := hello`,
+  );
+  await sendButton(page).click();
+  await expect(result(page).locator(".client-status")).toHaveText("正常");
+  await expect(valueRow(page, labelNode)).toContainText("Good");
+  await expect.poll(() => variableValue(page)).toBe(21);
+  const vars = await api<{ id: string; value: unknown }[]>(
+    page,
+    "GetVariables",
+  );
+  expect(vars.find((v) => v.id === label.id)?.value).toBe("hello");
+  await shot(page, "client-opcua-write-multi");
+
+  // 読めない行は、行の番号つきで組み立ての欄に出る
+  await setting(composer(page), "書き込む内容").fill(
+    `${nodeId} := 21\n${labelNode} = x`,
+  );
+  await expect(composer(page).locator(".client-build-error")).toContainText(
+    "2 行目",
+  );
+  await expect(sendButton(page)).toBeDisabled();
 });
 
 test("16 進で入れる欄に OPC UA の説明が出て、組み立てた内容を送れる", async ({
