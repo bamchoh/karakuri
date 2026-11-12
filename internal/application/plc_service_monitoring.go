@@ -13,14 +13,16 @@ import (
 
 // === モニタリング管理 ===
 
-// GetMonitoringItems はモニタリング項目一覧をOrder順で返す
+// GetMonitoringItems はモニタリング項目一覧をOrder順で返す。
+// 呼び出し側がロックの外で読むため、項目はコピーを返す（並べ替えで Order が書き換わる）。
 func (s *PLCService) GetMonitoringItems() []*MonitoringItemDTO {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
 	result := make([]*MonitoringItemDTO, 0, len(s.monitoringItems))
 	for _, item := range s.monitoringItems {
-		result = append(result, item)
+		cp := *item
+		result = append(result, &cp)
 	}
 
 	// Order順にソート
@@ -51,10 +53,10 @@ func (s *PLCService) AddMonitoringItem(item *MonitoringItemDTO) (*MonitoringItem
 	item.ID = uuid.New().String()
 	// Orderを設定
 	item.Order = s.getNextOrder()
-	s.monitoringItems[item.ID] = item
+	stored := *item
+	s.monitoringItems[item.ID] = &stored
 
-	// 自動保存
-	go s.saveMonitoringConfigInternal()
+	s.scheduleMonitoringSave()
 
 	return item, nil
 }
@@ -111,8 +113,7 @@ func (s *PLCService) MoveMonitoringItem(id string, direction string) error {
 	// Orderを入れ替え
 	target.Order, items[swapIndex].Order = items[swapIndex].Order, target.Order
 
-	// 自動保存
-	go s.saveMonitoringConfigInternal()
+	s.scheduleMonitoringSave()
 
 	return nil
 }
@@ -174,8 +175,7 @@ func (s *PLCService) ReorderMonitoringItem(id string, newIndex int) error {
 		item.Order = i
 	}
 
-	// 自動保存
-	go s.saveMonitoringConfigInternal()
+	s.scheduleMonitoringSave()
 
 	return nil
 }
@@ -189,10 +189,10 @@ func (s *PLCService) UpdateMonitoringItem(item *MonitoringItemDTO) error {
 		return fmt.Errorf("monitoring item not found: %s", item.ID)
 	}
 
-	s.monitoringItems[item.ID] = item
+	stored := *item
+	s.monitoringItems[item.ID] = &stored
 
-	// 自動保存
-	go s.saveMonitoringConfigInternal()
+	s.scheduleMonitoringSave()
 
 	return nil
 }
@@ -208,8 +208,7 @@ func (s *PLCService) DeleteMonitoringItem(id string) error {
 
 	delete(s.monitoringItems, id)
 
-	// 自動保存
-	go s.saveMonitoringConfigInternal()
+	s.scheduleMonitoringSave()
 
 	return nil
 }
@@ -221,8 +220,7 @@ func (s *PLCService) ClearMonitoringItems() {
 
 	s.monitoringItems = make(map[string]*MonitoringItemDTO)
 
-	// 自動保存
-	go s.saveMonitoringConfigInternal()
+	s.scheduleMonitoringSave()
 }
 
 // getMonitoringConfigPath はモニタリング設定ファイルのパスを返す
@@ -232,34 +230,58 @@ func getMonitoringConfigPath() (string, error) {
 
 // SaveMonitoringConfig はモニタリング設定をファイルに保存する
 func (s *PLCService) SaveMonitoringConfig() error {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	return s.saveMonitoringConfigInternal()
+	s.mu.Lock()
+	seq, items := s.snapshotMonitoringItems()
+	s.mu.Unlock()
+	return s.writeMonitoringConfig(seq, items)
 }
 
-// saveMonitoringConfigInternal は内部保存処理（ロック不要）
-func (s *PLCService) saveMonitoringConfigInternal() error {
+// scheduleMonitoringSave は現在のモニタリング項目をバックグラウンドで保存する（mu をロック済みで呼ぶ）。
+// ロック中に内容のコピーを取り、書き込みはロックの外で行う。
+func (s *PLCService) scheduleMonitoringSave() {
+	seq, items := s.snapshotMonitoringItems()
+	s.monitoringSaveGroup.Add(1)
+	go func() {
+		defer s.monitoringSaveGroup.Done()
+		_ = s.writeMonitoringConfig(seq, items)
+	}()
+}
+
+// snapshotMonitoringItems は保存用に項目のコピーを Order 順で作り、通し番号を付ける（mu をロック済みで呼ぶ）。
+// 項目は保存後も書き換えられる（並べ替えで Order が変わる）ため、ポインタではなく値をコピーする。
+func (s *PLCService) snapshotMonitoringItems() (uint64, []*MonitoringItemDTO) {
+	items := make([]*MonitoringItemDTO, 0, len(s.monitoringItems))
+	for _, item := range s.monitoringItems {
+		cp := *item
+		items = append(items, &cp)
+	}
+	sort.Slice(items, func(i, j int) bool { return items[i].Order < items[j].Order })
+	s.monitoringSaveSeq++
+	return s.monitoringSaveSeq, items
+}
+
+// writeMonitoringConfig はスナップショットをファイルに書く。
+// 書き込みは 1 つずつ行い、すでにより新しい内容を書いていれば何もしない（古い内容で上書きしない）。
+func (s *PLCService) writeMonitoringConfig(seq uint64, items []*MonitoringItemDTO) error {
+	s.monitoringSaveMu.Lock()
+	defer s.monitoringSaveMu.Unlock()
+	if seq < s.monitoringSavedSeq {
+		return nil
+	}
+
 	configPath, err := getMonitoringConfigPath()
 	if err != nil {
 		return err
 	}
-
-	items := make([]*MonitoringItemDTO, 0, len(s.monitoringItems))
-	for _, item := range s.monitoringItems {
-		items = append(items, item)
-	}
-
-	config := &MonitoringConfigDTO{
-		Version: 1,
-		Items:   items,
-	}
-
-	data, err := json.MarshalIndent(config, "", "  ")
+	data, err := json.MarshalIndent(&MonitoringConfigDTO{Version: 1, Items: items}, "", "  ")
 	if err != nil {
 		return err
 	}
-
-	return os.WriteFile(configPath, data, 0644)
+	if err := os.WriteFile(configPath, data, 0644); err != nil {
+		return err
+	}
+	s.monitoringSavedSeq = seq
+	return nil
 }
 
 // LoadMonitoringConfig はモニタリング設定をファイルから読み込む

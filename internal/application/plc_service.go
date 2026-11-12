@@ -58,6 +58,11 @@ type PLCService struct {
 
 	// モニタリング
 	monitoringItems map[string]*MonitoringItemDTO
+	// モニタリング設定の自動保存（plc_service_monitoring.go）
+	monitoringSaveSeq   uint64         // 保存する内容の通し番号（mu で保護）
+	monitoringSaveMu    sync.Mutex     // ファイルへの書き込みを 1 つずつにする
+	monitoringSavedSeq  uint64         // 書き込み済みの通し番号（monitoringSaveMu で保護）
+	monitoringSaveGroup sync.WaitGroup // 実行中の自動保存
 
 	// 通信イベント
 	eventEmitter protocol.CommunicationEventEmitter
@@ -326,6 +331,9 @@ func (s *PLCService) getServerInstance(protocolType string) (*serverInstance, er
 
 // Shutdown はサービスをシャットダウンする
 func (s *PLCService) Shutdown() {
+	// 実行中のモニタリング設定の保存を終わらせる
+	s.monitoringSaveGroup.Wait()
+
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
