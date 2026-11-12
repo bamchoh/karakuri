@@ -138,6 +138,13 @@ func (f *LazyRemoteServerFactory) ForceReconnect() error {
 	return f.EnsureStarted()
 }
 
+// IsProcessRunning はプラグインのプロセスが動いている（接続がある）かを返す
+func (f *LazyRemoteServerFactory) IsProcessRunning() bool {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.proc != nil && !f.proc.IsCrashed()
+}
+
 func (f *LazyRemoteServerFactory) IsProcessCrashed() bool {
 	f.mu.Lock()
 	defer f.mu.Unlock()
