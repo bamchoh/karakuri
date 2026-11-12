@@ -511,11 +511,14 @@ export const ServerPanel = forwardRef<ServerPanelHandle, ServerPanelProps>(
             <div className="server-instance-empty">
               {serverInstances.length === 0 && clients.length === 0 ? (
                 <>
-                  サーバーが登録されていません。SERVERS の
-                  <SquarePlus className="icon-left" size={14} />
-                  でサーバーを、CLIENTS の
-                  <SquarePlus className="icon-left" size={14} />
-                  で外部の機器への接続先を追加してください。
+                  <p>サーバーもクライアントも登録されていません。</p>
+                  <p>
+                    SERVERS の
+                    <SquarePlus size={14} />
+                    でサーバーを、CLIENTS（マスター）の
+                    <SquarePlus size={14} />
+                    で外部の機器への接続先を追加してください。
+                  </p>
                 </>
               ) : (
                 "左の一覧から選んでください。"

@@ -1105,7 +1105,20 @@ button:disabled {
   background: var(--bg-panel);
   border-radius: 4px;
   border: 1px solid var(--border);
-  height: 60px;
+  /* 文章が折り返しても枠からはみ出さないよう、高さは内容に合わせて伸ばす */
+  min-height: 60px;
+  line-height: 1.6;
+  align-self: flex-start;
+}
+
+.server-instance-empty p {
+  margin: 0;
+}
+
+/* 文中の ⊞ アイコンを文字の高さにそろえる */
+.server-instance-empty svg {
+  vertical-align: -2px;
+  margin: 0 0.15rem;
 }
 
 /* 縦タブレイアウト */

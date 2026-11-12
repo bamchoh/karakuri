@@ -65,9 +65,17 @@ test.describe("サーバーの追加と削除", () => {
   test("サーバーがないときは案内を表示し、ダイアログから追加できる", async ({
     page,
   }) => {
-    await expect(page.locator(".server-instance-empty")).toContainText(
-      "サーバーが登録されていません",
+    const empty = page.locator(".server-instance-empty");
+    await expect(empty).toContainText(
+      "サーバーもクライアントも登録されていません",
     );
+    // 案内が折り返しても、枠からはみ出さない（狭いウィンドウでも）
+    await page.setViewportSize({ width: 900, height: 700 });
+    expect(
+      await empty.evaluate((el) => el.scrollHeight <= el.clientHeight),
+    ).toBe(true);
+    await shot(page, "connections-empty");
+    await page.setViewportSize({ width: 1400, height: 900 });
     await expect(page.locator(".server-tab-item")).toHaveCount(0);
 
     // 追加ダイアログには、追加できるプロトコルが並ぶ
@@ -159,7 +167,7 @@ test.describe("サーバーの追加と削除", () => {
     await pane(page).locator(".btn-danger").click();
     await expect(page.locator(".server-tab-item")).toHaveCount(0);
     await expect(page.locator(".server-instance-empty")).toContainText(
-      "サーバーが登録されていません",
+      "サーバーもクライアントも登録されていません",
     );
   });
 });
