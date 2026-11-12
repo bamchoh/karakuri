@@ -6,7 +6,6 @@ import (
 	"karakuri/internal/domain/protocol"
 	"karakuri/internal/domain/script"
 	"karakuri/internal/domain/variable"
-	"karakuri/internal/infrastructure/adapter"
 )
 
 // === プロジェクトExport/Import ===
@@ -137,19 +136,16 @@ func (s *PLCService) ImportProject(data *ProjectDataDTO) error {
 		s.scriptEngine.StopAll()
 	}
 
-	// 全サーバーを停止・削除
+	// 全サーバーを停止・削除（RemoveServer と同じ後始末をする）。
+	// プラグインのプロセスも止める。止めないと、読み込む前のレジスタの値や UnitID の設定が
+	// プラグインに残り、読み込んだプロジェクトに含まれないプロトコルのプロセスも動き続ける
 	for _, inst := range s.servers {
-		if inst.cancelChange != nil {
-			inst.cancelChange()
-		}
-		if inst.changeListener != nil {
-			inst.changeListener.Detach()
-		}
-		if ds, ok := inst.dataStore.(*adapter.VariableBackedDataStore); ok {
-			ds.Detach()
-		}
 		if inst.server != nil {
 			inst.server.Stop()
+		}
+		inst.detachSync()
+		if stopper, ok := inst.factory.(pluginStopper); ok {
+			stopper.StopProcess()
 		}
 	}
 	s.servers = make(map[protocol.ProtocolType]*serverInstance)

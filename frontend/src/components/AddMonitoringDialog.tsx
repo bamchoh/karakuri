@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState } from "react";
 import { FocusTrap } from "./FocusTrap";
 import { application } from "../../wailsjs/go/models";
 
@@ -33,9 +33,12 @@ export function AddMonitoringDialog({
   serverInstances,
   memoryAreasByProtocol,
 }: AddMonitoringDialogProps) {
-  // 追加ダイアログ
-  const [formProtocolType, setFormProtocolType] = useState("");
-  const [formArea, setFormArea] = useState("");
+  // 選んだプロトコルとエリア。空文字は「まだ選んでいない」で、その間は既定のもの
+  // （先頭のサーバー、その最初のワードのエリア）を使う。
+  // 既定を effect で state に入れると、開いた直後の一瞬だけエリアが決まらず、
+  // 1 始まりのアドレスの換算がずれる
+  const [selectedProtocolType, setSelectedProtocolType] = useState("");
+  const [selectedArea, setSelectedArea] = useState("");
   const [formAddress, setFormAddress] = useState(0);
   const [formCount, setFormCount] = useState(1);
   const [formBitWidth, setFormBitWidth] = useState<BitWidth>(16);
@@ -43,37 +46,26 @@ export function AddMonitoringDialog({
   const [formDisplayFormat, setFormDisplayFormat] =
     useState<DisplayFormat>("decimal");
 
-  // フォームのプロトコル変更
+  const formProtocolType =
+    selectedProtocolType || serverInstances[0]?.protocolType || "";
+  const formAreas = memoryAreasByProtocol[formProtocolType] || [];
+  const formArea =
+    selectedArea ||
+    formAreas.find((a) => !a.isBit)?.id ||
+    formAreas[0]?.id ||
+    "";
+
+  // フォームのプロトコル変更（エリアは、そのプロトコルの既定に戻す）
   const handleFormProtocolChange = (protocolType: string) => {
-    setFormProtocolType(protocolType);
-    const areas = memoryAreasByProtocol[protocolType] || [];
-    setFormArea(areas.find((a) => !a.isBit)?.id || areas[0]?.id || "");
+    setSelectedProtocolType(protocolType);
+    setSelectedArea("");
   };
 
   // 選択されたエリアがビットタイプかどうか
-  const formAreas = memoryAreasByProtocol[formProtocolType] || [];
   const selectedAreaIsBit =
     formAreas.find((a) => a.id === formArea)?.isBit ?? false;
   const isOneOriginFormArea =
     formAreas.find((a) => a.id === formArea)?.oneOrigin ?? false;
-
-  useEffect(() => {
-    if (serverInstances.length === 0) {
-      return;
-    }
-
-    if (formProtocolType !== "") {
-      return;
-    }
-
-    const protocolType = serverInstances[0].protocolType;
-
-    setFormProtocolType(protocolType);
-
-    const areas = memoryAreasByProtocol[protocolType] || [];
-
-    setFormArea(areas.find((a) => !a.isBit)?.id ?? areas[0]?.id ?? "");
-  }, [serverInstances, memoryAreasByProtocol, formProtocolType]);
 
   return (
     <FocusTrap
@@ -113,7 +105,7 @@ export function AddMonitoringDialog({
             <label>メモリエリア:</label>
             <select
               value={formArea}
-              onChange={(e) => setFormArea(e.target.value)}
+              onChange={(e) => setSelectedArea(e.target.value)}
             >
               {formAreas.map((area) => (
                 <option key={area.id} value={area.id}>
