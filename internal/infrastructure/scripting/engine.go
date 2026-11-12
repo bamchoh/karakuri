@@ -517,8 +517,10 @@ func (e *ScriptEngine) startScript(s *script.Script) error {
 	e.scripts[s.ID] = rs
 
 	// 周期実行ゴルーチン
+	// s は呼び出し側が書き換えることがある（スクリプトの保存）。ゴルーチンには、開始した時点の値を渡す
+	id, name, interval := s.ID, s.Name, s.Interval
 	go func() {
-		ticker := time.NewTicker(s.Interval)
+		ticker := time.NewTicker(interval)
 		defer ticker.Stop()
 
 		// 直前の実行のエラー（成功なら空）。同じエラーが続く間は、コンソールに出し直さない
@@ -533,7 +535,7 @@ func (e *ScriptEngine) startScript(s *script.Script) error {
 					return // 実行中に停止された
 				}
 				if errMsg != "" && errMsg != lastErr {
-					e.addLog(s.ID, s.Name, LogLevelError, errMsg)
+					e.addLog(id, name, LogLevelError, errMsg)
 				}
 				lastErr = errMsg
 			}
