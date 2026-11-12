@@ -602,3 +602,148 @@ func TestListener_MultiWordVariable(t *testing.T) {
 		t.Errorf("配列の変数 = %s, want [7 8 9]", got)
 	}
 }
+
+// ===== DataStore の寿命（#44: 起動前から使え、起動し直しても値が残る） =====
+
+// stoppedServer はプラグインに接続し、サーバーを作るところまで行う（起動しない）。
+// PLCService がサーバーを追加した直後と同じ状態
+func stoppedServer(t *testing.T) (*testFactory, *RemoteDataStore, *RemoteProtocolServer) {
+	t.Helper()
+	pluginSide, hostSide := startPlugin(t)
+	if err := hostSide.EnsureStarted(); err != nil {
+		t.Fatalf("EnsureStarted: %v", err)
+	}
+	ds := hostSide.CreateDataStore().(*RemoteDataStore)
+	srv, err := hostSide.CreateServer(hostSide.CreateConfigFromVariant("v1"), ds)
+	if err != nil {
+		t.Fatalf("CreateServer: %v", err)
+	}
+	rs := srv.(*RemoteProtocolServer)
+	t.Cleanup(func() { _ = rs.Stop() })
+	return pluginSide, ds, rs
+}
+
+func TestDataStore_UsableBeforeServerStart(t *testing.T) {
+	_, ds, rs := stoppedServer(t)
+	const hr, coils = "holdingRegisters", "coils"
+
+	// 一度も起動していなくても、エリアの一覧が取れて読み書きできる
+	if got := ds.GetAreas(); !reflect.DeepEqual(got, protocoltest.Areas) {
+		t.Errorf("起動前の GetAreas = %+v", got)
+	}
+	if err := ds.WriteWord(hr, 5, 77); err != nil {
+		t.Fatalf("起動前の WriteWord: %v", err)
+	}
+	if err := ds.WriteBit(coils, 5, true); err != nil {
+		t.Fatalf("起動前の WriteBit: %v", err)
+	}
+	if got, err := ds.ReadWord(hr, 5); err != nil || got != 77 {
+		t.Errorf("起動前の ReadWord = %d, %v", got, err)
+	}
+
+	// 起動前に書いた値は、起動したあとも残っている
+	if err := rs.Start(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	if got, err := ds.ReadWord(hr, 5); err != nil || got != 77 {
+		t.Errorf("起動後の ReadWord = %d, %v, want 77", got, err)
+	}
+	if got, err := ds.ReadBit(coils, 5); err != nil || !got {
+		t.Errorf("起動後の ReadBit = %v, %v, want true", got, err)
+	}
+}
+
+func TestDataStore_KeepsValuesAcrossRestart(t *testing.T) {
+	pluginSide, _, ds, rs := startedServer(t)
+	const hr = "holdingRegisters"
+	if err := ds.WriteWords(hr, 5, []uint16{11, 22}); err != nil {
+		t.Fatal(err)
+	}
+	store := pluginSide.pluginStore()
+
+	for i := 0; i < 2; i++ {
+		if err := rs.Stop(); err != nil {
+			t.Fatal(err)
+		}
+		// 停止中も読める
+		if got, err := ds.ReadWords(hr, 5, 2); err != nil || !reflect.DeepEqual(got, []uint16{11, 22}) {
+			t.Errorf("停止中（%d 回目）= %v, %v, want [11 22]", i+1, got, err)
+		}
+		if err := rs.Start(t.Context()); err != nil {
+			t.Fatal(err)
+		}
+		if got, err := ds.ReadWords(hr, 5, 2); err != nil || !reflect.DeepEqual(got, []uint16{11, 22}) {
+			t.Errorf("起動し直したあと（%d 回目）= %v, %v, want [11 22]", i+1, got, err)
+		}
+	}
+	// プラグイン側の DataStore は作り直されていない
+	if pluginSide.pluginStore() != store {
+		t.Error("起動し直したときに DataStore が作り直された")
+	}
+}
+
+func TestListener_SyncSurvivesStartAndRestart(t *testing.T) {
+	pluginSide, ds, rs := stoppedServer(t)
+	vars := variable.NewVariableStore()
+	speed, _ := vars.CreateVariable("Speed", "INT", 12)
+	if err := vars.SetMappings(speed.ID, []variable.ProtocolMapping{{ProtocolType: testProtocol, MemoryArea: "holdingRegisters", Address: 10, Endianness: "big"}}); err != nil {
+		t.Fatal(err)
+	}
+	value := func() string {
+		v, _ := vars.GetVariable(speed.ID)
+		return fmt.Sprint(v.Value)
+	}
+	register := func() uint16 {
+		v, _ := pluginSide.pluginStore().ReadWord("holdingRegisters", 10)
+		return v
+	}
+
+	// サーバーを追加した時点（起動前）で、変数の値がレジスタに入る
+	listener := NewRemoteVariableChangeListener(ds, vars, testProtocol)
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		_ = listener.StartChangeSubscription(ctx)
+	}()
+	defer func() {
+		cancel()
+		<-done
+		listener.Detach()
+	}()
+	if got := register(); got != 12 {
+		t.Errorf("起動前: レジスタ = %d, want 12", got)
+	}
+	// 起動前に変数を変えても反映される
+	_ = vars.UpdateValue(speed.ID, 34)
+	if got := register(); got != 34 {
+		t.Errorf("起動前の変数の変更: レジスタ = %d, want 34", got)
+	}
+
+	// 起動・起動し直しのあとも、レジスタは変数と同じ値のままで、双方向の同期が続く
+	for i := 0; i < 2; i++ {
+		if err := rs.Start(t.Context()); err != nil {
+			t.Fatal(err)
+		}
+		if got := register(); fmt.Sprint(got) != value() {
+			t.Errorf("起動 %d 回目: レジスタ = %d, 変数 = %s", i+1, got, value())
+		}
+		want := uint16(100 + i)
+		// 書き込みは 1 回ずつ行い、届くのを待つ（続けて書くと、遅れて届いた通知が後の値を上書きする）
+		eventually(t, "起動後もクライアントの書き込みが変数に届く", func() bool {
+			_ = pluginSide.pluginStore().WriteWords("holdingRegisters", 10, []uint16{want})
+			for wait := 0; wait < 40 && value() != fmt.Sprint(want); wait++ {
+				time.Sleep(5 * time.Millisecond)
+			}
+			return value() == fmt.Sprint(want)
+		})
+		time.Sleep(50 * time.Millisecond) // 残っている通知が処理されるのを待つ
+		_ = vars.UpdateValue(speed.ID, 200+i)
+		if got := register(); got != uint16(200+i) {
+			t.Errorf("起動 %d 回目の変数の変更: レジスタ = %d, want %d", i+1, got, 200+i)
+		}
+		if err := rs.Stop(); err != nil {
+			t.Fatal(err)
+		}
+	}
+}
