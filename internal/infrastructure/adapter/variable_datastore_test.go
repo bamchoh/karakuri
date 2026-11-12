@@ -114,10 +114,6 @@ func (d *testDataStore) WriteWords(area string, addr uint32, vals []uint16) erro
 	return nil
 }
 
-func (d *testDataStore) Snapshot() map[string]interface{}       { return map[string]interface{}{} }
-func (d *testDataStore) Restore(_ map[string]interface{}) error { return nil }
-func (d *testDataStore) ClearAll()                              {}
-
 // =====================================================================
 // テストセットアップヘルパー
 // =====================================================================
@@ -133,17 +129,6 @@ func setupAdapter(protocolType string) (*VariableBackedDataStore, *testDataStore
 // =====================================================================
 // Unwrap
 // =====================================================================
-
-func TestVariableBackedDataStore_Unwrap(t *testing.T) {
-	inner := newTestDataStore()
-	varStore := variable.NewVariableStore()
-	adapter := NewVariableBackedDataStore(inner, varStore, "test")
-
-	got := adapter.Unwrap()
-	if got != inner {
-		t.Error("Unwrap() should return the inner DataStore")
-	}
-}
 
 // =====================================================================
 // GetAreas / 基本的な読み書き委譲
@@ -459,20 +444,6 @@ func TestVariableBackedDataStore_WriteBits_Delegation(t *testing.T) {
 // ClearAll の委譲
 // =====================================================================
 
-func TestVariableBackedDataStore_ClearAll(t *testing.T) {
-	adapter, inner, _ := setupAdapter("test")
-
-	_ = inner.WriteWord("holding", 0, 999)
-	_ = inner.WriteBit("coils", 0, true)
-
-	// adapter.ClearAll はinnerに委譲
-	adapter.ClearAll()
-
-	// inner のデータがクリアされること（実装はinnerに委譲なので、
-	// testDataStoreのClearAllは何もしないが、インターフェースを満たす）
-	// ここではパニックしないことだけ確認
-}
-
 // =====================================================================
 // 型アサーション確認（interface実装）
 // =====================================================================
@@ -584,6 +555,6 @@ func TestVariableBackedDataStore_NoEcho(t *testing.T) {
 
 type countingListener struct{ count int }
 
-func (l *countingListener) OnVariableChanged(*variable.Variable, []variable.ProtocolMapping, string, interface{}) {
+func (l *countingListener) OnVariableChanged(*variable.Variable, []variable.ProtocolMapping) {
 	l.count++
 }

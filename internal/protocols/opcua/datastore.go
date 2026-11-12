@@ -17,6 +17,3 @@ func (d *emptyDataStore) ReadWord(string, uint32) (uint16, error)            { r
 func (d *emptyDataStore) WriteWord(string, uint32, uint16) error             { return nil }
 func (d *emptyDataStore) ReadWords(string, uint32, uint16) ([]uint16, error) { return nil, nil }
 func (d *emptyDataStore) WriteWords(string, uint32, []uint16) error          { return nil }
-func (d *emptyDataStore) Snapshot() map[string]interface{}                   { return nil }
-func (d *emptyDataStore) Restore(map[string]interface{}) error               { return nil }
-func (d *emptyDataStore) ClearAll()                                          {}

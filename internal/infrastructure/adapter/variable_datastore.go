@@ -42,12 +42,6 @@ func NewVariableBackedDataStore(inner protocol.DataStore, varStore *variable.Var
 	return adapter
 }
 
-// Unwrap は内側の DataStore を返す。
-// プロトコルファクトリーが具体型を必要とする場合に使用する。
-func (a *VariableBackedDataStore) Unwrap() protocol.DataStore {
-	return a.inner
-}
-
 // Detach はリスナーを解除する（サーバーを削除するときに呼ぶ）
 func (a *VariableBackedDataStore) Detach() {
 	a.varStore.RemoveListener(a)
@@ -58,7 +52,7 @@ func (a *VariableBackedDataStore) Detach() {
 // ============================================================
 
 // OnVariableChanged はVariableStoreからの変更通知を処理する
-func (a *VariableBackedDataStore) OnVariableChanged(v *variable.Variable, mappings []variable.ProtocolMapping, _ string, _ interface{}) {
+func (a *VariableBackedDataStore) OnVariableChanged(v *variable.Variable, mappings []variable.ProtocolMapping) {
 	for _, m := range mappings {
 		if m.ProtocolType != a.protocolType {
 			continue
@@ -177,22 +171,6 @@ func (a *VariableBackedDataStore) syncBitsToVariables(area string, address uint3
 	}
 }
 
-// syncAllDataStoreToVariables はDataStoreの全マッピング済みアドレスを変数に反映する
-func (a *VariableBackedDataStore) syncAllDataStoreToVariables() {
-	allVars := a.varStore.GetAllVariables()
-	for _, v := range allVars {
-		mappings := a.varStore.GetMappings(v.ID)
-		for _, m := range mappings {
-			if m.ProtocolType != a.protocolType {
-				continue
-			}
-			if value, ok := a.readVariableFromInner(v, &m); ok {
-				a.varStore.UpdateValueFrom(v.ID, value, a)
-			}
-		}
-	}
-}
-
 // ============================================================
 // protocol.DataStore インターフェースの実装
 // 読み取りはそのまま inner に委譲
@@ -249,21 +227,4 @@ func (a *VariableBackedDataStore) WriteWords(area string, address uint32, values
 	}
 	a.syncWordsToVariables(area, address, len(values))
 	return nil
-}
-
-func (a *VariableBackedDataStore) Snapshot() map[string]interface{} {
-	return a.inner.Snapshot()
-}
-
-func (a *VariableBackedDataStore) Restore(data map[string]interface{}) error {
-	if err := a.inner.Restore(data); err != nil {
-		return err
-	}
-	// 復元後、DataStoreの値を変数に反映
-	a.syncAllDataStoreToVariables()
-	return nil
-}
-
-func (a *VariableBackedDataStore) ClearAll() {
-	a.inner.ClearAll()
 }
