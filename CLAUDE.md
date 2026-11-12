@@ -162,6 +162,7 @@ internal/
 │   ├── plc_service_variables.go  # 変数・マッピング・ノード公開設定・構造体型
 │   ├── app_events.go             # Wails イベントの送信（WailsAppStateEmitter / WailsEventEmitter）
 │   └── dto.go                    # DTO定義（ProtocolSchemaDTO, MonitoringItemDTO等）
+├── valuecodec/       # ホストとプラグインの間で変数の値を運ぶ MessagePack の変換（両側で共通）
 ├── pluginruntime/    # プラグイン側の共通実装（各プラグインの main から使う。Wails に依存しない）
 │   ├── runtime.go            # RunFactory（gRPC サーバー起動・GRPC_PORT 出力）
 │   ├── server.go             # PluginService + DataStoreService の実装
@@ -624,7 +625,9 @@ JavaScript（goja）でPLC動作を記述。
 
 - ホスト → OPC UA: `SubscribeVariableChanges` で変更された変数 ID を受け取り、その変数を読み直してルートと全子ノードに `SetValue()`。取りこぼし対策として 1 秒ごとに全変数を再同期
 - OPC UA → ホスト: `Node.OnWrite` → `WriteVariableValue`（ルート）/ `WriteVariableFieldValue`（子ノード、フィールドパスは外部インデックス）。書き込み後に同じ変数の他ノードも更新
-- msgpack は `MapType=map[string]interface{}` でデコードし、構造体値を JSON 化できるようにする
+- 値は MessagePack で運ぶ。変換は `internal/valuecodec`（`Marshal` / `Unmarshal`）に 1 か所だけ定義し、ホスト（`HostGrpcServer`）とプラグイン（`RemoteVariableStoreAccessor`）の両方がこれを使う。設定が食い違うと、文字列が `[]byte`、構造体が `map[interface{}]interface{}` になって書き込みが失敗する
+  - デコードした値は元の Go の型を持たない（整数は `int64` / `uint64`、小数は `float64`）。ホストは `variable.ConvertValue` で変数の型に合わせる
+  - この経路全体（OPC UA クライアント → サーバー → gRPC → ホストの変数ストア）は `cmd/opcua-plugin/internal/opcua/host_integration_test.go` で確認する。他の OPC UA のテストはフェイクの変数ストアを使うため、値の変換を通らない
 
 #### サーバー設定
 

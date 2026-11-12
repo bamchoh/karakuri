@@ -6,34 +6,14 @@ import (
 	"net"
 	"sync"
 
-	"github.com/ugorji/go/codec"
 	"google.golang.org/grpc"
 
 	pb "karakuri/pb/pluginpb"
 
 	"karakuri/internal/domain/protocol"
 	"karakuri/internal/domain/variable"
+	"karakuri/internal/valuecodec"
 )
-
-var msgpackHandle = func() *codec.MsgpackHandle {
-	h := new(codec.MsgpackHandle)
-	h.TypeInfos = codec.NewTypeInfos([]string{"msgpack"})
-	return h
-}()
-
-func marshalMsgpack(v interface{}) ([]byte, error) {
-	var b []byte
-	enc := codec.NewEncoderBytes(&b, msgpackHandle)
-	if err := enc.Encode(v); err != nil {
-		return nil, err
-	}
-	return b, nil
-}
-
-func unmarshalMsgpack(b []byte, v interface{}) error {
-	dec := codec.NewDecoderBytes(b, msgpackHandle)
-	return dec.Decode(v)
-}
 
 // HostGrpcServer はホスト側で動作する gRPC サーバー。
 // OPC UA 等の SupportsNodePublishing=true プラグインが VariableAccessorService を呼び出すために使用する。
@@ -116,7 +96,7 @@ func (s *HostGrpcServer) ReadVariableValue(ctx context.Context, req *pb.ReadVari
 	if err != nil {
 		return &pb.ReadVariableValueResponse{Error: err.Error()}, nil
 	}
-	b, err := marshalMsgpack(val)
+	b, err := valuecodec.Marshal(val)
 	if err != nil {
 		return &pb.ReadVariableValueResponse{Error: fmt.Sprintf("MessagePack 変換失敗: %v", err)}, nil
 	}
@@ -125,7 +105,7 @@ func (s *HostGrpcServer) ReadVariableValue(ctx context.Context, req *pb.ReadVari
 
 func (s *HostGrpcServer) WriteVariableValue(ctx context.Context, req *pb.WriteVariableValueRequest) (*pb.Empty, error) {
 	var val interface{}
-	if err := unmarshalMsgpack(req.ValueMsgpack, &val); err != nil {
+	if err := valuecodec.Unmarshal(req.ValueMsgpack, &val); err != nil {
 		return nil, fmt.Errorf("MessagePack デコード失敗: %w", err)
 	}
 	if err := s.accessor.WriteVariableValue(req.VariableId, val); err != nil {
@@ -136,7 +116,7 @@ func (s *HostGrpcServer) WriteVariableValue(ctx context.Context, req *pb.WriteVa
 
 func (s *HostGrpcServer) WriteVariableField(ctx context.Context, req *pb.WriteVariableFieldRequest) (*pb.Empty, error) {
 	var val interface{}
-	if err := unmarshalMsgpack(req.ValueMsgpack, &val); err != nil {
+	if err := valuecodec.Unmarshal(req.ValueMsgpack, &val); err != nil {
 		return nil, fmt.Errorf("MessagePack デコード失敗: %w", err)
 	}
 	if err := s.accessor.WriteVariableFieldValue(req.VariableId, req.FieldPath, val); err != nil {
@@ -199,7 +179,7 @@ func (s *HostGrpcServer) OnVariableChanged(v *variable.Variable, _ []variable.Pr
 	if changedPath != "" && changedValue != nil {
 		target = changedValue
 	}
-	b, err := marshalMsgpack(target)
+	b, err := valuecodec.Marshal(target)
 	if err != nil {
 		return
 	}
