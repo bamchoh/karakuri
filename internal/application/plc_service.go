@@ -91,6 +91,9 @@ func NewPLCService() *PLCService {
 		}
 	})
 
+	// スクリプトの plc.sendCommand() / plc.sendRequest() から、クライアントの接続先へ送れるようにする
+	service.scriptEngine.SetClientSender(scriptClientSender{svc: service})
+
 	// モニタリング設定を読み込み
 	_ = service.LoadMonitoringConfig()
 

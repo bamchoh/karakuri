@@ -392,6 +392,7 @@ JavaScript（goja）でPLC動作を記述。
   - TIME/DATE シンタックスシュガー: `plc.readTimeMs()`, `plc.writeTimeMs()`, `plc.readDateSec()`, `plc.writeDateSec()`, `plc.readTimeOfDayMs()`, `plc.writeTimeOfDayMs()`, `plc.readDateAndTimeSec()`, `plc.writeDateAndTimeSec()`（変数の読み取り・パース・フォーマット・書き込みをワンステップで実行）
   - TIME/DATE 文字列変換: `plc.parseTime()`, `plc.formatTime()`, `plc.parseDate()`, `plc.formatDate()`, `plc.parseTimeOfDay()`, `plc.formatTimeOfDay()`, `plc.parseDateAndTime()`, `plc.formatDateAndTime()`
   - 外部の機器との同期の状態: `plc.getVariableStatus(name)`（クライアントの接続先にマッピングした変数。`{ state, writePending, error, client }`、マッピングしていなければ `null`）
+  - 外部の機器へ送る: `plc.sendCommand(client, group, command)`（コマンドグループに保存したコマンドを名前で指定）、`plc.sendRequest(client, hex)`（16 進で指定）。応答かタイムアウトまで待って `{ status, error, values: [{ label, value, word?, bit? }], sent, received, elapsedMs, summary, label }` を返す。見つからない・16 進が読めないときも例外にせず `status: "error"`。名前が重なれば追加した順で最初のもの。履歴の `label` は「スクリプト「名前」: グループ / コマンド」（実装は `plc_service_client_script.go` の `scriptClientSender`、エンジンへは `ScriptEngine.SetClientSender()` で渡す）
 
 ### Wailsバインディング
 
