@@ -267,9 +267,17 @@ frontend/src/
 │   ├── ServerPanel.tsx     # スキーマ駆動のサーバー設定UI
 │   ├── RegisterPanel.tsx   # 汎用メモリ操作UI（サブタブで一覧/モニタリング切替）
 │   ├── MonitoringView.tsx  # カスタムレジスタモニタリング
-│   ├── VariableView.tsx    # 変数管理UI（IEC 61131-3データ型対応）
-│   ├── variableTypes.ts    # 変数のデータ型・値の純粋関数（型の解析、数値の解析と整形。state に依存しない）
-│   ├── StructArrayElementEditor.tsx  # 構造体配列要素のエディタ（VariableView の値編集ダイアログで使用）
+│   ├── VariableView.tsx    # 変数管理UI（変数一覧・行のキーボード操作・右クリックメニュー。ダイアログは下の各ファイル）
+│   ├── AddVariableDialog.tsx   # 変数追加ダイアログ
+│   ├── MetaEditDialog.tsx      # 変数の名前・データ型の編集ダイアログ
+│   ├── ValueEditDialog.tsx     # 値の編集ダイアログ（再帰的エディタ）
+│   ├── MappingDialog.tsx       # マッピング設定ダイアログ（レジスタマッピング + ノード公開設定）
+│   ├── BulkMappingDialog.tsx   # 一括マッピング編集ダイアログ
+│   ├── StructTypeDialog.tsx    # 構造体型管理ダイアログ
+│   ├── StructArrayElementEditor.tsx  # 構造体配列要素のエディタ（ValueEditDialog で使用）
+│   ├── variableTypes.ts    # 変数のデータ型・値の純粋関数と行の型定義（state に依存しない）
+│   ├── useNodeAddresses.ts # ノードアドレス（OPC UA の NodeID 等）の取得と保持（マッピングの 2 つのダイアログで使用）
+│   ├── useEscapeKey.ts     # Esc キーでダイアログを閉じるためのフック
 │   └── ScriptPanel.tsx     # スクリプト管理（エラー表示機能付き）
 └── App.tsx                 # タブベースのメインUI
 ```
@@ -300,6 +308,13 @@ frontend/src/
 - **API 呼び出し**: `ReadWords(item.protocolType, item.memoryArea, ...)` など全 API に `protocolType` を渡す
 
 #### VariableView.tsx
+`VariableView.tsx` は変数一覧と行の操作だけを持ち、各ダイアログは別ファイルのコンポーネントに分かれている（以下の説明は、ダイアログの分も含めた変数画面全体のもの）。
+- **ダイアログの作り**: 各ダイアログはフォームの state を自分で持ち、`VariableView` に常にマウントされる。開くときは ref の `open()`（`MetaEditDialog` / `MappingDialog` は対象の変数、`ValueEditDialog` は `openRow(row)`）を呼ぶ。閉じているときは `null` を返す
+  - 常にマウントしているのは、閉じても入力内容を保持するため（変数追加ダイアログはキャンセルしても入力が残る）
+  - 親は `ref.current?.isOpen()` で開閉を調べ、ダイアログが開いている間は行のキーボード操作を止める
+  - Esc で閉じる処理は各ダイアログが `useEscapeKey` で持つ
+- **共有するデータ**: `dataTypes` / `structTypes` / `variables` / `serverInstances` / `memoryAreasByProtocol` は `VariableView` が読み込み、props で渡す。保存後の再読み込みは `onChanged`（`loadVariables` / `loadStructTypes`）で行う
+- **画面のテスト**: `frontend/e2e/variable-dialogs.spec.ts` が各ダイアログの動きを確認する。ダイアログを変更したら実行する
 IEC 61131-3準拠の変数管理機能。
 - **データ型サポート**:
   - スカラー型: BOOL, SINT, INT, DINT, USINT, UINT, UDINT, REAL, LREAL, STRING[n]
@@ -480,7 +495,7 @@ JavaScript（goja）でPLC動作を記述。
 ### Reactコンポーネントの状態管理
 
 - **コンポーネントの定義位置**: 関数コンポーネント内で別のコンポーネントを定義すると、再レンダリング時に新しいコンポーネントとして扱われ、`useState`などの状態がリセットされる
-  - 例: `StructArrayElementEditor`は`VariableView`の外（`StructArrayElementEditor.tsx`）で定義
+  - 例: `StructArrayElementEditor`は`ValueEditDialog`の外（`StructArrayElementEditor.tsx`）で定義
   - 内部で使用する関数は props で渡す
 - **キーの設定**: リスト描画時は安定した`key`を設定（インデックスだけでなく、パスベースのキーを使用）
 
