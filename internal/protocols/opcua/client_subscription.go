@@ -23,6 +23,8 @@ const (
 	// つながらないとき、つなぎ直すまでの待ち時間（失敗が続くと、上限まで倍にしていく）
 	subscriptionRetryMin = time.Second
 	subscriptionRetryMax = 5 * time.Second
+	// 監視用のセッションのタイムアウト（サーバーに頼む値）
+	subscriptionSessionTimeout = time.Minute
 )
 
 var _ protocol.SubscriptionClientFactory = (*ClientFactory)(nil)
@@ -58,6 +60,11 @@ func (c *Client) subscriptionDial(ctx context.Context, onState func(uaclient.Con
 	cfg.SessionName = "Karakuri (subscription)"
 	cfg.AutoReconnect = true
 	cfg.MaxReconnectInterval = subscriptionRetryMax
+	// セッションを保つ間隔は、こちらで決める。任せると uastack（v0.1.1）は、サーバーが決めたセッションの
+	// タイムアウトから間隔を出すが、その値をロックなしで読むので、つなぎ直しでセッションを作り直す処理と
+	// データ競合になる（競合検出で失敗する）
+	cfg.SessionTimeout = subscriptionSessionTimeout
+	cfg.KeepAliveInterval = subscriptionSessionTimeout / 3
 	cfg.OnStateChange = onState
 	ctx, cancel := context.WithTimeout(ctx, c.timeout)
 	defer cancel()
