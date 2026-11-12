@@ -191,6 +191,8 @@ export function VariableView() {
       depth: number,
       valuePath: (string | number)[],
       wordOffset: number,
+      // バックエンドに渡すフィールドパス（配列の添字は表示と同じ外部インデックス）
+      extPath: string,
     ) => {
       // 配列型
       if (isArrayType(dataType)) {
@@ -206,6 +208,7 @@ export function VariableView() {
           depth,
           variable: v,
           valuePath,
+          fieldPath: extPath,
           isHeader: true,
           wordOffset,
         });
@@ -215,9 +218,18 @@ export function VariableView() {
           value.forEach((elem: any, i: number) => {
             const elemPath = [...valuePath, i];
             const elemName = `${displayName}[${lowerBound + i}]`;
+            const elemExtPath = `${extPath}[${lowerBound + i}]`;
             const elemOffset = wordOffset + i * elemWordCount;
             if (isStructType(elemType) || isArrayType(elemType)) {
-              expand(elemName, elemType, elem, depth + 1, elemPath, elemOffset);
+              expand(
+                elemName,
+                elemType,
+                elem,
+                depth + 1,
+                elemPath,
+                elemOffset,
+                elemExtPath,
+              );
             } else {
               rows.push({
                 key: `${v.id}:${elemPath.join(".")}`,
@@ -227,6 +239,7 @@ export function VariableView() {
                 depth: depth + 1,
                 variable: v,
                 valuePath: elemPath,
+                fieldPath: elemExtPath,
                 isHeader: false,
                 wordOffset: elemOffset,
               });
@@ -253,6 +266,7 @@ export function VariableView() {
           depth,
           variable: v,
           valuePath,
+          fieldPath: extPath,
           isHeader: true,
           wordOffset,
         });
@@ -260,6 +274,7 @@ export function VariableView() {
           st.fields.forEach((field) => {
             const fieldPath = [...valuePath, field.name];
             const fieldName = `${displayName}.${field.name}`;
+            const fieldExtPath = `${extPath}.${field.name}`;
             const fieldOffset = wordOffset + field.offset;
             if (isStructType(field.dataType) || isArrayType(field.dataType)) {
               expand(
@@ -269,6 +284,7 @@ export function VariableView() {
                 depth + 1,
                 fieldPath,
                 fieldOffset,
+                fieldExtPath,
               );
             } else {
               rows.push({
@@ -279,6 +295,7 @@ export function VariableView() {
                 depth: depth + 1,
                 variable: v,
                 valuePath: fieldPath,
+                fieldPath: fieldExtPath,
                 isHeader: false,
                 wordOffset: fieldOffset,
               });
@@ -297,12 +314,13 @@ export function VariableView() {
         depth,
         variable: v,
         valuePath,
+        fieldPath: extPath,
         isHeader: false,
         wordOffset,
       });
     };
 
-    expand(v.name, v.dataType, v.value, 0, [], 0);
+    expand(v.name, v.dataType, v.value, 0, [], 0, "");
     return rows;
   };
 

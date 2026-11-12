@@ -387,8 +387,7 @@ test.describe("値を編集ダイアログ", () => {
       on: false,
     });
 
-    // 配列: 要素の行を編集。
-    // 開始インデックスが 0 でない配列は、別の要素に書き込まれる不具合があるため使わない（issue #24）
+    // 配列: 要素の行を編集
     await variableRow(page, "Values").locator("td.var-name").click();
     await shot(page, "rows-expanded");
     const elem = variableRow(page, "Values[1]").locator("td.var-value");
@@ -397,6 +396,65 @@ test.describe("値を編集ダイアログ", () => {
     await dialog.locator("input").fill("20");
     await dialog.getByRole("button", { name: "更新" }).click();
     expect((await getVariable(page, "Values")).value).toEqual([1, 20, 3]);
+  });
+
+  // issue #24: 以前は、開始インデックスの分だけずれた要素に書き込まれていた
+  test("開始インデックスが 0 でない配列でも、編集した行の要素に書き込む", async ({
+    page,
+  }) => {
+    await api(page, "RegisterStructType", {
+      name: "Rec",
+      fields: [{ name: "hist", dataType: "ARRAY[2..3] OF INT", offset: 0 }],
+      wordCount: 0,
+    });
+    await page.reload();
+    await openApp(page);
+    await openVariables(page);
+    await createVariable(page, "Values", "ARRAY[1..3] OF DINT", [1, 2, 3]);
+    await createVariable(page, "Grid", "ARRAY[1..2, 5..6] OF INT", [
+      [1, 2],
+      [3, 4],
+    ]);
+    await createVariable(page, "Recs", "ARRAY[10..11] OF Rec", [
+      { hist: [1, 2] },
+      { hist: [3, 4] },
+    ]);
+    const dialog = dialogByTitle(page, "値を編集");
+    const edit = async (rowName: string, value: string) => {
+      const cell = variableRow(page, rowName).locator("td.var-value");
+      await cell.click();
+      await expect(dialog.locator(".dialog-value").nth(0)).toHaveText(rowName);
+      await dialog.locator("input").fill(value);
+      await dialog.getByRole("button", { name: "更新" }).click();
+      await expect(dialog).toBeHidden();
+      await expect(cell).toHaveText(value);
+    };
+    const expand = (rowName: string) =>
+      variableRow(page, rowName).locator("td.var-name").click();
+
+    // 1 次元: 最後の要素（Values[3]）
+    await expand("Values");
+    await edit("Values[3]", "30");
+    expect((await getVariable(page, "Values")).value).toEqual([1, 2, 30]);
+
+    // 2 次元: Grid[2][5] は 2 行目の先頭
+    await expand("Grid");
+    await expand("Grid[2]");
+    await edit("Grid[2][5]", "50");
+    expect((await getVariable(page, "Grid")).value).toEqual([
+      [1, 2],
+      [50, 4],
+    ]);
+
+    // 構造体の配列の中の配列: Recs[11].hist[3] は最後の要素
+    await expand("Recs");
+    await expand("Recs[11]");
+    await expand("Recs[11].hist");
+    await edit("Recs[11].hist[3]", "99");
+    expect((await getVariable(page, "Recs")).value).toEqual([
+      { hist: [1, 2] },
+      { hist: [3, 99] },
+    ]);
   });
 
   test("見出し行からは変数全体を編集でき、キャンセルと Esc では変わらない", async ({

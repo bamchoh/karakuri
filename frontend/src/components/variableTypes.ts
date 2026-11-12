@@ -181,23 +181,6 @@ export const coerceFloatIfNeeded = (value: any, dataType: string): any => {
   return value;
 };
 
-// valuePath (string | number)[] をバックエンドのフィールドパス文字列に変換する
-// 文字列セグメントは常に "." プレフィックスを付ける
-// 例: ["motor", "speed"] → ".motor.speed"
-//     ["items", 1]       → ".items[1]"
-//     [0, "name"]        → "[0].name"
-export const valuePathToFieldPath = (valuePath: (string | number)[]): string => {
-  let result = "";
-  for (const seg of valuePath) {
-    if (typeof seg === "number") {
-      result += `[${seg}]`;
-    } else {
-      result += `.${seg}`;
-    }
-  }
-  return result;
-};
-
 // 数値入力のパース（接頭辞で自動判定）
 export const parseNumericInput = (input: string): number => {
   const trimmed = input.trim();
@@ -339,8 +322,11 @@ export interface FlatRow {
   depth: number;
   // 親変数への参照（編集・削除・マッピング用）
   variable: application.VariableDTO;
-  // 値のパスを表すキー配列（例: ["fieldName"] や [0, "fieldName"]）
+  // 値のパスを表すキー配列（例: ["fieldName"] や [0, "fieldName"]）。配列の添字は 0 始まりの位置
   valuePath: (string | number)[];
+  // バックエンドに渡すフィールドパス（例: ".fieldName" や "[1].fieldName"）。
+  // 配列の添字は表示と同じ外部インデックス（ARRAY[1..3] の先頭は [1]）。変数そのものの行は ""
+  fieldPath: string;
   // この行がヘッダー行（構造体/配列の親）かどうか
   isHeader: boolean;
   // 変数のベースアドレスからのワードオフセット
