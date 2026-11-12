@@ -13,6 +13,7 @@ import {
   createVariable,
   getVariable,
   MODBUS_PORT,
+  openClient,
 } from "./helpers";
 
 // 変数を、クライアントの接続先（テストで起動した Karakuri 自身の Modbus TCP サーバー）のアドレスにマッピングして同期する。
@@ -122,7 +123,7 @@ test("読めなくなったら「通信エラー」、書けなければ「書�
   await shot(page, "client-mapping-error");
 
   // 接続先の画面に、状態のまとめが出る
-  await page.getByTitle("Clients").click();
+  await openClient(page, "自分");
   await page.locator(".sub-tab-button", { hasText: "ポーリング" }).click();
   const summary = page.getByTestId("client-mapping-summary");
   await expect(summary).toContainText("通信エラー 1");

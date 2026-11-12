@@ -5,7 +5,6 @@ import { UnsavedChangesDialog } from "./components/UnsavedChangesDialog";
 import { VariableView } from "./components/VariableView";
 import { RegisterPanel, RegisterTab } from "./components/RegisterPanel";
 import { ScriptPanel } from "./components/ScriptPanel";
-import { ClientPanel } from "./components/ClientPanel";
 import { KarakuriLogo } from "./components/KarakuriLogo";
 import { GetHTTPAPIPort, SetHTTPAPIPort } from "../wailsjs/go/main/App";
 import { Sidebar } from "./components/Sidebar";
@@ -15,7 +14,7 @@ import { FolderOpen, Save } from "lucide-react";
 
 const APP_VERSION = "v0.0.39";
 
-type Tab = "server" | "variables" | "registers" | "scripts" | "clients";
+type Tab = "server" | "variables" | "registers" | "scripts";
 
 function App() {
   const [activeTab, setActiveTab] = useState<Tab>("server");
@@ -183,7 +182,6 @@ function App() {
             />
           )}
           {activeTab === "scripts" && <ScriptPanel />}
-          {activeTab === "clients" && <ClientPanel />}
         </main>{" "}
         {pendingTab && (
           <UnsavedChangesDialog

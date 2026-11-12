@@ -14,17 +14,22 @@ import {
   StopServer,
   GetSerialPorts,
   GetAvailableProtocols,
+  AddClient,
+  RemoveClient,
 } from "../../wailsjs/go/main/App";
 import { EventsOn } from "../../wailsjs/runtime/runtime";
 import { application } from "../../wailsjs/go/models";
 import { Square, Play, SquarePlus } from "lucide-react";
 import { AddServerDialog } from "./AddServerDialog";
 import { ServerConfigPane, ServerConfigPaneHandle } from "./ServerConfigPane";
+import { ClientDetailPane, ClientSubTab } from "./ClientDetailPane";
 import { serverStatusClass } from "./serverStatus";
 import { UnsavedChangesDialog } from "./UnsavedChangesDialog";
+import { useClients } from "./useClients";
 
-// サーバー画面: 左にサーバーの一覧（起動・停止）、右に選択したサーバーの設定（ServerConfigPane）。
-// 設定を保存しないままサーバーの切り替え・起動をしようとしたときは、確認してから実行する。
+// 通信画面: 左にサーバー（Karakuri が待ち受ける側）とクライアント（外部の機器へつなぐ側・マスター）の一覧、
+// 右に選んだものの設定（サーバーは ServerConfigPane、クライアントは ClientDetailPane）。
+// 設定を保存しないまま、別のものへの切り替え・起動をしようとしたときは、確認してから実行する。
 export interface ServerPanelHandle {
   save: () => Promise<void>;
   revert: () => Promise<void>;
@@ -33,33 +38,53 @@ interface ServerPanelProps {
   onDirtyChange?: (dirty: boolean) => void;
 }
 
+// 選んでいるもの。サーバーはプロトコルタイプ、クライアントは接続先の ID で指す
+type Selection = { kind: "server" | "client"; id: string } | null;
+
+const sameSelection = (a: Selection, b: Selection) =>
+  a?.kind === b?.kind && a?.id === b?.id;
+
 export const ServerPanel = forwardRef<ServerPanelHandle, ServerPanelProps>(
   function ServerPanel({ onDirtyChange }, ref) {
     const [serverInstances, setServerInstances] = useState<
       application.ServerInstanceDTO[]
     >([]);
+    const [serversLoaded, setServersLoaded] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [serialPorts, setSerialPorts] = useState<string[]>([]);
     const [protocols, setProtocols] = useState<application.ProtocolInfoDTO[]>(
       [],
     );
-    const [selectedProtocolType, setSelectedProtocolType] = useState<
-      string | null
-    >(null);
+    const {
+      protocols: clientProtocols,
+      clients,
+      logs: clientLogs,
+      loaded: clientsLoaded,
+      error: clientsError,
+      loadClients,
+      loadLogs,
+    } = useClients();
+    const [addClientProtocol, setAddClientProtocol] = useState("");
+    const [selected, setSelected] = useState<Selection>(null);
+    // クライアントの右側で、選び直しても保つもの
+    const [clientSubTab, setClientSubTab] = useState<ClientSubTab>("command");
+    const [clientSettingsOpen, setClientSettingsOpen] = useState(true);
+
     const [selectedPaneDirty, setSelectedPaneDirty] = useState(false);
     const [pendingAction, setPendingAction] = useState<{
       execute: () => Promise<void>;
       discardLabel: string;
       saveLabel: string;
     } | null>(null);
-    const configPaneRef = useRef<ServerConfigPaneHandle>(null);
+    // 右側の設定（サーバー・クライアントのどちらも save / revert を持つ）
+    const paneRef = useRef<ServerConfigPaneHandle>(null);
 
     useImperativeHandle(ref, () => ({
       save: async () => {
-        await configPaneRef.current?.save();
+        await paneRef.current?.save();
       },
       revert: async () => {
-        await configPaneRef.current?.revert();
+        await paneRef.current?.revert();
       },
     }));
 
@@ -79,13 +104,7 @@ export const ServerPanel = forwardRef<ServerPanelHandle, ServerPanelProps>(
       const offServer = EventsOn(
         "plc:server-changed",
         (instances: application.ServerInstanceDTO[]) => {
-          const list = instances || [];
-          setServerInstances(list);
-          // 選択中サーバーが消えた場合は先頭を選択
-          setSelectedProtocolType((prev) => {
-            if (prev && list.some((i) => i.protocolType === prev)) return prev;
-            return list.length > 0 ? list[0].protocolType : null;
-          });
+          setServerInstances(instances || []);
         },
       );
       const offProtocols = EventsOn(
@@ -100,6 +119,30 @@ export const ServerPanel = forwardRef<ServerPanelHandle, ServerPanelProps>(
       };
     }, []);
 
+    useEffect(() => {
+      if (!addClientProtocol && clientProtocols.length > 0) {
+        setAddClientProtocol(clientProtocols[0].protocolType);
+      }
+    }, [clientProtocols, addClientProtocol]);
+
+    // 選んでいるものが消えたら（または何も選んでいなければ）、先頭のサーバー、なければ先頭のクライアントを選ぶ
+    useEffect(() => {
+      if (!serversLoaded || !clientsLoaded) return;
+      const exists =
+        selected &&
+        (selected.kind === "server"
+          ? serverInstances.some((i) => i.protocolType === selected.id)
+          : clients.some((c) => c.id === selected.id));
+      if (exists) return;
+      if (serverInstances.length > 0) {
+        setSelected({ kind: "server", id: serverInstances[0].protocolType });
+      } else if (clients.length > 0) {
+        setSelected({ kind: "client", id: clients[0].id });
+      } else if (selected) {
+        setSelected(null);
+      }
+    }, [selected, serverInstances, clients, serversLoaded, clientsLoaded]);
+
     const loadInitialData = async () => {
       try {
         const [instances, protos, ports] = await Promise.all([
@@ -107,13 +150,13 @@ export const ServerPanel = forwardRef<ServerPanelHandle, ServerPanelProps>(
           GetAvailableProtocols(),
           GetSerialPorts(),
         ]);
-        const list = instances || [];
-        setServerInstances(list);
+        setServerInstances(instances || []);
         setProtocols(protos || []);
         setSerialPorts(ports || []);
-        if (list.length > 0) setSelectedProtocolType(list[0].protocolType);
       } catch (e) {
         setError(String(e));
+      } finally {
+        setServersLoaded(true);
       }
     };
 
@@ -127,6 +170,7 @@ export const ServerPanel = forwardRef<ServerPanelHandle, ServerPanelProps>(
       }
     };
 
+    // 右側に保存していない変更があれば、確認してから execute を実行する
     const requestAction = (
       execute: () => Promise<void>,
       discardLabel: string,
@@ -143,7 +187,7 @@ export const ServerPanel = forwardRef<ServerPanelHandle, ServerPanelProps>(
       if (!pendingAction) return;
       const action = pendingAction;
       setPendingAction(null);
-      await configPaneRef.current?.save();
+      await paneRef.current?.save();
       await action.execute();
     };
 
@@ -151,7 +195,7 @@ export const ServerPanel = forwardRef<ServerPanelHandle, ServerPanelProps>(
       if (!pendingAction) return;
       const action = pendingAction;
       setPendingAction(null);
-      await configPaneRef.current?.revert();
+      await paneRef.current?.revert();
       await action.execute();
     };
 
@@ -159,18 +203,21 @@ export const ServerPanel = forwardRef<ServerPanelHandle, ServerPanelProps>(
       setPendingAction(null);
     };
 
-    const handleSelectTab = (protocolType: string) => {
-      if (protocolType === selectedProtocolType) return;
+    const handleSelect = (next: Selection) => {
+      if (sameSelection(next, selected)) return;
       requestAction(
-        async () => setSelectedProtocolType(protocolType),
+        async () => setSelected(next),
         "保存せずに切り替え",
         "保存してから切り替え",
       );
     };
 
     const handleStart = (protocolType: string) => {
-      const isSameTab = protocolType === selectedProtocolType;
-      if (isSameTab) {
+      const isSelected = sameSelection(selected, {
+        kind: "server",
+        id: protocolType,
+      });
+      if (isSelected) {
         requestAction(
           async () => doStart(protocolType),
           "保存せずに開始",
@@ -191,13 +238,11 @@ export const ServerPanel = forwardRef<ServerPanelHandle, ServerPanelProps>(
       }
     };
 
-    const handleRemove = async (protocolType: string) => {
+    const handleRemoveServer = async (protocolType: string) => {
       try {
         setError(null);
         await RemoveServer(protocolType);
-        const list = (await GetServerInstances()) || [];
-        setServerInstances(list);
-        setSelectedProtocolType(list.length > 0 ? list[0].protocolType : null);
+        setServerInstances((await GetServerInstances()) || []);
       } catch (e) {
         setError(String(e));
       }
@@ -231,25 +276,70 @@ export const ServerPanel = forwardRef<ServerPanelHandle, ServerPanelProps>(
       try {
         setError(null);
         await AddServer(protocolType, variantId);
-        const list = (await GetServerInstances()) || [];
-        setServerInstances(list);
-        setSelectedProtocolType(protocolType);
+        setServerInstances((await GetServerInstances()) || []);
+        setSelected({ kind: "server", id: protocolType });
         setIsAddDialogOpen(false);
       } catch (e) {
         setError(String(e));
       }
     };
 
+    const handleAddClient = () => {
+      if (!addClientProtocol) return;
+      requestAction(
+        async () => {
+          try {
+            setError(null);
+            const added = await AddClient(addClientProtocol, "");
+            await loadClients();
+            setSelected({ kind: "client", id: added.id });
+          } catch (e) {
+            setError(String(e));
+          }
+        },
+        "保存せずに追加",
+        "保存してから追加",
+      );
+    };
+
+    const handleRemoveClient = async (id: string) => {
+      try {
+        setError(null);
+        await RemoveClient(id);
+        await loadClients();
+      } catch (e) {
+        setError(String(e));
+      }
+    };
+
     const selectedInstance =
-      serverInstances.find((i) => i.protocolType === selectedProtocolType) ??
-      null;
+      selected?.kind === "server"
+        ? (serverInstances.find((i) => i.protocolType === selected.id) ?? null)
+        : null;
+    const selectedClient =
+      selected?.kind === "client"
+        ? (clients.find((c) => c.id === selected.id) ?? null)
+        : null;
+    const selectedClientProtocol = selectedClient
+      ? (clientProtocols.find(
+          (p) => p.protocolType === selectedClient.protocolType,
+        ) ?? null)
+      : null;
+
+    // 右側に何も出していなければ、保存していない変更もない（削除したものの変更が残らないように）
+    const hasPane = !!selectedInstance || !!selectedClient;
+    useEffect(() => {
+      if (!hasPane) handlePaneDirtyChange(false);
+    }, [hasPane, handlePaneDirtyChange]);
+
+    const shownError = error ?? clientsError;
 
     return (
       <div className="panel panel-fill">
-        {error && <div className="error-message">{error}</div>}
+        {shownError && <div className="error-message">{shownError}</div>}
 
         <div className="server-vertical-tabs">
-          {/* 左ペイン: タブリスト */}
+          {/* 左ペイン: サーバーとクライアントの一覧 */}
           <div className="server-tab-list">
             <div className="server-panel-header">
               <span>SERVERS</span>
@@ -258,6 +348,8 @@ export const ServerPanel = forwardRef<ServerPanelHandle, ServerPanelProps>(
                   onClick={handleOpenAddDialog}
                   disabled={availableProtocols.length === 0}
                   className="toolbar-icon-button"
+                  title="サーバーを追加"
+                  aria-label="サーバーを追加"
                 >
                   <SquarePlus size={14} />
                 </button>
@@ -265,14 +357,19 @@ export const ServerPanel = forwardRef<ServerPanelHandle, ServerPanelProps>(
             </div>
 
             {serverInstances.map((instance) => {
-              const isSelected = instance.protocolType === selectedProtocolType;
+              const isSelected = sameSelection(selected, {
+                kind: "server",
+                id: instance.protocolType,
+              });
               const statusClass = serverStatusClass(instance.status);
               const isRunning = instance.status === "Running";
               return (
                 <div
                   key={instance.protocolType}
                   className={`server-tab-item${isSelected ? " selected" : ""}`}
-                  onClick={() => handleSelectTab(instance.protocolType)}
+                  onClick={() =>
+                    handleSelect({ kind: "server", id: instance.protocolType })
+                  }
                 >
                   <div className="server-tab-left">
                     <div
@@ -306,31 +403,122 @@ export const ServerPanel = forwardRef<ServerPanelHandle, ServerPanelProps>(
                 </div>
               );
             })}
+            {serversLoaded && serverInstances.length === 0 && (
+              <div className="server-list-empty">
+                サーバーが登録されていません
+              </div>
+            )}
+
+            <div className="server-panel-header client-group-header">
+              <span title="Karakuri から外部の機器へつなぐ側（Modbus のマスター）">
+                CLIENTS（マスター）
+              </span>
+              <div className="panel-header-actions">
+                {clientProtocols.length > 1 && (
+                  <select
+                    className="client-add-protocol"
+                    value={addClientProtocol}
+                    onChange={(e) => setAddClientProtocol(e.target.value)}
+                    aria-label="追加する接続先のプロトコル"
+                  >
+                    {clientProtocols.map((p) => (
+                      <option key={p.protocolType} value={p.protocolType}>
+                        {p.displayName}
+                      </option>
+                    ))}
+                  </select>
+                )}
+                <button
+                  onClick={handleAddClient}
+                  disabled={clientProtocols.length === 0}
+                  className="toolbar-icon-button"
+                  title="接続先を追加"
+                  aria-label="接続先を追加"
+                >
+                  <SquarePlus size={14} />
+                </button>
+              </div>
+            </div>
+
+            {clients.map((c) => (
+              <div
+                key={c.id}
+                className={`server-tab-item client-tab-item${
+                  sameSelection(selected, { kind: "client", id: c.id })
+                    ? " selected"
+                    : ""
+                }`}
+                onClick={() => handleSelect({ kind: "client", id: c.id })}
+              >
+                <div className="server-tab-left">
+                  <div
+                    className={`server-status-dot ${c.connected ? "running" : "stopped"}`}
+                    title={c.connected ? "接続中" : "未接続"}
+                  />
+                  <span className="server-tab-name">{c.name}</span>
+                  <span className="server-instance-variant">
+                    {c.displayName}
+                  </span>
+                  {c.polling && (
+                    <span className="client-polling-badge" title="ポーリング中">
+                      ポーリング中
+                    </span>
+                  )}
+                </div>
+              </div>
+            ))}
+            {clientsLoaded && clients.length === 0 && (
+              <div className="server-list-empty">
+                接続先が登録されていません
+              </div>
+            )}
           </div>
 
-          {/* 右ペイン: 設定 */}
-          {serverInstances.length === 0 ? (
-            <div className="server-instance-empty">
-              サーバーが登録されていません。
-              <SquarePlus className="icon-left" size={14} />
-              ボタンでサーバーを追加してください。
+          {/* 右ペイン: 選んだものの設定 */}
+          {selectedInstance ? (
+            <div className="server-tab-content">
+              <ServerConfigPane
+                key={`server:${selectedInstance.protocolType}`}
+                ref={paneRef}
+                instance={selectedInstance}
+                serialPorts={serialPorts}
+                onRefreshPorts={handleRefreshPorts}
+                onRemove={handleRemoveServer}
+                onDirtyChange={handlePaneDirtyChange}
+              />
+            </div>
+          ) : selectedClient && selectedClientProtocol ? (
+            <div className="server-tab-content">
+              <ClientDetailPane
+                key={`client:${selectedClient.id}`}
+                ref={paneRef}
+                client={selectedClient}
+                protocol={selectedClientProtocol}
+                logs={clientLogs.filter(
+                  (l) => l.clientId === selectedClient.id,
+                )}
+                subTab={clientSubTab}
+                onSubTabChange={setClientSubTab}
+                settingsOpen={clientSettingsOpen}
+                onSettingsOpenChange={setClientSettingsOpen}
+                onDirtyChange={handlePaneDirtyChange}
+                onClientsChanged={loadClients}
+                onLogsChanged={loadLogs}
+                onRemove={handleRemoveClient}
+              />
             </div>
           ) : (
-            <div className="server-tab-content">
-              {selectedInstance ? (
-                <ServerConfigPane
-                  key={selectedInstance.protocolType}
-                  ref={configPaneRef}
-                  instance={selectedInstance}
-                  serialPorts={serialPorts}
-                  onRefreshPorts={handleRefreshPorts}
-                  onRemove={handleRemove}
-                  onDirtyChange={handlePaneDirtyChange}
-                />
+            <div className="server-instance-empty">
+              {serverInstances.length === 0 && clients.length === 0 ? (
+                <>
+                  サーバーが登録されていません。SERVERS の
+                  <SquarePlus className="icon-left" size={14} />
+                  でサーバーを、CLIENTS の
+                  <SquarePlus className="icon-left" size={14} />
+                  で外部の機器への接続先を追加してください。
+                </>
               ) : (
-                <div className="server-instance-empty">
-                  サーバーを選択してください。
-                </div>
+                "左の一覧から選んでください。"
               )}
             </div>
           )}

@@ -9,6 +9,8 @@ import {
   writeWord,
   escapeRegExp,
   MODBUS_PORT,
+  openClient,
+  dialogByTitle,
 } from "./helpers";
 
 // クライアント画面の動きを確認する。
@@ -25,7 +27,7 @@ test.afterEach(async ({ page }) => {
 });
 
 async function openClients(page: Page) {
-  await page.getByTitle("Clients").click();
+  await page.getByTitle("Connections", { exact: true }).click();
   await expect(page.locator(".server-vertical-tabs")).toBeVisible();
 }
 
@@ -63,8 +65,7 @@ async function addClient(page: Page, settings: Record<string, unknown> = {}) {
     timeoutMs: 500,
     ...settings,
   });
-  await openClients(page);
-  await expect(page.locator(".server-config-pane-name")).toHaveText("自分");
+  await openClient(page, "自分");
   return c;
 }
 
@@ -206,4 +207,67 @@ test("応答しない UnitID はタイムアウトになり、履歴から送り
     "タイムアウト",
   );
   await shot(page, "client-timeout");
+});
+
+test("サーバーとクライアントが 1 つの一覧に並び、保存していない接続先の設定は切り替える前に確認する", async ({
+  page,
+}) => {
+  const c = await addClient(page);
+  // サーバーとクライアントが同じ画面に並ぶ
+  await expect(
+    page.locator(".server-tab-item:not(.client-tab-item)"),
+  ).toHaveCount(1);
+  await expect(page.locator(".client-tab-item")).toHaveCount(1);
+  await expect(page.getByText("CLIENTS（マスター）")).toBeVisible();
+
+  // 接続先の設定を変えたまま、サーバーへ切り替えようとすると確認する
+  await setting(page, "ポート").fill("1502");
+  await page
+    .locator(".server-tab-item", { hasText: "Modbus TCP" })
+    .first()
+    .click();
+  const confirm = dialogByTitle(page, "設定が保存されていません");
+  await expect(confirm).toBeVisible();
+  await shot(page, "connections-unsaved-confirm");
+  await confirm.getByRole("button", { name: "キャンセル" }).click();
+  await expect(page.locator(".client-tab-item")).toHaveClass(/selected/);
+  await expect(setting(page, "ポート")).toHaveValue("1502");
+
+  // 保存してから切り替えると、接続先の設定が保存される
+  await page
+    .locator(".server-tab-item", { hasText: "Modbus TCP" })
+    .first()
+    .click();
+  await confirm.getByRole("button", { name: "保存してから切り替え" }).click();
+  await expect(page.locator(".server-config-pane-name")).toHaveText(
+    "Modbus TCP",
+  );
+  const clients = await api<any[]>(page, "GetClients");
+  expect(clients.find((x) => x.id === c.id).settings.port).toBe(1502);
+});
+
+test("接続先の設定の欄は折りたためて、閉じると設定を 1 行で表示する", async ({
+  page,
+}) => {
+  await addClient(page);
+  const toggle = page.getByRole("button", { name: /接続先の設定/ });
+  await expect(toggle).toHaveAttribute("aria-expanded", "true");
+  await expect(setting(page, "ホスト")).toBeVisible();
+
+  await toggle.click();
+  await expect(toggle).toHaveAttribute("aria-expanded", "false");
+  await expect(page.locator(".client-settings-summary")).toContainText(
+    `ホスト: 127.0.0.1 / ポート: ${MODBUS_PORT}`,
+  );
+  await expect(
+    page.locator(".vscode-setting-label", { hasText: "ホスト" }),
+  ).toHaveCount(0);
+  await shot(page, "client-settings-collapsed");
+
+  // 別の画面に移って戻ると、開いた状態に戻る（通信画面を作り直すため）
+  await page.getByTitle("Variables").click();
+  await openClient(page, "自分");
+  await expect(
+    page.getByRole("button", { name: /接続先の設定/ }),
+  ).toHaveAttribute("aria-expanded", "true");
 });

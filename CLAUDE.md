@@ -83,7 +83,7 @@ go build ./...
 
 `frontend/e2e/` に、ブラウザで画面を操作して確認するテストがある。`task dev` が立てる開発用サーバー（`http://localhost:34115`）に接続するため、Go 側の API とプロトコルの実装を含めた動作を確認できる。手順と注意は `frontend/e2e/README.md` を参照。
 
-- 画面ごとのテスト: サーバー画面 `server-panel.spec.ts`、変数画面 `variable-dialogs.spec.ts` / `node-publishing.spec.ts`、レジスタ画面 `register-panel.spec.ts` / `monitoring.spec.ts`、スクリプト画面 `script-panel.spec.ts`、クライアント画面 `client-panel.spec.ts` / `client-polling.spec.ts`
+- 画面ごとのテスト: 通信画面（サーバー）`server-panel.spec.ts`、変数画面 `variable-dialogs.spec.ts` / `node-publishing.spec.ts`、レジスタ画面 `register-panel.spec.ts` / `monitoring.spec.ts`、スクリプト画面 `script-panel.spec.ts`、通信画面（クライアント）`client-panel.spec.ts` / `client-polling.spec.ts` / `client-mapping.spec.ts`
 - 画面を変更したら、該当するテストを実行する（なければ追加する）。`shot()` で撮ったスクリーンショット（`frontend/e2e/.screenshots/`）で見た目も確認する
 - データの準備は `api(page, "メソッド名", ...)` で Go 側の API を直接呼び、確認したい操作だけを画面で行う
 - **テストはアプリのサーバー・変数・モニタリング項目・スクリプトをすべて削除する。** 開発サーバーは `KARAKURI_CONFIG_DIR` を一時フォルダに向けて起動する
@@ -249,7 +249,7 @@ internal/
 ```
 frontend/src/
 ├── components/
-│   ├── ServerPanel.tsx     # サーバー画面（サーバーの一覧・起動と停止・保存していない変更の確認の流れ）
+│   ├── ServerPanel.tsx     # 通信画面（サーバーとクライアントの一覧・起動と停止・保存していない変更の確認の流れ）
 │   ├── ServerConfigPane.tsx    # 選択したサーバーの設定（スキーマ駆動のフォーム・UnitID の応答設定）
 │   ├── DynamicField.tsx        # サーバー設定の 1 項目（種類ごとの入力欄）
 │   ├── AddServerDialog.tsx     # サーバー追加ダイアログ
@@ -276,25 +276,28 @@ frontend/src/
 │   ├── useNodeAddresses.ts # ノードアドレス（OPC UA の NodeID 等）の取得と保持（マッピングの 2 つのダイアログで使用）
 │   ├── useEscapeKey.ts     # Esc キーでダイアログを閉じるためのフック
 │   ├── ScriptPanel.tsx     # スクリプト管理（一覧・編集・1 回実行・コンソール）
-│   ├── ClientPanel.tsx     # クライアント画面（接続先の一覧と読み込み）
-│   ├── ClientDetailPane.tsx    # 選んだ接続先の設定・コマンド・結果と履歴
+│   ├── useClients.ts       # クライアントの接続先の一覧・使えるプロトコル・履歴の読み込み（通信画面で使う）
+│   ├── ClientDetailPane.tsx    # 通信画面の右側（クライアントを選んだとき）: 接続先の設定（折りたためる）・コマンド・結果と履歴・ポーリング
 │   ├── ClientCommandComposer.tsx # コマンドの組み立て（項目から組み立てる / 16 進で入れる）
 │   ├── ClientCommandLog.tsx    # コマンドの結果と履歴
 │   ├── ClientPollingView.tsx   # ポーリング（周期・読み取り項目の追加・最後の結果と値）
-│   └── clientFormat.ts         # クライアント画面で共通の表示の書式（状態の名前・時刻・かかった時間）
+│   └── clientFormat.ts         # クライアント（通信画面の右側）で共通の表示の書式（状態の名前・時刻・かかった時間）
 └── App.tsx                 # タブベースのメインUI
 ```
 
 #### ServerPanel.tsx
-サーバーインスタンスの一覧を表示・管理します。左に一覧、右に選択したサーバーの設定（`ServerConfigPane`）を並べる。
+通信画面（サイドバーの「Connections」）。サーバー（Karakuri が待ち受ける側）とクライアント（外部の機器へつなぐ側・マスター）を 1 つの画面で扱う。左に一覧、右に選んだものの設定（サーバーは `ServerConfigPane`、クライアントは `ClientDetailPane`）を並べる。
+- **一覧**: 上に「SERVERS」、下に「CLIENTS（マスター）」のグループ。それぞれに追加ボタン（「サーバーを追加」「接続先を追加」）。クライアントの行は `.server-tab-item.client-tab-item`
+- **選択**: `{ kind: "server" | "client", id }` で持つ。選んでいるものが消えたら、先頭のサーバー、なければ先頭のクライアントを選ぶ
+- **クライアント**: 一覧・プロトコル・履歴は `useClients()` が読み込む（一覧は 1 秒ごとに読み直す）。右側のサブタブ（コマンド / ポーリング）と、接続先の設定の欄を開いているかは `ServerPanel` が持ち、接続先を選び直しても保つ
 - **サーバー一覧**: マウント時に `GetServerInstances()` / `GetAvailableProtocols()` を読み、以後は Wails イベント `plc:server-changed` / `plc:protocols-changed` で更新する
 - **サーバー追加**: `AddServerDialog` で未追加のプロトコルから選択して追加（`AddServer(protocolType, variant)`）。ダイアログは開くたびにマウントし、選択中のプロトコルを自分で持つ
 - **個別操作**: 一覧の再生・停止ボタンで起動と停止、設定の右上のごみ箱で削除（起動中は削除できない）
 - **設定（`ServerConfigPane`）**: `GetProtocolSchema(protocolType)` のスキーマから `DynamicField` でフォームを作る。項目はカテゴリごとにまとめる。起動中は変更できない
   - UnitID をサポートするプロトコルでは「UnitID 応答設定」を出す。切り替えは保存ボタンを押さなくてもすぐ反映する
   - 親からは ref の `save()` / `revert()` で、保存していない変更を保存・破棄できる
-- **保存していない変更の確認**: 設定を変更したまま、別のサーバーへの切り替え・選択中のサーバーの起動・別の画面への移動（`App.tsx`）をしようとすると `UnsavedChangesDialog` を出す。`ServerPanel` の `requestAction()` が「変更があれば確認してから実行する」をまとめている
-- **画面のテスト**: `frontend/e2e/server-panel.spec.ts`
+- **保存していない変更の確認**: 設定を変更したまま、別のサーバー・クライアントへの切り替え・選択中のサーバーの起動・接続先の追加・別の画面への移動（`App.tsx`）をしようとすると `UnsavedChangesDialog` を出す。`ServerPanel` の `requestAction()` が「変更があれば確認してから実行する」をまとめている。サーバーとクライアントの右側は、どちらも ref の `save()` / `revert()` と `onDirtyChange` を持つ
+- **画面のテスト**: `frontend/e2e/server-panel.spec.ts`（クライアントは `client-panel.spec.ts` など。e2e の `openClient(page, 名前)` で通信画面を開いて接続先を選ぶ）
 
 #### RegisterPanel.tsx
 「一覧表示」（`RegisterListView`）と「モニタリング」（`MonitoringView`）のサブタブを持ちます。サーバーの一覧は `RegisterPanel` が 1 秒ごとに読み、両方に渡す。

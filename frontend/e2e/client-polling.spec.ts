@@ -8,6 +8,7 @@ import {
   writeWord,
   escapeRegExp,
   MODBUS_PORT,
+  openClient,
 } from "./helpers";
 
 // クライアント画面のポーリング（周期的な読み取り）を確認する。
@@ -49,8 +50,7 @@ async function openPolling(page: Page, settings: Record<string, unknown> = {}) {
     timeoutMs: 200,
     ...settings,
   });
-  await page.getByTitle("Clients").click();
-  await expect(page.locator(".server-config-pane-name")).toHaveText("自分");
+  await openClient(page, "自分");
   await page.locator(".sub-tab-button", { hasText: "ポーリング" }).click();
   await expect(pollingView(page)).toBeVisible();
   return c;
@@ -181,6 +181,6 @@ test("読み取り項目を削除できる。タブを切り替えても選ん�
 
   // 別の接続先を選んでも、ポーリングのタブのまま
   await page.getByTitle("接続先を追加").click();
-  await expect(page.locator(".server-tab-item")).toHaveCount(2);
+  await expect(page.locator(".client-tab-item")).toHaveCount(2);
   await expect(pollingView(page)).toBeVisible();
 });

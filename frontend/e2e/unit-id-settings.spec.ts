@@ -36,7 +36,7 @@ test("起動前に切り替えた UnitID の設定が残り、起動・起動し
 }) => {
   await addStoppedModbusServer(page);
   await api(page, "AddServer", "opcua", "");
-  await page.getByTitle("Server", { exact: true }).click();
+  await page.getByTitle("Connections", { exact: true }).click();
   const tab = (name: string) =>
     page.locator(".server-tab-item", { hasText: name });
   await tab("Modbus TCP").click();

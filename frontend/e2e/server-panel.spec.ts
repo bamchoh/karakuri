@@ -49,8 +49,9 @@ function setting(page: Page, label: string) {
 const pane = (page: Page) => page.locator(".server-config-pane");
 const saveButton = (page: Page) =>
   page.locator(".server-config-pane-footer button");
+// サーバーの追加ボタン（一覧にはクライアントの追加ボタンもある）
 const addButton = (page: Page) =>
-  page.locator(".server-panel-header .toolbar-icon-button");
+  page.getByRole("button", { name: "サーバーを追加" });
 
 async function config(page: Page, protocolType: string) {
   return api<{ variant: string; settings: Record<string, any> }>(

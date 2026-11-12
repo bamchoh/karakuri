@@ -53,8 +53,15 @@ export async function resetApp(page: Page) {
 // ===== サーバー画面・レジスタ画面の操作 =====
 
 export async function openServers(page: Page) {
-  await page.getByTitle("Server", { exact: true }).click();
+  await page.getByTitle("Connections", { exact: true }).click();
   await expect(page.locator(".server-vertical-tabs")).toBeVisible();
+}
+
+// 通信画面を開き、クライアントの接続先を一覧から選ぶ（既定ではサーバーが選ばれているため）
+export async function openClient(page: Page, name: string) {
+  await openServers(page);
+  await page.locator(".client-tab-item", { hasText: name }).click();
+  await expect(page.locator(".server-config-pane-name")).toHaveText(name);
 }
 
 // レジスタ画面を開く。tab を渡すとサブタブ（一覧表示 / モニタリング）も切り替える
