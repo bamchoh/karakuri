@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"sync"
 
 	"google.golang.org/grpc"
 
@@ -13,6 +14,7 @@ import (
 )
 
 var _ protocol.UnitIDConfigurable = (*RemoteProtocolServer)(nil)
+var _ protocol.CommunicationEventAware = (*RemoteProtocolServer)(nil)
 
 // RemoteProtocolServer は gRPC クライアントを通じてプラグインプロセスの ProtocolServer を実装する
 type RemoteProtocolServer struct {
@@ -21,6 +23,12 @@ type RemoteProtocolServer struct {
 	config       protocol.ProtocolConfig
 	// hostGrpcAddr は HostGrpcServer のアドレス（SupportsNodePublishing=true の場合に使用）
 	hostGrpcAddr string
+
+	// 通信イベント（プラグイン → ホスト）の転送
+	commMu      sync.Mutex
+	emitter     protocol.CommunicationEventEmitter
+	cancelComm  context.CancelFunc // 起動中の購読を止める
+	commStopped chan struct{}      // 購読のゴルーチンが終わると閉じる
 }
 
 func NewRemoteProtocolServer(client pb.PluginServiceClient, conn *grpc.ClientConn, config protocol.ProtocolConfig) *RemoteProtocolServer {
@@ -46,12 +54,77 @@ func (s *RemoteProtocolServer) Start(ctx context.Context) error {
 		SettingsJson: rc.settingsJSON,
 		HostGrpcAddr: s.hostGrpcAddr,
 	})
-	return err
+	if err != nil {
+		return err
+	}
+	s.startCommunicationEvents()
+	return nil
 }
 
 func (s *RemoteProtocolServer) Stop() error {
+	s.stopCommunicationEvents()
 	_, err := s.pluginClient.Stop(backgroundCtx(), &pb.Empty{})
 	return err
+}
+
+// SetEventEmitter は通信イベントの送信先を設定する（CommunicationEventAware）。
+// 次に Start したときから、プラグインの通信イベントをこの送信先へ転送する。
+func (s *RemoteProtocolServer) SetEventEmitter(emitter protocol.CommunicationEventEmitter) {
+	s.commMu.Lock()
+	s.emitter = emitter
+	s.commMu.Unlock()
+}
+
+// startCommunicationEvents はプラグインの通信イベントのストリームを購読し、送信先へ転送する
+func (s *RemoteProtocolServer) startCommunicationEvents() {
+	s.stopCommunicationEvents()
+
+	s.commMu.Lock()
+	defer s.commMu.Unlock()
+	emitter := s.emitter
+	if emitter == nil {
+		return
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	stopped := make(chan struct{})
+	s.cancelComm, s.commStopped = cancel, stopped
+
+	go func() {
+		defer close(stopped)
+		// 止めたとき・プラグインが終了したときは、接続数を 0 に戻す
+		defer emitter.EmitConnection(0)
+		stream, err := s.pluginClient.SubscribeCommunicationEvents(ctx, &pb.Empty{})
+		if err != nil {
+			return
+		}
+		for {
+			ev, err := stream.Recv()
+			if err != nil {
+				return
+			}
+			if ev.Rx {
+				emitter.EmitRx()
+			}
+			if ev.Tx {
+				emitter.EmitTx()
+			}
+			if ev.ConnectionChanged {
+				emitter.EmitConnection(int(ev.ConnectionCount))
+			}
+		}
+	}()
+}
+
+// stopCommunicationEvents は通信イベントの購読を止め、ゴルーチンの終了を待つ
+func (s *RemoteProtocolServer) stopCommunicationEvents() {
+	s.commMu.Lock()
+	cancel, stopped := s.cancelComm, s.commStopped
+	s.cancelComm, s.commStopped = nil, nil
+	s.commMu.Unlock()
+	if cancel != nil {
+		cancel()
+		<-stopped
+	}
 }
 
 func (s *RemoteProtocolServer) Status() protocol.ServerStatus {

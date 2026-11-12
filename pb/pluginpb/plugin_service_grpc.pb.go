@@ -41,6 +41,9 @@ type PluginServiceClient interface {
 	// 公開変数のノードアドレス（OPC UA なら NodeID）を返す（SupportsNodePublishing=true のプロトコル用）
 	// サーバー未作成時は settings_json の設定で計算する
 	GetNodeAddresses(ctx context.Context, in *GetNodeAddressesRequest, opts ...grpc.CallOption) (*GetNodeAddressesResponse, error)
+	// 通信イベント（受信・送信・接続数）をストリームで送る。ホストは通信インジケーターの表示に使う。
+	// 高頻度の通信でも負荷にならないよう、プラグイン側で短い間隔にまとめて送る
+	SubscribeCommunicationEvents(ctx context.Context, in *Empty, opts ...grpc.CallOption) (PluginService_SubscribeCommunicationEventsClient, error)
 	// UnitID 管理（SupportsUnitID=true のプロトコル用）
 	GetUnitIDSettings(ctx context.Context, in *Empty, opts ...grpc.CallOption) (*UnitIDSettingsResponse, error)
 	SetUnitIDEnabled(ctx context.Context, in *SetUnitIDEnabledRequest, opts ...grpc.CallOption) (*Empty, error)
@@ -163,6 +166,38 @@ func (c *pluginServiceClient) GetNodeAddresses(ctx context.Context, in *GetNodeA
 	return out, nil
 }
 
+func (c *pluginServiceClient) SubscribeCommunicationEvents(ctx context.Context, in *Empty, opts ...grpc.CallOption) (PluginService_SubscribeCommunicationEventsClient, error) {
+	stream, err := c.cc.NewStream(ctx, &PluginService_ServiceDesc.Streams[0], "/plugin.v1.PluginService/SubscribeCommunicationEvents", opts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &pluginServiceSubscribeCommunicationEventsClient{stream}
+	if err := x.ClientStream.SendMsg(in); err != nil {
+		return nil, err
+	}
+	if err := x.ClientStream.CloseSend(); err != nil {
+		return nil, err
+	}
+	return x, nil
+}
+
+type PluginService_SubscribeCommunicationEventsClient interface {
+	Recv() (*CommunicationEvents, error)
+	grpc.ClientStream
+}
+
+type pluginServiceSubscribeCommunicationEventsClient struct {
+	grpc.ClientStream
+}
+
+func (x *pluginServiceSubscribeCommunicationEventsClient) Recv() (*CommunicationEvents, error) {
+	m := new(CommunicationEvents)
+	if err := x.ClientStream.RecvMsg(m); err != nil {
+		return nil, err
+	}
+	return m, nil
+}
+
 func (c *pluginServiceClient) GetUnitIDSettings(ctx context.Context, in *Empty, opts ...grpc.CallOption) (*UnitIDSettingsResponse, error) {
 	out := new(UnitIDSettingsResponse)
 	err := c.cc.Invoke(ctx, "/plugin.v1.PluginService/GetUnitIDSettings", in, out, opts...)
@@ -213,6 +248,9 @@ type PluginServiceServer interface {
 	// 公開変数のノードアドレス（OPC UA なら NodeID）を返す（SupportsNodePublishing=true のプロトコル用）
 	// サーバー未作成時は settings_json の設定で計算する
 	GetNodeAddresses(context.Context, *GetNodeAddressesRequest) (*GetNodeAddressesResponse, error)
+	// 通信イベント（受信・送信・接続数）をストリームで送る。ホストは通信インジケーターの表示に使う。
+	// 高頻度の通信でも負荷にならないよう、プラグイン側で短い間隔にまとめて送る
+	SubscribeCommunicationEvents(*Empty, PluginService_SubscribeCommunicationEventsServer) error
 	// UnitID 管理（SupportsUnitID=true のプロトコル用）
 	GetUnitIDSettings(context.Context, *Empty) (*UnitIDSettingsResponse, error)
 	SetUnitIDEnabled(context.Context, *SetUnitIDEnabledRequest) (*Empty, error)
@@ -259,6 +297,9 @@ func (UnimplementedPluginServiceServer) OnNodePublishingUpdated(context.Context,
 }
 func (UnimplementedPluginServiceServer) GetNodeAddresses(context.Context, *GetNodeAddressesRequest) (*GetNodeAddressesResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetNodeAddresses not implemented")
+}
+func (UnimplementedPluginServiceServer) SubscribeCommunicationEvents(*Empty, PluginService_SubscribeCommunicationEventsServer) error {
+	return status.Errorf(codes.Unimplemented, "method SubscribeCommunicationEvents not implemented")
 }
 func (UnimplementedPluginServiceServer) GetUnitIDSettings(context.Context, *Empty) (*UnitIDSettingsResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetUnitIDSettings not implemented")
@@ -498,6 +539,27 @@ func _PluginService_GetNodeAddresses_Handler(srv interface{}, ctx context.Contex
 	return interceptor(ctx, in, info, handler)
 }
 
+func _PluginService_SubscribeCommunicationEvents_Handler(srv interface{}, stream grpc.ServerStream) error {
+	m := new(Empty)
+	if err := stream.RecvMsg(m); err != nil {
+		return err
+	}
+	return srv.(PluginServiceServer).SubscribeCommunicationEvents(m, &pluginServiceSubscribeCommunicationEventsServer{stream})
+}
+
+type PluginService_SubscribeCommunicationEventsServer interface {
+	Send(*CommunicationEvents) error
+	grpc.ServerStream
+}
+
+type pluginServiceSubscribeCommunicationEventsServer struct {
+	grpc.ServerStream
+}
+
+func (x *pluginServiceSubscribeCommunicationEventsServer) Send(m *CommunicationEvents) error {
+	return x.ServerStream.SendMsg(m)
+}
+
 func _PluginService_GetUnitIDSettings_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(Empty)
 	if err := dec(in); err != nil {
@@ -620,6 +682,12 @@ var PluginService_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _PluginService_SetDisabledUnitIDs_Handler,
 		},
 	},
-	Streams:  []grpc.StreamDesc{},
+	Streams: []grpc.StreamDesc{
+		{
+			StreamName:    "SubscribeCommunicationEvents",
+			Handler:       _PluginService_SubscribeCommunicationEvents_Handler,
+			ServerStreams: true,
+		},
+	},
 	Metadata: "plugin_service.proto",
 }

@@ -13,6 +13,12 @@ type CommunicationEventEmitter interface {
 	EmitConnection(count int)
 }
 
+// CommunicationEventAware は通信イベントの送信先を受け取る ProtocolServer 用インターフェース。
+// プラグイン内では pluginruntime が、ホストへイベントを届ける送信先を起動前に渡す。
+type CommunicationEventAware interface {
+	SetEventEmitter(emitter CommunicationEventEmitter)
+}
+
 // WailsEventEmitter はWailsランタイムを使用したイベントエミッター
 type WailsEventEmitter struct {
 	ctx context.Context

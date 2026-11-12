@@ -34,6 +34,10 @@ service PluginService {
   // サーバー未作成時は settings_json の設定で計算する
   rpc GetNodeAddresses(GetNodeAddressesRequest) returns (GetNodeAddressesResponse);
 
+  // 通信イベント（受信・送信・接続数）をストリームで送る。ホストは通信インジケーターの表示に使う。
+  // 高頻度の通信でも負荷にならないよう、プラグイン側で短い間隔にまとめて送る
+  rpc SubscribeCommunicationEvents(Empty) returns (stream CommunicationEvents);
+
   // UnitID 管理（SupportsUnitID=true のプロトコル用）
   rpc GetUnitIDSettings(Empty) returns (UnitIDSettingsResponse);
   rpc SetUnitIDEnabled(SetUnitIDEnabledRequest) returns (Empty);
@@ -166,6 +170,14 @@ message GetNodeAddressesResponse {
 message NodeAddress {
   string address = 1;
   string error = 2; // 空でなければ、この変数を公開できない理由（UI に表示する）
+}
+
+// CommunicationEvents は前回の送信以降に起きた通信イベントをまとめたもの
+message CommunicationEvents {
+  bool rx = 1;                    // 受信があった
+  bool tx = 2;                    // 送信があった
+  bool connection_changed = 3;    // 接続数が変わった
+  int32 connection_count = 4;     // 現在の接続数（connection_changed のときに有効）
 }
 
 message UnitIDSettingsResponse {

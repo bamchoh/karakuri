@@ -30,11 +30,15 @@ type Server struct {
 
 	// ホストからの書き込み中フラグ（循環通知防止）
 	hostWriting bool
+
+	// 通信イベント（受信・送信・接続数）をホストへ届けるハブ
+	commEvents *commEventHub
 }
 
 func newServer(factory protocol.ServerFactory) *Server {
 	return &Server{
-		factory: factory,
+		factory:    factory,
+		commEvents: newCommEventHub(),
 	}
 }
 
@@ -211,6 +215,11 @@ func (s *Server) CreateAndStart(ctx context.Context, req *pb.CreateAndStartReque
 	}
 	s.server = srv
 	s.factory = factory
+
+	// 通信イベントの送信先を渡す（ホストの通信インジケーター用）
+	if aware, ok := srv.(protocol.CommunicationEventAware); ok {
+		aware.SetEventEmitter(s.commEvents)
+	}
 
 	if err := srv.Start(ctx); err != nil {
 		return nil, fmt.Errorf("サーバー起動失敗: %w", err)
