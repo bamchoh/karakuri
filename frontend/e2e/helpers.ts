@@ -27,7 +27,7 @@ export async function openApp(page: Page) {
   await expect(page.locator("#root")).not.toBeEmpty();
 }
 
-// テストで作ったサーバー・変数・構造体型をすべて消して、アプリを初期状態に戻す
+// テストで作ったサーバー・変数・構造体型・モニタリング項目・スクリプトをすべて消して、アプリを初期状態に戻す
 export async function resetApp(page: Page) {
   const vars = await api<{ id: string }[]>(page, "GetVariables");
   for (const v of vars || []) await api(page, "DeleteVariable", v.id);
@@ -42,6 +42,9 @@ export async function resetApp(page: Page) {
     await api(page, "RemoveServer", s.protocolType);
   }
   await api(page, "ClearMonitoringItems");
+  const scripts = await api<{ id: string }[]>(page, "GetScripts");
+  for (const s of scripts || []) await api(page, "DeleteScript", s.id);
+  await api(page, "ClearConsoleLogs");
 }
 
 // ===== サーバー画面・レジスタ画面の操作 =====

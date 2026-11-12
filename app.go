@@ -276,14 +276,9 @@ func (a *App) StopScript(id string) error {
 	return a.plcService.StopScript(id)
 }
 
-// RunScriptOnce はスクリプトを1回だけ実行する
+// RunScriptOnce はコードを 1 回だけ実行する（結果とエラーはコンソールにも出る）
 func (a *App) RunScriptOnce(code string) (interface{}, error) {
 	return a.plcService.RunScriptOnce(code)
-}
-
-// ClearScriptError はスクリプトのエラー情報をクリアする
-func (a *App) ClearScriptError(id string) {
-	a.plcService.ClearScriptError(id)
 }
 
 // GetConsoleLogs はスクリプトのコンソールログを返す

@@ -25,7 +25,7 @@ func (s *PLCService) CreateScript(name, code string, intervalMs int) (*ScriptDTO
 
 	go s.emitScriptsChanged()
 
-	return scriptToDTO(sc, false, "", 0), nil
+	return scriptToDTO(sc, false), nil
 }
 
 // UpdateScript はスクリプトを更新する
@@ -48,14 +48,16 @@ func (s *PLCService) UpdateScript(id, name, code string, intervalMs int) error {
 	sc.Code = code
 	sc.Interval = time.Duration(intervalMs) * time.Millisecond
 
-	// 実行中だった場合は再開
+	// 実行中だった場合は再開する。新しいコードがコンパイルできなければ、停止したままにしてエラーを返す
+	// （変更は保存されている。エラーはコンソールにも出る）
+	var startErr error
 	if wasRunning {
-		s.scriptEngine.StartScript(sc)
+		startErr = s.scriptEngine.StartScript(sc)
 	}
 
 	go s.emitScriptsChanged()
 
-	return nil
+	return startErr
 }
 
 // DeleteScript はスクリプトを削除する
@@ -80,17 +82,7 @@ func (s *PLCService) GetScripts() []*ScriptDTO {
 
 	result := make([]*ScriptDTO, 0, len(s.scripts))
 	for _, sc := range s.scripts {
-		isRunning := s.scriptEngine.IsRunning(sc.ID)
-		var lastError string
-		var errorAtMs int64
-		if isRunning {
-			errMsg, errAt := s.scriptEngine.GetLastError(sc.ID)
-			lastError = errMsg
-			if !errAt.IsZero() {
-				errorAtMs = errAt.UnixMilli()
-			}
-		}
-		result = append(result, scriptToDTO(sc, isRunning, lastError, errorAtMs))
+		result = append(result, scriptToDTO(sc, s.scriptEngine.IsRunning(sc.ID)))
 	}
 
 	sort.Slice(result, func(i, j int) bool {
@@ -110,17 +102,7 @@ func (s *PLCService) GetScript(id string) (*ScriptDTO, error) {
 		return nil, fmt.Errorf("script not found: %s", id)
 	}
 
-	isRunning := s.scriptEngine.IsRunning(id)
-	var lastError string
-	var errorAtMs int64
-	if isRunning {
-		errMsg, errAt := s.scriptEngine.GetLastError(id)
-		lastError = errMsg
-		if !errAt.IsZero() {
-			errorAtMs = errAt.UnixMilli()
-		}
-	}
-	return scriptToDTO(sc, isRunning, lastError, errorAtMs), nil
+	return scriptToDTO(sc, s.scriptEngine.IsRunning(id)), nil
 }
 
 // StartScript はスクリプトを開始する
@@ -149,15 +131,9 @@ func (s *PLCService) StopScript(id string) error {
 	return nil
 }
 
-// RunScriptOnce はスクリプトを1回だけ実行する
+// RunScriptOnce はコードを 1 回だけ実行する（保存も周期実行もしない）。結果とエラーはコンソールにも出る
 func (s *PLCService) RunScriptOnce(code string) (interface{}, error) {
 	return s.scriptEngine.RunOnce(code)
-}
-
-// ClearScriptError はスクリプトのエラー情報をクリアする
-func (s *PLCService) ClearScriptError(id string) {
-	s.scriptEngine.ClearError(id)
-	go s.emitScriptsChanged()
 }
 
 // GetConsoleLogs はコンソールログの一覧を返す
@@ -165,12 +141,7 @@ func (s *PLCService) GetConsoleLogs() []ConsoleLogDTO {
 	entries := s.scriptEngine.GetConsoleLogs()
 	result := make([]ConsoleLogDTO, len(entries))
 	for i, e := range entries {
-		result[i] = ConsoleLogDTO{
-			ScriptID:   e.ScriptID,
-			ScriptName: e.ScriptName,
-			Message:    e.Message,
-			At:         e.At.UnixMilli(),
-		}
+		result[i] = consoleLogToDTO(e)
 	}
 	return result
 }
@@ -183,13 +154,18 @@ func (s *PLCService) ClearConsoleLogs() {
 // SetConsoleLogCallback はコンソールログ追加時のコールバックを設定する
 func (s *PLCService) SetConsoleLogCallback(cb func(ConsoleLogDTO)) {
 	s.scriptEngine.SetOnLogAdded(func(entry scripting.ConsoleLogEntry) {
-		cb(ConsoleLogDTO{
-			ScriptID:   entry.ScriptID,
-			ScriptName: entry.ScriptName,
-			Message:    entry.Message,
-			At:         entry.At.UnixMilli(),
-		})
+		cb(consoleLogToDTO(entry))
 	})
+}
+
+func consoleLogToDTO(e scripting.ConsoleLogEntry) ConsoleLogDTO {
+	return ConsoleLogDTO{
+		ScriptID:   e.ScriptID,
+		ScriptName: e.ScriptName,
+		Level:      e.Level,
+		Message:    e.Message,
+		At:         e.At.UnixMilli(),
+	}
 }
 
 // GetIntervalPresets は周期プリセットを取得する
@@ -205,15 +181,13 @@ func (s *PLCService) GetIntervalPresets() []IntervalPresetDTO {
 	return result
 }
 
-func scriptToDTO(sc *script.Script, isRunning bool, lastError string, errorAtMs int64) *ScriptDTO {
+func scriptToDTO(sc *script.Script, isRunning bool) *ScriptDTO {
 	return &ScriptDTO{
 		ID:         sc.ID,
 		Name:       sc.Name,
 		Code:       sc.Code,
 		IntervalMs: int(sc.Interval.Milliseconds()),
 		IsRunning:  isRunning,
-		LastError:  lastError,
-		ErrorAt:    errorAtMs,
 		Order:      sc.Order,
 	}
 }

@@ -1,9 +1,5 @@
 import type { DisplayFormat, BitWidth, Endianness } from "../types/register";
-import {
-  DISPLAY_FORMATS,
-  BIT_WIDTHS,
-  ENDIANNESS_OPTIONS,
-} from "../constants/register";
+import { BIT_WIDTHS } from "../constants/register";
 
 // ビット幅に応じたワード数を取得
 export const getWordCount = (bitWidth: BitWidth): number => {

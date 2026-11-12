@@ -8,13 +8,12 @@ import {
   StartScript,
   StopScript,
   RunScriptOnce,
-  ClearScriptError,
   GetConsoleLogs,
   ClearConsoleLogs,
 } from "../../wailsjs/go/main/App";
 import { EventsOn } from "../../wailsjs/runtime/runtime";
 import { application } from "../../wailsjs/go/models";
-import { SpaceIcon, Square, Play, Trash2, SquarePlus } from "lucide-react";
+import { Square, Play, SquarePlus } from "lucide-react";
 import { Group, Panel, Separator } from "react-resizable-panels";
 
 const DEFAULT_CODE = `// PLCオブジェクトで変数にアクセスできます
@@ -55,96 +54,49 @@ function generateNewScriptName(scripts: application.ScriptDTO[]) {
   return `${baseName}${index}`;
 }
 
-const ScriptEditPanel = ({
-  selectedScript,
+// 選択したスクリプトの編集欄。入力中の内容は自分で持つ（key にスクリプトの ID を渡して、選び直すたびに作り直す）
+function ScriptEditPanel({
+  script,
+  presets,
+  onSave,
+  onRunOnce,
   onDelete,
 }: {
-  selectedScript: application.ScriptDTO | null;
-  onDelete: (id: string) => void;
-}) => {
-  const [editName, setEditName] = useState(selectedScript?.name ?? "");
-  const [editInterval, setEditInterval] = useState(1000);
-  const [presets, setPresets] = useState<application.IntervalPresetDTO[]>([]);
-  const [editCode, setEditCode] = useState(
-    selectedScript?.code ?? DEFAULT_CODE,
-  );
-  const [testOutput, setTestOutput] = useState<string | null>(null);
-
-  useEffect(() => {
-    loadData();
-  }, []);
-
-  const handleSave = async (selectedScriptId: string) => {
-    try {
-      await UpdateScript(selectedScriptId, editName, editCode, editInterval);
-    } catch (e) {}
-  };
-
-  const handleTest = async () => {
-    try {
-      const result = await RunScriptOnce(editCode);
-      setTestOutput(
-        result !== undefined ? JSON.stringify(result, null, 2) : "(no output)",
-      );
-    } catch (e) {
-      setTestOutput(null);
-    }
-  };
-
-  const handleCancel = () => {
-    setTestOutput(null);
-  };
-
-  const handleDelete = async (id: string) => {
-    if (confirm("このスクリプトを削除しますか？")) {
-      try {
-        await DeleteScript(id);
-      } catch (e) {}
-    }
-  };
-
-  useEffect(() => {
-    const off = EventsOn("project:imported", () => {
-      loadData();
-    });
-
-    return off;
-  }, []);
-
-  const loadData = async () => {
-    await Promise.all([loadPresets()]);
-  };
-
-  const loadPresets = async () => {
-    try {
-      const p = await GetIntervalPresets();
-      setPresets(p || []);
-    } catch (e) {
-      console.error("Failed to load presets:", e);
-    }
-  };
+  script: application.ScriptDTO;
+  presets: application.IntervalPresetDTO[];
+  onSave: (name: string, code: string, intervalMs: number) => void;
+  onRunOnce: (code: string) => void;
+  onDelete: () => void;
+}) {
+  const [name, setName] = useState(script.name);
+  const [code, setCode] = useState(script.code);
+  const [intervalMs, setIntervalMs] = useState(script.intervalMs);
 
   return (
     <div className="script-panel">
-      {/* error && <div className="error-message">{error}</div> */}
-
       <div className="editor-card">
         <div className="editor-header-row">
           <div className="form-group">
             <label>名前</label>
             <input
               type="text"
-              value={editName}
-              onChange={(e) => setEditName(e.target.value)}
+              aria-label="名前"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
             />
           </div>
 
           <div className="form-group">
             <label>実行周期</label>
             <select
-              value={editInterval}
-              onChange={(e) => setEditInterval(parseInt(e.target.value))}
+              aria-label="実行周期"
+              value={intervalMs}
+              onChange={(e) => setIntervalMs(parseInt(e.target.value))}
             >
+              {/* 選択肢にない周期（読み込んだプロジェクトなど）も、そのまま選ばれた状態にする */}
+              {!presets.some((p) => p.ms === intervalMs) && (
+                <option value={intervalMs}>{intervalMs}ms</option>
+              )}
               {presets.map((p) => (
                 <option key={p.ms} value={p.ms}>
                   {p.label}
@@ -157,53 +109,56 @@ const ScriptEditPanel = ({
 
       <div className="editor-body">
         <textarea
-          value={editCode}
-          onChange={(e) => setEditCode(e.target.value)}
+          aria-label="コード"
+          value={code}
+          onChange={(e) => setCode(e.target.value)}
           className="code-editor"
           spellCheck={false}
         />
       </div>
 
-      {testOutput && (
-        <div className="test-output">
-          <label>テスト結果:</label>
-          <pre>{testOutput}</pre>
-        </div>
-      )}
-
       <div className="editor-footer">
+        <div className="editor-footer-left">
+          <button
+            onClick={() => onSave(name, code, intervalMs)}
+            className="btn-primary"
+          >
+            保存
+          </button>
+          <button
+            onClick={() => onRunOnce(code)}
+            className="btn-secondary"
+            title="入力中のコードを、保存せずに 1 回だけ実行します。結果とエラーはコンソールに出ます"
+          >
+            1 回実行
+          </button>
+        </div>
         <button
-          onClick={() => handleSave(selectedScript?.id ?? "")}
-          className="btn-primary"
-        >
-          保存
-        </button>
-        <button
-          onClick={() => onDelete(selectedScript?.id ?? "")}
+          onClick={onDelete}
           className="btn-danger"
-          disabled={selectedScript?.isRunning}
+          disabled={script.isRunning}
+          title={script.isRunning ? "実行中は削除できません" : undefined}
         >
           削除
         </button>
       </div>
     </div>
   );
-};
+}
 
 export function ScriptPanel() {
   const [scripts, setScripts] = useState<application.ScriptDTO[]>([]);
   const [presets, setPresets] = useState<application.IntervalPresetDTO[]>([]);
-  const [selectedScript, setSelectedScript] =
-    useState<application.ScriptDTO | null>(null);
-  const [editName, setEditName] = useState("");
-  const [editCode, setEditCode] = useState("");
-  const [editInterval, setEditInterval] = useState(1000);
-  const [testOutput, setTestOutput] = useState<string | null>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  // 保存・削除・開始・停止に失敗したときのエラー（次の操作が成功すると消える）。
+  // スクリプトの実行中のエラーは、ここではなくコンソールに出る
   const [error, setError] = useState<string | null>(null);
   const [consoleLogs, setConsoleLogs] = useState<application.ConsoleLogDTO[]>(
     [],
   );
   const consoleRef = useRef<HTMLDivElement>(null);
+
+  const selectedScript = scripts.find((s) => s.id === selectedId) ?? null;
 
   useEffect(() => {
     loadData();
@@ -222,9 +177,13 @@ export function ScriptPanel() {
         });
       },
     );
+    const offImported = EventsOn("project:imported", () => {
+      loadData();
+    });
     return () => {
       offScripts();
       offLog();
+      offImported();
     };
   }, []);
 
@@ -234,19 +193,12 @@ export function ScriptPanel() {
     }
   }, [consoleLogs]);
 
+  // 選択中のスクリプトがなくなったら（削除・プロジェクトの読み込み）、先頭を選ぶ
   useEffect(() => {
-    const off = EventsOn("project:imported", () => {
-      loadData();
-    });
-
-    return off;
-  }, []);
-
-  useEffect(() => {
-    if (selectedScript && !scripts.some((s) => s.id === selectedScript.id)) {
-      setSelectedScript(scripts[0] ?? null);
+    if (selectedId && !scripts.some((s) => s.id === selectedId)) {
+      setSelectedId(scripts[0]?.id ?? null);
     }
-  }, [scripts, selectedScript]);
+  }, [scripts, selectedId]);
 
   const loadData = async () => {
     await Promise.all([loadScripts(), loadPresets(), loadConsoleLogs()]);
@@ -288,82 +240,56 @@ export function ScriptPanel() {
     }
   };
 
-  const handleNew = async () => {
-    const name = generateNewScriptName(scripts);
-    const code = DEFAULT_CODE;
-    const interval = 1000;
-
-    await CreateScript(name, code, interval);
-
-    setError(null);
-    setTestOutput(null);
-
+  // 操作を実行し、失敗したらエラーを表示する。一覧はどちらの場合も読み直す
+  const run = async (action: () => Promise<unknown>) => {
+    try {
+      await action();
+      setError(null);
+    } catch (e) {
+      setError(String(e));
+    }
     await loadScripts();
   };
 
-  const handleSave = async (name: string, code: string, interval: number) => {
-    try {
-      setError(null);
-      if (selectedScript) {
-        await UpdateScript(selectedScript.id, name, code, interval);
-      } else {
-        await CreateScript(name, code, interval);
+  const handleNew = () =>
+    run(async () => {
+      const created = await CreateScript(
+        generateNewScriptName(scripts),
+        DEFAULT_CODE,
+        1000,
+      );
+      setSelectedId(created.id);
+    });
+
+  const handleSave = (
+    id: string,
+    name: string,
+    code: string,
+    intervalMs: number,
+  ) => run(() => UpdateScript(id, name, code, intervalMs));
+
+  // 結果もエラーもコンソールに出るので、ここでは何も表示しない
+  const handleRunOnce = (code: string) => {
+    RunScriptOnce(code).catch(() => {});
+  };
+
+  const handleDelete = (id: string) => {
+    if (!confirm("このスクリプトを削除しますか？")) return;
+    // 削除したあとは、同じ位置（なければ 1 つ前）のスクリプトを選ぶ
+    const index = scripts.findIndex((s) => s.id === id);
+    const rest = scripts.filter((s) => s.id !== id);
+    run(async () => {
+      await DeleteScript(id);
+      if (selectedId === id) {
+        setSelectedId((rest[index] ?? rest[index - 1])?.id ?? null);
       }
-      setSelectedScript(null);
-      await loadScripts();
-    } catch (e) {
-      setError(String(e));
-    }
+    });
   };
 
-  const handleDelete = async (id: string) => {
-    if (confirm("このスクリプトを削除しますか？")) {
-      try {
-        await DeleteScript(id);
-
-        const index = scripts.findIndex((s) => s.id === id);
-
-        const newScripts = scripts.filter((s) => s.id !== id);
-
-        if (selectedScript?.id === id) {
-          setSelectedScript(newScripts[index] ?? newScripts[index - 1] ?? null);
-        }
-
-        await loadScripts();
-      } catch (e) {
-        setError(String(e));
-      }
-    }
-  };
-
-  const handleToggle = async (script: application.ScriptDTO) => {
-    try {
-      if (script.isRunning) {
-        await StopScript(script.id);
-      } else {
-        await StartScript(script.id);
-      }
-      await loadScripts();
-    } catch (e) {
-      setError(String(e));
-    }
-  };
-
-  const handleClearError = async (id: string) => {
-    try {
-      await ClearScriptError(id);
-      await loadScripts();
-    } catch (e) {
-      console.error("Failed to clear script error:", e);
-    }
-  };
-
-  const handleSelectTab = (scriptId: string) => {
-    console.log("Selecting script tab:", scriptId);
-    if (scriptId === selectedScript?.id) return;
-    const foundScript = scripts.find((s) => s.id === scriptId);
-    setSelectedScript(foundScript ?? null); // undefined なら null にする
-  };
+  const handleToggle = (script: application.ScriptDTO) =>
+    run(() =>
+      script.isRunning ? StopScript(script.id) : StartScript(script.id),
+    );
 
   return (
     <div
@@ -375,36 +301,29 @@ export function ScriptPanel() {
           <div className="server-panel-header">
             <span>SCRIPTS</span>
             <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
-              <button onClick={handleNew} className="toolbar-icon-button">
+              <button
+                onClick={handleNew}
+                className="toolbar-icon-button"
+                title="スクリプトを追加"
+              >
                 <SquarePlus size={14} />
               </button>
             </div>
           </div>
 
           {scripts.map((script) => {
-            const isSelected = script.id === selectedScript?.id;
-            const statusClass = script.isRunning
-              ? "running"
-              : script.lastError
-                ? "error"
-                : "stopped";
+            const isSelected = script.id === selectedId;
             const isRunning = script.isRunning;
             return (
               <div
                 key={script.id}
                 className={`server-tab-item${isSelected ? " selected" : ""}`}
-                onClick={() => handleSelectTab(script.id)}
+                onClick={() => setSelectedId(script.id)}
               >
                 <div className="server-tab-left">
                   <div
-                    className={`server-status-dot ${statusClass}`}
-                    title={
-                      script.isRunning
-                        ? "Running"
-                        : script.lastError
-                          ? "Error"
-                          : "Stopped"
-                    }
+                    className={`server-status-dot ${isRunning ? "running" : "stopped"}`}
+                    title={isRunning ? "Running" : "Stopped"}
                   />
                   <span className="server-tab-name">{script.name}</span>
                   {script.name && (
@@ -438,8 +357,13 @@ export function ScriptPanel() {
               ) : selectedScript ? (
                 <ScriptEditPanel
                   key={selectedScript.id}
-                  selectedScript={selectedScript}
-                  onDelete={handleDelete}
+                  script={selectedScript}
+                  presets={presets}
+                  onSave={(name, code, intervalMs) =>
+                    handleSave(selectedScript.id, name, code, intervalMs)
+                  }
+                  onRunOnce={handleRunOnce}
+                  onDelete={() => handleDelete(selectedScript.id)}
                 />
               ) : (
                 <p className="empty-message">スクリプトが選択されていません</p>
@@ -464,7 +388,7 @@ export function ScriptPanel() {
                     <span className="console-empty">出力なし</span>
                   ) : (
                     consoleLogs.map((log, i) => (
-                      <div key={i} className="console-entry">
+                      <div key={i} className={`console-entry ${log.level}`}>
                         <span className="console-time">
                           {new Date(log.at).toLocaleTimeString()}
                         </span>

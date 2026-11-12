@@ -18,10 +18,6 @@ export function ClearMonitoringItems() {
   return window['go']['main']['App']['ClearMonitoringItems']();
 }
 
-export function ClearScriptError(arg1) {
-  return window['go']['main']['App']['ClearScriptError'](arg1);
-}
-
 export function CreateScript(arg1, arg2, arg3) {
   return window['go']['main']['App']['CreateScript'](arg1, arg2, arg3);
 }
