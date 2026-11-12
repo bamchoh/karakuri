@@ -12,8 +12,8 @@ import (
 
 // mockChangeListener はChangeListenerのモック実装
 type mockChangeListener struct {
-	calls     int
-	lastVar   *Variable
+	calls        int
+	lastVar      *Variable
 	lastMappings []ProtocolMapping
 }
 

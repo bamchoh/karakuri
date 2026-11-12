@@ -8,7 +8,7 @@ import (
 
 // ASCII フレーム定数
 const (
-	ASCIIFrameStart = ':' // 0x3A
+	ASCIIFrameStart = ':'  // 0x3A
 	ASCIIFrameCR    = '\r' // 0x0D
 	ASCIIFrameLF    = '\n' // 0x0A
 )

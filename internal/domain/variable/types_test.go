@@ -84,10 +84,10 @@ func TestDataType_IsStringType_Valid(t *testing.T) {
 
 func TestDataType_IsStringType_Invalid(t *testing.T) {
 	invalid := []DataType{
-		TypeSTRING,     // 長さなし
-		"STRING[]",     // 空の括弧
-		"STRING[abc]",  // 数値でない
-		"STRING[10",    // 閉じ括弧なし
+		TypeSTRING,    // 長さなし
+		"STRING[]",    // 空の括弧
+		"STRING[abc]", // 数値でない
+		"STRING[10",   // 閉じ括弧なし
 		TypeINT,
 		DataType("MyStruct"),
 	}
@@ -290,15 +290,15 @@ func TestParseArrayType_Valid(t *testing.T) {
 
 func TestParseArrayType_Invalid(t *testing.T) {
 	invalid := []DataType{
-		TypeINT,                   // 配列でない
-		"ARRAY[]",                 // 中身なし
-		"ARRAY[0..9]",             // " OF " なし
-		"ARRAY[0..abc] OF INT",    // 上限が数値でない
-		"ARRAY[0..-1] OF INT",     // 上限 < 下限
+		TypeINT,                // 配列でない
+		"ARRAY[]",              // 中身なし
+		"ARRAY[0..9]",          // " OF " なし
+		"ARRAY[0..abc] OF INT", // 上限が数値でない
+		"ARRAY[0..-1] OF INT",  // 上限 < 下限
 		// 旧形式の無効ケース
-		"ARRAY[INT;abc]",          // サイズが数値でない
-		"ARRAY[INT;-1]",           // 負のサイズ
-		"ARRAY[INT;0]",            // ゼロサイズ
+		"ARRAY[INT;abc]", // サイズが数値でない
+		"ARRAY[INT;-1]",  // 負のサイズ
+		"ARRAY[INT;0]",   // ゼロサイズ
 	}
 	for _, dt := range invalid {
 		_, _, err := ParseArrayType(dt)

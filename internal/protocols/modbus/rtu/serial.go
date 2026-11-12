@@ -19,12 +19,12 @@ type SerialConfig struct {
 
 // SerialManager はシリアルポートの管理を行う
 type SerialManager struct {
-	mu           sync.Mutex
-	port         serial.Port
-	config       SerialConfig
-	silenceTime  time.Duration // 3.5文字時間
-	readTimeout  time.Duration
-	closed       bool
+	mu          sync.Mutex
+	port        serial.Port
+	config      SerialConfig
+	silenceTime time.Duration // 3.5文字時間
+	readTimeout time.Duration
+	closed      bool
 }
 
 // NewSerialManager は新しいSerialManagerを作成する

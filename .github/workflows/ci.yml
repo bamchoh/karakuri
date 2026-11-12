@@ -1,0 +1,78 @@
+name: CI
+
+# Pull Request と main への push で、ビルドとテストを実行する。
+# 画面の確認用テスト（Playwright）は、開発サーバーと WebView2 が要るので対象外（手元で task e2e を実行する）。
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+# 同じ Pull Request に続けて push したら、前の実行は止める
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # アプリと同じ Windows で、画面のビルドと Go のテストを実行する
+  test:
+    name: ビルドとテスト（Windows）
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: 画面の依存パッケージを入れる
+        working-directory: frontend
+        run: npm ci
+
+      # 型検査（未使用の変数の検査を含む）と本番ビルド。
+      # main.go が frontend/dist を埋め込むので、Go のビルドより先に実行する
+      - name: 画面の型検査とビルド
+        working-directory: frontend
+        run: npm run build
+
+      - name: go vet
+        run: go vet ./...
+
+      - name: Go のテスト
+        run: go test ./...
+
+  # Linux で、整形の検査と、競合検出を有効にしたテストを実行する。
+  # Windows の実行環境は改行を CRLF に変えるので、gofmt の検査はこちらで行う
+  race:
+    name: 整形と競合検出（Linux）
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+
+      - name: gofmt
+        run: |
+          unformatted=$(gofmt -l .)
+          if [ -n "$unformatted" ]; then
+            echo "gofmt で整形されていないファイルがあります:"
+            echo "$unformatted"
+            exit 1
+          fi
+
+      # アプリ本体（main.go / app.go）は Wails が Linux 用のライブラリを必要とするので、internal だけを対象にする
+      - name: Go のテスト（競合検出あり）
+        run: go test -race ./internal/...
