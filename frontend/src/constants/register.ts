@@ -21,3 +21,9 @@ export const ENDIANNESS_OPTIONS: { value: Endianness; label: string }[] = [
   { value: "big", label: "BE" },
   { value: "little", label: "LE" },
 ];
+
+// エンディアンの選択肢（幅に余裕のある場所で使う、長い表記）
+export const ENDIANNESS_LONG_OPTIONS: { value: Endianness; label: string }[] = [
+  { value: "big", label: "ビッグ(BE)" },
+  { value: "little", label: "リトル(LE)" },
+];
