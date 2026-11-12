@@ -25,10 +25,10 @@ const MOTOR_TYPE = {
   wordCount: 0,
 };
 
-// FocusTrap は、描画から 100ms 以内の Enter を「ダイアログを開いた Enter」とみなして無視する。
-// 入力の直後は再描画で判定がやり直されるため、Enter の前に少し待つ
-async function waitForEnterReady(page: Page) {
-  await page.waitForTimeout(200);
+// ダイアログは、開いてから 100ms 以内の Enter を「ダイアログを開いた Enter」とみなして無視する。
+// 人の操作ではそれより後になるので、Enter で確定するテストでは開いたあとに少し待つ
+async function waitAfterOpen(page: Page) {
+  await page.waitForTimeout(150);
 }
 
 async function openContextMenu(page: Page, name: string) {
@@ -85,14 +85,16 @@ test.describe("変数追加ダイアログ", () => {
     expect(await getVariable(page, "Keep")).toBeUndefined();
   });
 
+  // issue #25: 以前は、入力の直後（約 100ms 以内）の Enter が無視されていた
   test("Enter で確定でき、変数名が空なら何もしない", async ({ page }) => {
     await page.getByRole("button", { name: "変数を追加" }).click();
     const dialog = dialogByTitle(page, "変数を追加");
     await dialog.getByRole("button", { name: "追加" }).click();
     await expect(dialog).toBeVisible();
 
+    // 入力の直後の Enter でも確定する
+    await waitAfterOpen(page);
     await field(dialog, "変数名:").fill("ByEnter");
-    await waitForEnterReady(page);
     await field(dialog, "変数名:").press("Enter");
     await expect(dialog).toBeHidden();
     await expect(variableRow(page, "ByEnter")).toBeVisible();
@@ -322,9 +324,9 @@ test.describe("値を編集ダイアログ", () => {
     await expect(dialog.locator(".dialog-value").nth(1)).toHaveText("INT");
     const input = dialog.locator("input");
     await expect(input).toBeFocused();
-    await input.fill("0x10");
     await shot(page, "value-edit-scalar");
-    await waitForEnterReady(page);
+    await waitAfterOpen(page);
+    await input.fill("0x10");
     await input.press("Enter");
     await expect(dialog).toBeHidden();
     await expect(
@@ -711,8 +713,8 @@ test.describe("行のキーボード操作", () => {
     await page.keyboard.press("Enter");
     const edit = dialogByTitle(page, "値を編集");
     await expect(edit.locator("input")).toBeFocused();
+    await waitAfterOpen(page);
     await edit.locator("input").fill("5");
-    await waitForEnterReady(page);
     await page.keyboard.press("Enter");
     await expect(edit).toBeHidden();
     await expect(row.locator("td.var-value")).toHaveText("5");
