@@ -347,3 +347,124 @@ export interface BulkEditRow {
   nodeEnabled: boolean;
   accessMode: string;
 }
+
+// ===== データ型を選ぶフォーム（変数追加・変数編集・構造体型のフィールドで共通） =====
+
+export interface DimBound {
+  lower: number;
+  upper: number;
+}
+
+// フォームの入力内容。カテゴリを切り替えても、他のカテゴリの入力は保持する
+export interface DataTypeFormValue {
+  category: "scalar" | "array" | "struct";
+  // スカラーのデータ型（STRING は長さを付けない）、または構造体型の名前
+  dataType: string;
+  // STRING のバイト長（スカラーの STRING と、配列の要素が STRING のときに使う）
+  stringLength: number;
+  arrayElemType: string;
+  arrayElemCategory: "scalar" | "struct";
+  // 使う次元数（1〜3）。dimBounds は常に 3 次元分を持つ
+  dimCount: number;
+  dimBounds: [DimBound, DimBound, DimBound];
+}
+
+// フォームの初期値。3 次元目の終了インデックスの既定値だけ、画面によって違う
+export const defaultDataTypeForm = (thirdDimUpper = 2): DataTypeFormValue => ({
+  category: "scalar",
+  dataType: "INT",
+  stringLength: 20,
+  arrayElemType: "INT",
+  arrayElemCategory: "scalar",
+  dimCount: 1,
+  dimBounds: [
+    { lower: 0, upper: 9 },
+    { lower: 0, upper: 4 },
+    { lower: 0, upper: thirdDimUpper },
+  ],
+});
+
+// フォームの入力内容からデータ型の文字列を作る
+// 例: STRING + 長さ 8 → "STRING[8]"、配列 2 次元 → "ARRAY[1..2, 0..1] OF REAL"
+export const buildDataTypeFromForm = (v: DataTypeFormValue): string => {
+  if (v.category === "array") {
+    const baseElemType = resolveBaseElemType(
+      v.arrayElemCategory,
+      v.arrayElemType,
+      v.stringLength,
+    );
+    return buildArrayTypeFE(baseElemType, v.dimBounds.slice(0, v.dimCount));
+  }
+  if (v.category === "scalar" && v.dataType === "STRING") {
+    return `STRING[${v.stringLength}]`;
+  }
+  return v.dataType;
+};
+
+// データ型の文字列をフォームの入力内容に戻す（編集を始めるときに使う）。
+// isStruct は、名前が構造体型かどうかの判定。データ型から決まらない項目は defaults のまま
+export const parseDataTypeToForm = (
+  dataType: string,
+  isStruct: (name: string) => boolean,
+  defaults: DataTypeFormValue,
+): DataTypeFormValue => {
+  const stringLengthOf = (t: string): number => {
+    const m = t.match(/^STRING\[(\d+)\]$/);
+    return m ? parseInt(m[1]) : defaults.stringLength;
+  };
+
+  if (isArrayType(dataType)) {
+    // 全次元とベース要素型を集める（入れ子の表記・旧形式 ARRAY[INT;10] にも対応）
+    const dims: DimBound[] = [];
+    let base = dataType;
+    while (isArrayType(base)) {
+      const flat = parseAllDimsFE(base);
+      if (flat) {
+        dims.push(...flat.dims);
+        base = flat.baseElemType;
+        continue;
+      }
+      const legacy = parseArrayTypeFE(base);
+      if (!legacy) break;
+      dims.push({ lower: legacy.lower, upper: legacy.upper });
+      base = legacy.elemType;
+    }
+    const form: DataTypeFormValue = {
+      ...defaults,
+      category: "array",
+      dimCount: Math.min(Math.max(dims.length, 1), 3),
+      dimBounds: [
+        dims[0] ?? defaults.dimBounds[0],
+        dims[1] ?? defaults.dimBounds[1],
+        dims[2] ?? defaults.dimBounds[2],
+      ],
+    };
+    if (base.startsWith("STRING[")) {
+      return {
+        ...form,
+        arrayElemCategory: "scalar",
+        arrayElemType: "STRING",
+        stringLength: stringLengthOf(base),
+      };
+    }
+    return {
+      ...form,
+      arrayElemCategory: isStruct(base) ? "struct" : "scalar",
+      arrayElemType: base,
+    };
+  }
+
+  if (dataType.startsWith("STRING[")) {
+    return {
+      ...defaults,
+      category: "scalar",
+      dataType: "STRING",
+      stringLength: stringLengthOf(dataType),
+    };
+  }
+  return {
+    ...defaults,
+    category: isStruct(dataType) ? "struct" : "scalar",
+    dataType,
+  };
+};

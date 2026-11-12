@@ -231,6 +231,57 @@ test.describe("構造体型管理ダイアログ", () => {
     await expect(dialog).toBeHidden();
   });
 
+  test("フィールドの型に他の構造体型を選べるが、編集中の型自身は選べない", async ({
+    page,
+  }) => {
+    await api(page, "RegisterStructType", MOTOR_TYPE);
+    await page.reload();
+    await openApp(page);
+    await openVariables(page);
+
+    await page.getByRole("button", { name: "構造体型管理" }).click();
+    const dialog = dialogByTitle(page, "構造体型管理");
+    await field(dialog, "型名:").fill("Line");
+    await field(dialog, "名前:").fill("main");
+    const category = field(dialog, "型カテゴリ:");
+    await expect(category.locator("option")).toHaveText([
+      "スカラー",
+      "配列",
+      "構造体",
+    ]);
+    await category.selectOption("struct");
+    await expect(field(dialog, "構造体型:")).toHaveValue("Motor");
+
+    // 2 つ目のフィールド: Motor の 2 次元配列
+    await dialog.getByRole("button", { name: "+ フィールド追加" }).click();
+    const second = dialog.locator(".dialog-field-editor").nth(1);
+    await field(second, "名前:").fill("spares");
+    await field(second, "型カテゴリ:").selectOption("array");
+    await field(second, "要素型:").selectOption("Motor");
+    await field(second, "次元数:").selectOption("2");
+    await dialog.getByRole("button", { name: "型を登録" }).click();
+
+    const listRow = dialog.locator("table.variable-table tbody tr", {
+      hasText: "Line",
+    });
+    await expect(listRow).toContainText(
+      "main:Motor, spares:ARRAY[0..9, 0..4] OF Motor",
+    );
+
+    // 編集: 定義がフォームに戻る。選べる構造体型に Line 自身は出ない
+    await listRow.getByRole("button", { name: "編集" }).click();
+    const first = dialog.locator(".dialog-field-editor").nth(0);
+    await expect(field(first, "型カテゴリ:")).toHaveValue("struct");
+    await expect(field(first, "構造体型:")).toHaveValue("Motor");
+    await expect(field(first, "構造体型:").locator("option")).toHaveCount(1);
+    await expect(field(second, "要素型:")).toHaveValue("Motor");
+    await expect(field(second, "次元数:")).toHaveValue("2");
+    await expect(field(second, "終了インデックス(2次元目):")).toHaveValue("4");
+    await expect(
+      field(second, "要素型:").locator('optgroup[label="構造体型"] option'),
+    ).toHaveText([/^Motor /]);
+  });
+
   test("閉じると入力は消える（Esc でも同じ）", async ({ page }) => {
     for (const close of ["button", "Escape"] as const) {
       await page.getByRole("button", { name: "構造体型管理" }).click();
@@ -279,6 +330,40 @@ test.describe("変数の編集（名前・データ型）ダイアログ", () =>
     await shot(page, "meta-edit-array");
     await page.keyboard.press("Escape");
     await expect(dialog).toBeHidden();
+  });
+
+  test("構造体型・STRING の配列も、現在の定義がフォームに入る", async ({
+    page,
+  }) => {
+    await api(page, "RegisterStructType", MOTOR_TYPE);
+    await page.reload();
+    await openApp(page);
+    await openVariables(page);
+    await createVariable(page, "M1", "Motor", { speed: 0, on: false });
+    await createVariable(page, "Names", "ARRAY[1..2] OF STRING[6]", ["", ""]);
+    const dialog = dialogByTitle(page, "変数を編集");
+
+    await (await openContextMenu(page, "M1"))
+      .getByRole("button", { name: "編集" })
+      .click();
+    await expect(field(dialog, "型カテゴリ:")).toHaveValue("struct");
+    await expect(field(dialog, "構造体型:")).toHaveValue("Motor");
+    await page.keyboard.press("Escape");
+
+    await (await openContextMenu(page, "Names"))
+      .getByRole("button", { name: "編集" })
+      .click();
+    await expect(field(dialog, "型カテゴリ:")).toHaveValue("array");
+    await expect(field(dialog, "要素型:")).toHaveValue("STRING");
+    await expect(field(dialog, "バイト長:")).toHaveValue("6");
+    await expect(field(dialog, "開始インデックス(1次元目):")).toHaveValue("1");
+    await expect(field(dialog, "終了インデックス(1次元目):")).toHaveValue("2");
+    // そのまま保存しても、データ型は変わらない
+    await dialog.getByRole("button", { name: "保存" }).click();
+    await expect(dialog).toBeHidden();
+    await expect(variableRow(page, "Names").locator("td.var-type")).toHaveText(
+      "ARRAY[1..2] OF STRING[6]",
+    );
   });
 
   test("名前とデータ型を変更できる（値は初期値に戻る）", async ({ page }) => {
