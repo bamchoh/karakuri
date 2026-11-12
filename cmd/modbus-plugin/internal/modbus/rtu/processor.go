@@ -36,7 +36,18 @@ func NewProcessor(handler RequestHandler) *Processor {
 	return &Processor{handler: handler}
 }
 
-// Process はリクエストを処理してレスポンスを返す
+// ProcessASCII はリクエストを処理して、ASCII フレームのレスポンスを返す。
+// 処理は RTU と同じで、フレームの形式（CRC の代わりに LRC、16 進の文字列）だけが違う
+func (p *Processor) ProcessASCII(req *Request) []byte {
+	res := p.Process(req)
+	if res == nil {
+		return nil
+	}
+	return BuildASCIIFrame(res[:len(res)-2]) // CRC を除いた中身
+}
+
+// Process はリクエストを処理してレスポンス（RTU フレーム）を返す。
+// 応答しない場合（UnitID がオフ）は nil を返す
 func (p *Processor) Process(req *Request) []byte {
 	// UnitIDが無効な場合は応答しない
 	if !p.handler.IsUnitIDEnabled(req.UnitID) {

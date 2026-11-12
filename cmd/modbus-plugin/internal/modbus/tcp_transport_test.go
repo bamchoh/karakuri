@@ -180,8 +180,20 @@ func TestTCP_ClientReadWrite(t *testing.T) {
 		t.Errorf("100 レジスタの読み取り = %d 件, %v", len(got), err)
 	}
 	// 範囲外は例外応答（応答自体は返る）
-	if _, err := client.ReadRegisters(200, 1, modbus.HOLDING_REGISTER); err == nil || errors.Is(err, modbus.ErrRequestTimedOut) {
-		t.Errorf("範囲外の読み取りのエラー = %v, want 例外応答", err)
+	if _, err := client.ReadRegisters(200, 1, modbus.HOLDING_REGISTER); !errors.Is(err, modbus.ErrIllegalDataAddress) {
+		t.Errorf("範囲外の保持レジスタの読み取りのエラー = %v, want ErrIllegalDataAddress", err)
+	}
+	if _, err := client.ReadRegisters(200, 1, modbus.INPUT_REGISTER); !errors.Is(err, modbus.ErrIllegalDataAddress) {
+		t.Errorf("範囲外の入力レジスタの読み取りのエラー = %v, want ErrIllegalDataAddress", err)
+	}
+	if _, err := client.ReadCoils(200, 1); !errors.Is(err, modbus.ErrIllegalDataAddress) {
+		t.Errorf("範囲外のコイルの読み取りのエラー = %v, want ErrIllegalDataAddress", err)
+	}
+	if _, err := client.ReadDiscreteInputs(200, 1); !errors.Is(err, modbus.ErrIllegalDataAddress) {
+		t.Errorf("範囲外の入力の読み取りのエラー = %v, want ErrIllegalDataAddress", err)
+	}
+	if err := client.WriteRegister(200, 1); !errors.Is(err, modbus.ErrIllegalDataAddress) {
+		t.Errorf("範囲外の書き込みのエラー = %v, want ErrIllegalDataAddress", err)
 	}
 
 	// コイル（FC 05 / 15 / 01）

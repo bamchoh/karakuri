@@ -40,6 +40,15 @@ func (h *DataStoreRequestHandler) emitRxTx(unitID uint8) {
 	}
 }
 
+// readOrIllegalAddress は、DataStore の読み取りエラー（範囲外のアドレスなど）を
+// 例外応答 Illegal Data Address にする。そのまま返すと Server Device Failure になる
+func readOrIllegalAddress[T any](values []T, err error) ([]T, error) {
+	if err != nil {
+		return nil, modbus.ErrIllegalDataAddress
+	}
+	return values, nil
+}
+
 // HandleCoils はコイル読み取りを処理する (Function Code 1)
 func (h *DataStoreRequestHandler) HandleCoils(req *modbus.CoilsRequest) ([]bool, error) {
 	h.emitRxTx(req.UnitId)
@@ -55,7 +64,7 @@ func (h *DataStoreRequestHandler) HandleCoils(req *modbus.CoilsRequest) ([]bool,
 		return req.Args, nil
 	}
 
-	return h.handler.store.ReadBits(AreaCoils, uint32(req.Addr), req.Quantity)
+	return readOrIllegalAddress(h.handler.store.ReadBits(AreaCoils, uint32(req.Addr), req.Quantity))
 }
 
 // HandleDiscreteInputs はディスクリート入力読み取りを処理する (Function Code 2)
@@ -64,7 +73,7 @@ func (h *DataStoreRequestHandler) HandleDiscreteInputs(req *modbus.DiscreteInput
 	if !h.handler.IsUnitIdEnabled(req.UnitId) {
 		return nil, modbus.ErrIllegalFunction
 	}
-	return h.handler.store.ReadBits(AreaDiscreteInputs, uint32(req.Addr), req.Quantity)
+	return readOrIllegalAddress(h.handler.store.ReadBits(AreaDiscreteInputs, uint32(req.Addr), req.Quantity))
 }
 
 // HandleHoldingRegisters は保持レジスタ読み取りを処理する (Function Code 3)
@@ -83,7 +92,7 @@ func (h *DataStoreRequestHandler) HandleHoldingRegisters(req *modbus.HoldingRegi
 	}
 
 	// 読み取りリクエスト
-	return h.handler.store.ReadWords(AreaHoldingRegs, uint32(req.Addr), req.Quantity)
+	return readOrIllegalAddress(h.handler.store.ReadWords(AreaHoldingRegs, uint32(req.Addr), req.Quantity))
 }
 
 // HandleInputRegisters は入力レジスタ読み取りを処理する (Function Code 4)
@@ -92,7 +101,7 @@ func (h *DataStoreRequestHandler) HandleInputRegisters(req *modbus.InputRegister
 	if !h.handler.IsUnitIdEnabled(req.UnitId) {
 		return nil, modbus.ErrIllegalFunction
 	}
-	return h.handler.store.ReadWords(AreaInputRegs, uint32(req.Addr), req.Quantity)
+	return readOrIllegalAddress(h.handler.store.ReadWords(AreaInputRegs, uint32(req.Addr), req.Quantity))
 }
 
 // HandleWriteSingleCoil は単一コイル書き込みを処理する (Function Code 5)
