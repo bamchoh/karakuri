@@ -176,6 +176,7 @@ func (s *VariableStore) RemoveListener(l ChangeListener) {
 // 返した関数は、ロックを外してから呼ぶ（リスナーの中から変数ストアを呼べるようにするため）。
 // origin が nil でなければ、そのリスナーには通知しない（自分の書き込みを自分に戻さないため）。
 func (s *VariableStore) prepareNotify(v *Variable, origin ChangeListener) func() {
+	snapshot := v.Clone() // 通知はロックの外で行うので、この時点の内容のコピーを渡す
 	mappings := s.getMappingsCopy(v.ID)
 	listeners := make([]ChangeListener, len(s.listeners))
 	copy(listeners, s.listeners)
@@ -184,7 +185,7 @@ func (s *VariableStore) prepareNotify(v *Variable, origin ChangeListener) func()
 			if origin != nil && l == origin {
 				continue
 			}
-			l.OnVariableChanged(v, mappings)
+			l.OnVariableChanged(snapshot, mappings)
 		}
 	}
 }
@@ -347,10 +348,15 @@ func (s *VariableStore) CreateVariable(name string, dataType DataType, initialVa
 	s.byName[v.Name] = v
 	s.mappings[v.ID] = nil
 
-	return v, nil
+	return v.Clone(), nil
 }
 
-// GetVariable はIDで変数を取得する
+// GetVariable はIDで変数を取得する。
+//
+// 変数を返すメソッド（GetVariable / GetVariableByName / GetAllVariables / FindVariableByMapping）と
+// リスナーへの通知は、その時点の内容のコピーを渡す。ストアの中の変数は、ロックの中でしか読み書きしない
+// （呼び出し側がロックの外で読んでいる間に、別の書き込みが入っても競合しないようにするため）。
+// 値（配列・構造体）そのものは書き換えず、更新のたびに新しい値に差し替えるので、コピーは浅くてよい。
 func (s *VariableStore) GetVariable(id string) (*Variable, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -359,7 +365,7 @@ func (s *VariableStore) GetVariable(id string) (*Variable, error) {
 	if !exists {
 		return nil, fmt.Errorf("variable %s not found", id)
 	}
-	return v, nil
+	return v.Clone(), nil
 }
 
 // GetVariableByName は名前で変数を取得する
@@ -371,7 +377,7 @@ func (s *VariableStore) GetVariableByName(name string) (*Variable, error) {
 	if !exists {
 		return nil, fmt.Errorf("variable %s not found", name)
 	}
-	return v, nil
+	return v.Clone(), nil
 }
 
 // GetAllVariables はすべての変数を取得する
@@ -381,7 +387,7 @@ func (s *VariableStore) GetAllVariables() []*Variable {
 
 	result := make([]*Variable, 0, len(s.variables))
 	for _, v := range s.variables {
-		result = append(result, v)
+		result = append(result, v.Clone())
 	}
 	return result
 }
@@ -492,13 +498,13 @@ func (s *VariableStore) FindVariableByMapping(protocolType, area string, address
 
 	for varID, mappings := range s.mappings {
 		for i := range mappings {
-			m := &mappings[i]
+			m := mappings[i]
 			if m.ProtocolType == protocolType && m.MemoryArea == area {
 				v := s.variables[varID]
 				wordCount := v.DataType.WordCountWithResolver(s)
 				// アドレス範囲内かチェック
 				if address >= m.Address && address < m.Address+uint32(wordCount) {
-					return v, m
+					return v.Clone(), &m
 				}
 			}
 		}

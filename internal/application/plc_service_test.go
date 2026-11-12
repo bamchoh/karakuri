@@ -822,7 +822,6 @@ func TestPLCService_ExportProject_ContainsServers(t *testing.T) {
 	}
 }
 
-
 func TestPLCService_ExportProject_MultipleServers(t *testing.T) {
 	svc := newTestService(t)
 
@@ -887,7 +886,6 @@ func TestPLCService_ImportProject_RestoresServers(t *testing.T) {
 		t.Error("expected modbus-rtu server after import")
 	}
 }
-
 
 func TestPLCService_ImportProject_RestoresScripts(t *testing.T) {
 	svc := newTestService(t)
