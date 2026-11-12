@@ -45,6 +45,16 @@ type ScriptEngine struct {
 	scripts       map[string]*runningScript
 	consoleLogs   []ConsoleLogEntry
 	onLogAdded    func(ConsoleLogEntry)
+	// statusOf は、外部の機器にマッピングした変数の同期の状態を返す（plc.getVariableStatus 用）。
+	// 変数 ID を受け取り、マッピングしていなければ nil を返す
+	statusOf func(variableID string) map[string]any
+}
+
+// SetVariableStatusProvider は plc.getVariableStatus() が使う、変数の同期の状態を返す関数を設定する
+func (e *ScriptEngine) SetVariableStatusProvider(fn func(variableID string) map[string]any) {
+	e.mu.Lock()
+	e.statusOf = fn
+	e.mu.Unlock()
 }
 
 type runningScript struct {
@@ -153,6 +163,27 @@ func (e *ScriptEngine) createVM(scriptID, scriptName string) *goja.Runtime {
 			}
 			// gojaがJavaScript numberとして扱えるようGoの標準型に変換
 			return toJSCompatibleValue(v.Value)
+		})
+
+		// getVariableStatus(name) - 外部の機器（クライアントの接続先）にマッピングした変数の同期の状態。
+		// { state: "ok" | "comm_error" | "invalid" | "stopped" | "", writePending: bool, error: string, client: 接続先の名前 }
+		// を返す。マッピングしていない変数・ない変数は null
+		plc.Set("getVariableStatus", func(name string) any {
+			v, err := e.variableStore.GetVariableByName(name)
+			if err != nil {
+				return nil
+			}
+			e.mu.Lock()
+			statusOf := e.statusOf
+			e.mu.Unlock()
+			if statusOf == nil {
+				return nil
+			}
+			st := statusOf(v.ID)
+			if st == nil {
+				return nil
+			}
+			return st
 		})
 
 		// writeVariable(name, value) - 変数名で値を書く

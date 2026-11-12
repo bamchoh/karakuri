@@ -76,3 +76,19 @@ type ResultValue struct {
 	Bit   *bool   // ビットの値（ビットでなければ nil）
 	Word  *uint16 // ワードの値（ワードでなければ nil）
 }
+
+// MappableClientFactory は、変数を外部の機器のアドレスにマッピングできるクライアントのファクトリー（任意で実装する）。
+//
+// ホストは、マッピングされた範囲を読む・書くリクエストをこのインターフェースで作り、
+// 読み取りの結果は CommandResult.Values の Bit / Word（アドレス順）から取り出す。
+type MappableClientFactory interface {
+	// MappingAreas はマッピングできるメモリエリアを返す。機器の側で書き込めないエリアは ReadOnly にする（読むだけにする）
+	MappingAreas() []MemoryArea
+	// MaxReadCount / MaxWriteCount は、1 回のリクエストで読める・書ける個数（ワードかビット）
+	MaxReadCount(area string) int
+	MaxWriteCount(area string) int
+	// BuildReadRequest は area の address から count 個を読むリクエストを作る
+	BuildReadRequest(area string, address uint32, count int) ([]byte, error)
+	// BuildWriteRequest は area の address からワード（ワードのエリア）かビット（ビットのエリア）を書くリクエストを作る
+	BuildWriteRequest(area string, address uint32, words []uint16, bits []bool) ([]byte, error)
+}

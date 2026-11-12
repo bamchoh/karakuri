@@ -69,21 +69,9 @@ func (a *VariableBackedDataStore) writeVariableToInner(v *variable.Variable, m *
 		return
 	}
 
-	var words []uint16
-	if v.DataType.IsArrayType() {
-		elemType, size, err := variable.ParseArrayType(v.DataType)
-		if err != nil {
-			return
-		}
-		words = variable.ArrayValueToWords(v.Value, elemType, size, m.Endianness, a.varStore.TypeResolver())
-	} else if v.DataType.IsStructType() {
-		structDef, err := a.varStore.GetStructType(string(v.DataType))
-		if err != nil || structDef == nil {
-			return
-		}
-		words = variable.StructValueToWords(v.Value, structDef, m.Endianness, a.varStore.TypeResolver())
-	} else {
-		words = variable.ValueToWords(v.Value, v.DataType, m.Endianness)
+	words, ok := encodeVariableWords(a.varStore, v, m.Endianness)
+	if !ok {
+		return
 	}
 	for i, w := range words {
 		a.inner.WriteWord(m.MemoryArea, m.Address+uint32(i), w)
@@ -119,24 +107,7 @@ func (a *VariableBackedDataStore) readVariableFromInner(v *variable.Variable, m 
 	if err != nil {
 		return nil, false
 	}
-
-	var value interface{}
-	if v.DataType.IsArrayType() {
-		elemType, size, parseErr := variable.ParseArrayType(v.DataType)
-		if parseErr != nil {
-			return nil, false
-		}
-		value, err = variable.WordsToArrayValue(words, elemType, size, m.Endianness, a.varStore.TypeResolver())
-	} else if v.DataType.IsStructType() {
-		structDef, getErr := a.varStore.GetStructType(string(v.DataType))
-		if getErr != nil || structDef == nil {
-			return nil, false
-		}
-		value, err = variable.WordsToStructValue(words, structDef, m.Endianness, a.varStore.TypeResolver())
-	} else {
-		value, err = variable.WordsToValue(words, v.DataType, m.Endianness)
-	}
-	return value, err == nil
+	return decodeVariableWords(a.varStore, v, words, m.Endianness)
 }
 
 // syncWordsToVariables は、書き込まれたワードの範囲にマッピングされた変数を、レジスタの値で更新する。

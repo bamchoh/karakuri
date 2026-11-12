@@ -12,6 +12,8 @@ import (
 	"github.com/google/uuid"
 
 	"karakuri/internal/domain/protocol"
+	"karakuri/internal/domain/variable"
+	"karakuri/internal/infrastructure/adapter"
 )
 
 // === クライアント（外部の機器へつなぐ側） ===
@@ -37,10 +39,16 @@ type clientInstance struct {
 	poller         *poller // nil なら停止中
 	pollCycles     int64
 	lastCycle      time.Duration
+
+	// 変数とのマッピング（plc_service_client_sync.go）。マッピングできないプロトコルなら nil
+	sync          *adapter.DeviceSync
+	failThreshold int           // 読み取りが続けて何回失敗したら「通信エラー」にするか
+	wake          chan struct{} // 書き込み未反映が増えたら、ポーリングのゴルーチンを起こす
 }
 
 type clientManager struct {
 	mu        sync.Mutex
+	varStore  *variable.VariableStore
 	factories map[protocol.ProtocolType]protocol.ClientFactory
 	clients   map[string]*clientInstance
 	seq       int
@@ -48,8 +56,9 @@ type clientManager struct {
 	logSeq    int64
 }
 
-func newClientManager() *clientManager {
+func newClientManager(varStore *variable.VariableStore) *clientManager {
 	return &clientManager{
+		varStore:  varStore,
 		factories: make(map[protocol.ProtocolType]protocol.ClientFactory),
 		clients:   make(map[string]*clientInstance),
 	}
@@ -161,10 +170,12 @@ func (s *PLCService) AddClient(protocolType, name string, settings map[string]in
 	m := s.clients
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	return m.addLocked(protocolType, name, settings)
+	return m.addLocked("", protocolType, name, settings)
 }
 
-func (m *clientManager) addLocked(protocolType, name string, settings map[string]interface{}) (*ClientDTO, error) {
+// addLocked は接続先を追加する。id が空なら新しい ID を作る（プロジェクトの読み込みでは、保存した ID を使う。
+// 変数のマッピングは ID で接続先を指すため）
+func (m *clientManager) addLocked(id, protocolType, name string, settings map[string]interface{}) (*ClientDTO, error) {
 	factory, ok := m.factories[protocol.ProtocolType(protocolType)]
 	if !ok {
 		return nil, fmt.Errorf("クライアントとして使えないプロトコルです: %s", protocolType)
@@ -182,8 +193,11 @@ func (m *clientManager) addLocked(protocolType, name string, settings map[string
 	if name == "" {
 		name = m.unusedDefaultNameLocked()
 	}
+	if _, used := m.clients[id]; id == "" || used {
+		id = uuid.NewString()
+	}
 	inst := &clientInstance{
-		id:           uuid.NewString(),
+		id:           id,
 		name:         name,
 		protocolType: factory.ProtocolType(),
 		factory:      factory,
@@ -192,6 +206,11 @@ func (m *clientManager) addLocked(protocolType, name string, settings map[string
 		order:        m.seq,
 
 		pollIntervalMs: defaultPollIntervalMs,
+		failThreshold:  defaultFailThreshold,
+		wake:           make(chan struct{}, 1),
+	}
+	if mf, ok := factory.(protocol.MappableClientFactory); ok {
+		inst.sync = adapter.NewDeviceSync(m.varStore, clientMappingKey(inst.id), mf.MappingAreas(), inst.wakePoller)
 	}
 	m.clients[inst.id] = inst
 	dto := inst.toDTO()
@@ -262,9 +281,13 @@ func (s *PLCService) RemoveClient(id string) error {
 		return fmt.Errorf("接続先が見つかりません: %s", id)
 	}
 	p.wait()
+	inst.detachSync()
 	if inst.client != nil {
 		_ = inst.client.Close()
 	}
+	// この接続先へのマッピングを、変数から外す
+	s.removeMappingsForKey(clientMappingKey(id))
+	go s.emitVariablesChanged()
 	return nil
 }
 
@@ -389,6 +412,7 @@ func (m *clientManager) export() []ClientSnapshotDTO {
 	result := make([]ClientSnapshotDTO, len(dtos))
 	for i, d := range dtos {
 		result[i] = ClientSnapshotDTO{
+			ID:           d.ID,
 			Name:         d.Name,
 			ProtocolType: d.ProtocolType,
 			Settings:     d.Settings,
@@ -400,6 +424,9 @@ func (m *clientManager) export() []ClientSnapshotDTO {
 
 // replaceAll は接続先をすべて閉じて、snapshots の内容に置き換える（プロジェクトの読み込み）。
 // 使えないプロトコル・設定の接続先・読み取り項目は読み飛ばす。ポーリングは停止した状態で始める
+//
+// 古い接続先のポーリングが止まり、変数との同期を外してから、新しい接続先を作る
+// （同じ ID の接続先の同期が、同時に 2 つ動かないようにするため）
 func (m *clientManager) replaceAll(snapshots []ClientSnapshotDTO) {
 	m.mu.Lock()
 	old := m.clients
@@ -408,42 +435,44 @@ func (m *clientManager) replaceAll(snapshots []ClientSnapshotDTO) {
 		pollers = append(pollers, inst.stopPollerLocked())
 	}
 	m.clients = make(map[string]*clientInstance)
+	m.mu.Unlock()
+
+	for _, p := range pollers {
+		p.wait()
+	}
+	closeClients(old) // old はもう m から外したので、ロックの外で読んでよい
+
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	for _, snap := range snapshots {
-		dto, err := m.addLocked(snap.ProtocolType, snap.Name, snap.Settings)
+		dto, err := m.addLocked(snap.ID, snap.ProtocolType, snap.Name, snap.Settings)
 		if err != nil {
 			continue
 		}
 		m.clients[dto.ID].restorePollingLocked(snap.Polling)
 	}
-	m.mu.Unlock()
-	for _, p := range pollers {
-		p.wait()
-	}
-	closeClients(old) // old はもう m から外したので、ロックの外で読んでよい
 }
 
+// closeAll はポーリングを止め、変数との同期を外し、接続を閉じる（アプリの終了）
 func (m *clientManager) closeAll() {
 	m.mu.Lock()
-	clients := make([]protocol.Client, 0, len(m.clients))
-	pollers := make([]*poller, 0, len(m.clients))
-	for _, inst := range m.clients {
-		clients = append(clients, inst.client)
+	old := m.clients
+	pollers := make([]*poller, 0, len(old))
+	for _, inst := range old {
 		pollers = append(pollers, inst.stopPollerLocked())
 	}
+	m.clients = make(map[string]*clientInstance)
 	m.mu.Unlock()
 	for _, p := range pollers {
 		p.wait()
 	}
-	for _, c := range clients {
-		if c != nil {
-			_ = c.Close()
-		}
-	}
+	closeClients(old)
 }
 
-// closeClients は接続を閉じる（送信中なら終わるまで待つので、clientManager.mu の外で呼ぶ）
+// closeClients は変数との同期を外し、接続を閉じる（送信中なら終わるまで待つので、clientManager.mu の外で呼ぶ）
 func closeClients(insts map[string]*clientInstance) {
 	for _, inst := range insts {
+		inst.detachSync()
 		if inst.client != nil {
 			_ = inst.client.Close()
 		}

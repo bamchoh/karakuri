@@ -60,6 +60,39 @@ type ClientPollingDTO struct {
 	Cycles      int64               `json:"cycles"`      // 開始してから読み取りを回った回数
 	LastCycleMs float64             `json:"lastCycleMs"` // 最後の 1 周にかかった時間（周期より長ければ、周期どおりに回れていない）
 	Items       []ClientPollItemDTO `json:"items"`
+	// 読み取りが続けて何回失敗したら、マッピングした変数を「通信エラー」にするか
+	FailThreshold int `json:"failThreshold"`
+	// マッピングした変数の数と、状態ごとの数（マッピングできないプロトコルなら nil）
+	Mapping *ClientMappingSummaryDTO `json:"mapping,omitempty"`
+}
+
+// ClientMappingSummaryDTO は接続先にマッピングした変数の状態のまとめ
+type ClientMappingSummaryDTO struct {
+	Variables    int `json:"variables"`
+	OK           int `json:"ok"`
+	CommError    int `json:"commError"`
+	WritePending int `json:"writePending"`
+	Invalid      int `json:"invalid"`
+}
+
+// MappingTargetDTO は変数をマッピングできる先（サーバー、またはクライアントの接続先）
+type MappingTargetDTO struct {
+	ProtocolType           string `json:"protocolType"` // マッピングの protocolType（接続先なら "client:<ID>"）
+	DisplayName            string `json:"displayName"`  // 選択肢に出す名前
+	Label                  string `json:"label"`        // マッピングの一覧に出す短い名前
+	IsClient               bool   `json:"isClient"`
+	SupportsNodePublishing bool   `json:"supportsNodePublishing"`
+}
+
+// VariableDeviceStatusDTO は、接続先にマッピングした変数の同期の状態
+type VariableDeviceStatusDTO struct {
+	VariableID   string `json:"variableId"`
+	ClientID     string `json:"clientId"`
+	ClientName   string `json:"clientName"`
+	State        string `json:"state"` // "" (まだ読めていない) / "ok" / "comm_error" / "invalid"（マッピングが使えない）/ "stopped"（ポーリングしていない）
+	WritePending bool   `json:"writePending"`
+	Error        string `json:"error,omitempty"`
+	At           string `json:"at,omitempty"` // 最後に読めた時刻
 }
 
 // ClientPollItemDTO はポーリングの読み取り項目
@@ -84,6 +117,7 @@ type ClientPollItemDTO struct {
 
 // ClientSnapshotDTO はプロジェクトに保存する接続先
 type ClientSnapshotDTO struct {
+	ID           string                    `json:"id,omitempty"` // 変数のマッピング（"client:<ID>"）が接続先を指すのに使う
 	Name         string                    `json:"name"`
 	ProtocolType string                    `json:"protocolType"`
 	Settings     map[string]interface{}    `json:"settings"`
@@ -92,8 +126,9 @@ type ClientSnapshotDTO struct {
 
 // ClientPollingSnapshotDTO はプロジェクトに保存するポーリングの設定（ポーリング中かどうかは保存しない）
 type ClientPollingSnapshotDTO struct {
-	IntervalMs int                         `json:"intervalMs"`
-	Items      []ClientPollItemSnapshotDTO `json:"items"`
+	IntervalMs    int                         `json:"intervalMs"`
+	FailThreshold int                         `json:"failThreshold,omitempty"`
+	Items         []ClientPollItemSnapshotDTO `json:"items"`
 }
 
 // ClientPollItemSnapshotDTO はプロジェクトに保存する読み取り項目

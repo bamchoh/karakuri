@@ -2384,3 +2384,40 @@ button:disabled {
 .client-poll-value-text {
   font-family: "Consolas", "Courier New", monospace;
 }
+
+/* ----- 変数と接続先の同期の状態 ----- */
+.device-status-badge {
+  margin-left: 0.5rem;
+  font-size: 0.7rem;
+  padding: 0 4px;
+  border-radius: 3px;
+  white-space: nowrap;
+  cursor: help;
+}
+
+.device-status-badge.device-status-error {
+  background: rgba(239, 68, 68, 0.15);
+  color: #f87171;
+}
+
+.device-status-badge.device-status-pending {
+  background: rgba(245, 158, 11, 0.15);
+  color: #fbbf24;
+}
+
+.vscode-setting-item.client-mapping-summary {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.client-mapping-counts {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.875rem;
+}
+
+.client-polling-interval input[aria-label="通信エラーにするまでの失敗回数"] {
+  width: 60px;
+}

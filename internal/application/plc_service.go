@@ -74,8 +74,22 @@ func NewPLCService() *PLCService {
 		scriptEngine:    scripting.NewScriptEngine(varStore),
 		scripts:         make(map[string]*script.Script),
 		monitoringItems: make(map[string]*MonitoringItemDTO),
-		clients:         newClientManager(),
+		clients:         newClientManager(varStore),
 	}
+
+	// スクリプトの plc.getVariableStatus() に、外部の機器との同期の状態を渡す
+	service.scriptEngine.SetVariableStatusProvider(func(variableID string) map[string]any {
+		st := service.VariableDeviceStatus(variableID)
+		if st == nil {
+			return nil
+		}
+		return map[string]any{
+			"state":        st.State,
+			"writePending": st.WritePending,
+			"error":        st.Error,
+			"client":       st.ClientName,
+		}
+	})
 
 	// モニタリング設定を読み込み
 	_ = service.LoadMonitoringConfig()

@@ -133,6 +133,9 @@ func (inst *clientInstance) pollingDTOLocked() *ClientPollingDTO {
 		Cycles:      inst.pollCycles,
 		LastCycleMs: float64(inst.lastCycle.Microseconds()) / 1000,
 		Items:       items,
+
+		FailThreshold: inst.failThreshold,
+		Mapping:       inst.mappingSummary(),
 	}
 }
 
@@ -263,7 +266,16 @@ func (s *PLCService) SetClientPollInterval(id string, intervalMs int) error {
 		return err
 	}
 	inst.pollIntervalMs = intervalMs
+	inst.wakePoller() // 長い周期を待っている最中でも、新しい周期で待ち直す
 	return nil
+}
+
+// wakePoller はポーリングのゴルーチンを起こす（書き込み未反映を書き、周期を読み直す）
+func (inst *clientInstance) wakePoller() {
+	select {
+	case inst.wake <- struct{}{}:
+	default:
+	}
 }
 
 // StartClientPolling はポーリングを始める（ポーリング中なら何もしない）
@@ -305,40 +317,67 @@ type pollTarget struct {
 	request []byte
 }
 
+// runPoller はポーリングのゴルーチン。周期ごとに、書き込み未反映の変数を書き、読み取り項目を読み、
+// マッピングした範囲を読む。周期を待つ間に書き込み未反映が増えたら（inst.wake）、すぐに書く。
+// inst.factory / inst.sync / inst.wake は作ったあとに変わらないので、ロックなしで読んでよい
 func (m *clientManager) runPoller(ctx context.Context, inst *clientInstance, p *poller) {
 	defer close(p.done)
+	currentClient := func() protocol.Client {
+		m.mu.Lock()
+		defer m.mu.Unlock()
+		return inst.client
+	}
 	for {
 		start := time.Now()
 
 		m.mu.Lock()
 		client := inst.client
+		threshold := inst.failThreshold
 		targets := make([]pollTarget, len(inst.pollItems))
 		for i, it := range inst.pollItems {
 			targets[i] = pollTarget{id: it.id, request: it.request}
 		}
 		m.mu.Unlock()
 
+		if !m.flushWrites(ctx, inst, client) {
+			return
+		}
 		m.pollOnce(ctx, inst, client, targets)
 		if ctx.Err() != nil {
+			return
+		}
+		if !m.syncReads(ctx, inst, client, threshold) {
 			return
 		}
 
 		m.mu.Lock()
 		inst.pollCycles++
 		inst.lastCycle = time.Since(start)
-		interval := time.Duration(inst.pollIntervalMs) * time.Millisecond
 		m.mu.Unlock()
 
-		wait := interval - time.Since(start)
-		if wait < 0 {
-			wait = 0
-		}
-		timer := time.NewTimer(wait)
-		select {
-		case <-ctx.Done():
-			timer.Stop()
-			return
-		case <-timer.C:
+	wait:
+		for {
+			// 周期は待つたびに読み直す（待っている間に変えられても、新しい周期で待つ）
+			m.mu.Lock()
+			interval := time.Duration(inst.pollIntervalMs) * time.Millisecond
+			m.mu.Unlock()
+			d := time.Until(start.Add(interval))
+			if d <= 0 {
+				break
+			}
+			timer := time.NewTimer(d)
+			select {
+			case <-ctx.Done():
+				timer.Stop()
+				return
+			case <-timer.C:
+				break wait
+			case <-inst.wake:
+				timer.Stop()
+				if !m.flushWrites(ctx, inst, currentClient()) {
+					return
+				}
+			}
 		}
 	}
 }
@@ -399,14 +438,14 @@ func (m *clientManager) recordPoll(inst *clientInstance, itemID string, update f
 
 // pollingSnapshotLocked はプロジェクトに保存するポーリングの設定を返す（既定のままなら nil）
 func (inst *clientInstance) pollingSnapshotLocked() *ClientPollingSnapshotDTO {
-	if inst == nil || (len(inst.pollItems) == 0 && inst.pollIntervalMs == defaultPollIntervalMs) {
+	if inst == nil || (len(inst.pollItems) == 0 && inst.pollIntervalMs == defaultPollIntervalMs && inst.failThreshold == defaultFailThreshold) {
 		return nil
 	}
 	items := make([]ClientPollItemSnapshotDTO, len(inst.pollItems))
 	for i, it := range inst.pollItems {
 		items[i] = ClientPollItemSnapshotDTO{CommandID: it.commandID, Params: copyParams(it.params), Format: it.format}
 	}
-	return &ClientPollingSnapshotDTO{IntervalMs: inst.pollIntervalMs, Items: items}
+	return &ClientPollingSnapshotDTO{IntervalMs: inst.pollIntervalMs, FailThreshold: inst.failThreshold, Items: items}
 }
 
 // restorePollingLocked はプロジェクトのポーリングの設定を戻す（使えない項目は読み飛ばす）
@@ -416,6 +455,9 @@ func (inst *clientInstance) restorePollingLocked(snap *ClientPollingSnapshotDTO)
 	}
 	if snap.IntervalMs >= minPollIntervalMs && snap.IntervalMs <= maxPollIntervalMs {
 		inst.pollIntervalMs = snap.IntervalMs
+	}
+	if snap.FailThreshold >= minFailThreshold && snap.FailThreshold <= maxFailThreshold {
+		inst.failThreshold = snap.FailThreshold
 	}
 	for _, s := range snap.Items {
 		if len(inst.pollItems) >= maxPollItems {

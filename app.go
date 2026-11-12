@@ -386,6 +386,21 @@ func (a *App) StopClientPolling(id string) error {
 	return a.plcService.StopClientPolling(id)
 }
 
+// SetClientFailThreshold は、読み取りが続けて何回失敗したら「通信エラー」にするかを変える
+func (a *App) SetClientFailThreshold(id string, n int) error {
+	return a.plcService.SetClientFailThreshold(id, n)
+}
+
+// GetMappingTargets は変数をマッピングできる先（サーバーと、接続先）を返す
+func (a *App) GetMappingTargets() []application.MappingTargetDTO {
+	return a.plcService.GetMappingTargets()
+}
+
+// GetVariableDeviceStatuses は、接続先にマッピングした変数の同期の状態を返す
+func (a *App) GetVariableDeviceStatuses() []application.VariableDeviceStatusDTO {
+	return a.plcService.GetVariableDeviceStatuses()
+}
+
 // === プロジェクト管理 ===
 
 // ExportProject はプロジェクトをファイルにエクスポートする

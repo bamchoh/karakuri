@@ -224,6 +224,26 @@ export namespace application {
 	        this.polling = source["polling"];
 	    }
 	}
+	export class ClientMappingSummaryDTO {
+	    variables: number;
+	    ok: number;
+	    commError: number;
+	    writePending: number;
+	    invalid: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new ClientMappingSummaryDTO(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.variables = source["variables"];
+	        this.ok = source["ok"];
+	        this.commError = source["commError"];
+	        this.writePending = source["writePending"];
+	        this.invalid = source["invalid"];
+	    }
+	}
 	export class ClientPollItemDTO {
 	    id: string;
 	    commandId: string;
@@ -286,6 +306,8 @@ export namespace application {
 	    cycles: number;
 	    lastCycleMs: number;
 	    items: ClientPollItemDTO[];
+	    failThreshold: number;
+	    mapping?: ClientMappingSummaryDTO;
 	
 	    static createFrom(source: any = {}) {
 	        return new ClientPollingDTO(source);
@@ -298,6 +320,8 @@ export namespace application {
 	        this.cycles = source["cycles"];
 	        this.lastCycleMs = source["lastCycleMs"];
 	        this.items = this.convertValues(source["items"], ClientPollItemDTO);
+	        this.failThreshold = source["failThreshold"];
+	        this.mapping = this.convertValues(source["mapping"], ClientMappingSummaryDTO);
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
@@ -503,6 +527,26 @@ export namespace application {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.label = source["label"];
 	        this.ms = source["ms"];
+	    }
+	}
+	export class MappingTargetDTO {
+	    protocolType: string;
+	    displayName: string;
+	    label: string;
+	    isClient: boolean;
+	    supportsNodePublishing: boolean;
+	
+	    static createFrom(source: any = {}) {
+	        return new MappingTargetDTO(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.protocolType = source["protocolType"];
+	        this.displayName = source["displayName"];
+	        this.label = source["label"];
+	        this.isClient = source["isClient"];
+	        this.supportsNodePublishing = source["supportsNodePublishing"];
 	    }
 	}
 	export class MemoryAreaDTO {
@@ -827,6 +871,30 @@ export namespace application {
 		    }
 		    return a;
 		}
+	}
+	export class VariableDeviceStatusDTO {
+	    variableId: string;
+	    clientId: string;
+	    clientName: string;
+	    state: string;
+	    writePending: boolean;
+	    error?: string;
+	    at?: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new VariableDeviceStatusDTO(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.variableId = source["variableId"];
+	        this.clientId = source["clientId"];
+	        this.clientName = source["clientName"];
+	        this.state = source["state"];
+	        this.writePending = source["writePending"];
+	        this.error = source["error"];
+	        this.at = source["at"];
+	    }
 	}
 
 }

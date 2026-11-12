@@ -106,6 +106,10 @@ export function GetIntervalPresets() {
   return window['go']['main']['App']['GetIntervalPresets']();
 }
 
+export function GetMappingTargets() {
+  return window['go']['main']['App']['GetMappingTargets']();
+}
+
 export function GetMemoryAreas(arg1) {
   return window['go']['main']['App']['GetMemoryAreas'](arg1);
 }
@@ -152,6 +156,10 @@ export function GetStructTypes() {
 
 export function GetUnitIDSettings(arg1) {
   return window['go']['main']['App']['GetUnitIDSettings'](arg1);
+}
+
+export function GetVariableDeviceStatuses() {
+  return window['go']['main']['App']['GetVariableDeviceStatuses']();
 }
 
 export function GetVariableMappings(arg1) {
@@ -204,6 +212,10 @@ export function RunScriptOnce(arg1) {
 
 export function SendClientRequest(arg1, arg2) {
   return window['go']['main']['App']['SendClientRequest'](arg1, arg2);
+}
+
+export function SetClientFailThreshold(arg1, arg2) {
+  return window['go']['main']['App']['SetClientFailThreshold'](arg1, arg2);
 }
 
 export function SetClientPollInterval(arg1, arg2) {

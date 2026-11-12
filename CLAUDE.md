@@ -20,7 +20,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **モニタリング**: 任意のレジスタをリアルタイム監視・書き込み（ドラッグ&ドロップ並べ替え対応）
 - **プロトコルマッピング**: 変数を複数プロトコルのメモリアドレスにマッピング可能
 - **REST HTTP API**: アプリをネットワーク経由で外部から操作可能（デフォルトポート 8765）。サーバー管理・レジスタ読み書き・変数管理・プロジェクトエクスポート/インポートに対応
-- **クライアント機能**: Karakuri から外部の機器（Modbus TCP サーバー）につないで、コマンドを送る。ファンクションコードを選んで組み立てる方式と、16 進（PDU）で直接入れる方式がある。送受信のバイト列・応答の解釈・履歴を表示する。読み取り項目を周期的に読むポーリングもできる
+- **クライアント機能**: Karakuri から外部の機器（Modbus TCP サーバー）につないで、コマンドを送る。ファンクションコードを選んで組み立てる方式と、16 進（PDU）で直接入れる方式がある。送受信のバイト列・応答の解釈・履歴を表示する。読み取り項目を周期的に読むポーリングもできる。変数を接続先のアドレスにマッピングすると、ポーリング中に変数と同期する（通信エラー・書き込み未反映の状態を表示）
 
 ## Build and Development Commands
 
@@ -159,6 +159,7 @@ internal/
 │   │   ├── datastore.go    # ModbusDataStore（4 つのメモリエリア）
 │   │   ├── datastore_adapter.go # リクエスト → DataStore の読み書き
 │   │   ├── client.go       # TCPClientFactory / TCPClient（Modbus TCP クライアント。リクエストの組み立て・送受信・応答の解釈）
+│   │   ├── client_mapping.go # 変数マッピング用のエリアと読み書きのリクエスト（MappableClientFactory）
 │   │   └── rtu/            # RTU / ASCII のフレーム処理（Processor は RTU と ASCII で共通）
 │   └── opcua/            # OPC UA（bamchoh/uastack 使用）
 │       ├── factory.go      # Factory（VariableStoreInjector 実装）
@@ -173,7 +174,9 @@ internal/
     ├── appconfig/    # 設定フォルダの決定（旧フォルダからの移行を含む）
     ├── adapter/      # アダプター層
     │   ├── variable_datastore.go       # VariableBackedDataStore（変数↔DataStore双方向同期）
-    │   └── variable_store_accessor.go  # VariableStoreAccessor 実装（ノード公開型プロトコルが変数を読み書きする）
+    │   ├── variable_store_accessor.go  # VariableStoreAccessor 実装（ノード公開型プロトコルが変数を読み書きする）
+    │   ├── device_sync.go              # DeviceSync（変数とクライアントの接続先のアドレスの同期の状態。通信はしない）
+    │   └── variable_codec.go           # 変数の値 ↔ ワード列の変換（VariableBackedDataStore と DeviceSync で共通）
     └── scripting/    # JSエンジン（goja使用）
 ```
 
@@ -347,6 +350,8 @@ frontend/src/
   - メモリエリア選択は `memoryAreasByProtocol[m.protocolType]` で取得
   - 2行表示レイアウト（ヘッダ行 + コントロール行）
   - マッピング競合警告: 他の変数と同じレジスタを使用している場合、ダイアログ内と変数一覧の両方に警告を表示
+  - **マッピング先**: `GetMappingTargets()` が返すサーバーとクライアントの接続先（`protocolType` は `client:<接続先の ID>`、選択肢は「接続先: 名前（プロトコル）」）。接続先のエリアは `GetMemoryAreas("client:<ID>")`。マッピング列には接続先の名前（`label`）で出す
+  - **同期の状態**: 接続先にマッピングした変数があるときだけ、`GetVariableDeviceStatuses()` を 500ms ごとに読み、値の右に「通信エラー」「書き込み未反映」「マッピング不可」を出す（ホバーで理由）
   - **マッピング列の表示**: レジスタマッピング（`protocol:area:addr`、area は `MemoryArea.shortName`）とノード公開設定（`opcua(R/W)` 等）をカンマ区切りで両方表示
   - **NodeID の表示**: マッピングダイアログ・一括マッピング編集で、`GetNodeAddresses(protocolType, variableIds)` でプロトコルの実装から取得した値（`nodeAddresses` state）を表示する。フロントエンドで NodeID を組み立てない。`error` がある変数は理由を表示し、公開を有効にした保存を止める
   - **ダイアログを開く際に `loadServerInstancesAndAreas()` を再実行**: マウント後に追加されたサーバーも「プロトコル公開設定」セクションに反映
@@ -382,6 +387,7 @@ JavaScript（goja）でPLC動作を記述。
     - `plc.readVariable()` でLINT/ULINT値が±2^53を超えた場合は `[WARN]` をコンソールに出力して `readLintBig()`/`readUlintBig()` の使用を促す
   - TIME/DATE シンタックスシュガー: `plc.readTimeMs()`, `plc.writeTimeMs()`, `plc.readDateSec()`, `plc.writeDateSec()`, `plc.readTimeOfDayMs()`, `plc.writeTimeOfDayMs()`, `plc.readDateAndTimeSec()`, `plc.writeDateAndTimeSec()`（変数の読み取り・パース・フォーマット・書き込みをワンステップで実行）
   - TIME/DATE 文字列変換: `plc.parseTime()`, `plc.formatTime()`, `plc.parseDate()`, `plc.formatDate()`, `plc.parseTimeOfDay()`, `plc.formatTimeOfDay()`, `plc.parseDateAndTime()`, `plc.formatDateAndTime()`
+  - 外部の機器との同期の状態: `plc.getVariableStatus(name)`（クライアントの接続先にマッピングした変数。`{ state, writePending, error, client }`、マッピングしていなければ `null`）
 
 ### Wailsバインディング
 
@@ -433,6 +439,9 @@ JavaScript（goja）でPLC動作を記述。
   - `GetClientPolling(id)`: ポーリングの状態（周期・実行中か・周回数・読み取り項目と最後の結果）
   - `AddClientPollItem(id, commandID, params, format)`, `UpdateClientPollItem(id, itemID, commandID, params, format)`, `RemoveClientPollItem(id, itemID)`: 読み取り項目（`Pollable` のコマンドだけ。1 つの接続先に 50 個まで）
   - `SetClientPollInterval(id, ms)`（50〜3600000）, `StartClientPolling(id)`, `StopClientPolling(id)`
+  - `SetClientFailThreshold(id, n)`（1〜100、既定 3）: 読み取りが続けて何回失敗したら、マッピングした変数を「通信エラー」にするか
+  - `GetMappingTargets()`: 変数をマッピングできる先（サーバーと、マッピングできる接続先）
+  - `GetVariableDeviceStatuses()`: 接続先にマッピングした変数の同期の状態（`state`: `""`（まだ読めていない）/ `ok` / `comm_error` / `invalid` / `stopped`、`writePending`、`error`）
 - **HTTP API 設定**:
   - `GetHTTPAPIPort()`: 現在のHTTP APIポート番号を返す
   - `SetHTTPAPIPort(port)`: ポートを変更してHTTP APIサーバーを再起動（1024〜65535、設定ファイルに永続化）
@@ -531,6 +540,7 @@ JavaScript（goja）でPLC動作を記述。
 5. クライアント（外部の機器へつなぐ側）にも対応するなら、`protocol.ClientFactory` / `protocol.Client`（`internal/domain/protocol/client.go`）を実装し、`protocols.ClientFactories()` に追加する
    - 接続先の設定項目（`ConnectionFields()`）とコマンドの定義（`Commands()`）は `ConfigField` で返す。画面はサーバー設定と同じ `DynamicField` で入力欄を作る
    - 読み取りのコマンドには `Pollable: true` を付ける（ポーリングに使える）。読み取った値は `ResultValue.Bit` / `Word` にも入れる
+   - 変数をマッピングできるようにするなら `protocol.MappableClientFactory`（エリア・1 回で読み書きできる個数・読み書きのリクエスト）も実装する。機器の側で書けないエリアは `ReadOnly` にする
    - `Send()` は通信の失敗を error ではなく `CommandResult.Status` で返す。タイムアウトしたら接続を閉じる（遅れて届く応答と取り違えないため）。次の `Send()` でつなぎ直す
 
 実装するときの決まり:
@@ -693,8 +703,18 @@ JavaScript（goja）でPLC動作を記述。
   - 止めるときは、ロックの中で取り消しだけして、ゴルーチンの終わりはロックの外で待つ（ゴルーチンは結果を入れるときに `clientManager.mu` を取るため）。接続先の削除・プロジェクトの読み込み・終了でも止める
   - 読み取り項目・周期・表示形式（`format`。画面が決める値で、ホストは意味を持たない）はプロジェクトに保存する。ポーリング中かどうかは保存しない（読み込んだら停止中）
   - 値の表示形式を変えられるよう、`ResultValue` は表示用の文字列に加えて元の値（`Bit` / `Word`）を持つ
-- **テスト**: `internal/protocols/modbus/client_test.go`（フェイクの TCP サーバー）、`internal/application/plc_service_clients_test.go` / `plc_service_client_polling_test.go`（`protocoltest.ClientFactory`）、`internal/protocols/integration_test.go` の `TestModbusClient_AgainstOwnServer` / `TestModbusClient_Polling`（Karakuri 自身の Modbus TCP サーバーにつなぐ）、画面は `client-panel.spec.ts` / `client-polling.spec.ts`
-- **今後の予定**: 変数と外部機器のアドレスのマッピング（読み取りのタイムアウト時は値を残して状態を「通信エラー」、書き込みのタイムアウト時は「書き込み未反映」にして再送）
+- **テスト**: `internal/protocols/modbus/client_test.go`（フェイクの TCP サーバー）・`client_mapping_test.go`、`internal/infrastructure/adapter/device_sync_test.go`（同期の決まり）、`internal/application/plc_service_clients_test.go` / `plc_service_client_polling_test.go`（`protocoltest.ClientFactory`）・`plc_service_client_sync_test.go`（`protocoltest.DeviceClientFactory`: フェイクの機器つき。`Device.Down` でタイムアウトにできる）、`internal/protocols/integration_test.go` の `TestModbusClient_AgainstOwnServer` / `TestModbusClient_Polling` / `TestModbusClient_VariableMapping`（Karakuri 自身の Modbus TCP サーバーにつなぐ）、画面は `client-panel.spec.ts` / `client-polling.spec.ts` / `client-mapping.spec.ts`
+- **変数とのマッピング**（`plc_service_client_sync.go`、状態は `adapter.DeviceSync`）: 変数をサーバーのレジスタと同じ形（`ProtocolMapping`、`protocolType` は `client:<接続先の ID>`）で接続先のアドレスにマッピングする。同期はポーリング中だけ行う
+  - 周期ごとに、書き込み未反映の変数を書く → 読み取り項目を読む → マッピングした範囲を読む。変数が変わって書き込み未反映が増えたら（周期の変更も）、待たずにポーリングのゴルーチンを起こす（`clientInstance.wake`）
+  - 読む範囲は、エリアごとに重なるか隣り合うものだけまとめる。1 回で読める個数（`MaxReadCount`）より大きければ分けて読み、全部読めたら反映する（一部だけの範囲では変数を変えない）
+  - **機器が先**: マッピングしてから一度も機器から読めていない変数は、機器に書かない（変数の初期値で機器を上書きしないため）。マッピング（エリア・アドレス・エンディアン）か型を変えたら、読み直すまで書かない
+  - 読めた変数がこの同期以外（画面・スクリプト・サーバーのクライアント）から変わると「書き込み未反映」にする。書き込みが反映されるまでは、読み取った値で上書きしない（最後に書いた側が勝つ）。止めている間に変えた値も未反映のまま残り、開始したら書く
+  - 機器の側で書けないエリア（Modbus のディスクリート入力・入力レジスタ）は読むだけ。変数を変えても、次の読み取りで機器の値に戻す
+  - 読み取りが続けて `failThreshold` 回失敗したら「通信エラー」。値は最後に読めたまま残す。書き込みが失敗したら未反映のまま、次の周期に送り直す。タイムアウト・通信エラーになったら、その周期の残りの通信はしない
+  - ビットのエリアには BOOL だけ。使えないマッピング（ないエリア・範囲外・ビットのエリアに BOOL 以外）は `invalid` にして読み書きしない
+  - 読み取りで変数を更新するときは `UpdateValueFrom()` で自分を通知先から外す（機器へ書き戻さない）。`DeviceSync` のロックの中では変数ストアを更新しない
+  - 接続先を削除すると、その接続先へのマッピングを変数から外す。プロジェクトには接続先の ID を保存し、読み込んでも ID を変えない（マッピングが接続先を指すため）
+  - スクリプトからは `plc.getVariableStatus(name)` で状態を読める（`{ state, writePending, error, client }`、マッピングしていなければ `null`）
 
 ### REST HTTP API 実装
 

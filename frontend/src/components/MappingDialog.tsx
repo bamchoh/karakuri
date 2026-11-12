@@ -16,11 +16,11 @@ export interface MappingDialogHandle {
 
 interface Props {
   variables: application.VariableDTO[];
-  serverInstances: application.ServerInstanceDTO[];
+  serverInstances: application.MappingTargetDTO[];
   memoryAreasByProtocol: Record<string, application.MemoryAreaDTO[]>;
   getWordCount: (dataType: string) => number;
   // サーバー一覧とメモリエリアを読み直す（ダイアログを開く直前に呼ぶ）
-  loadServerInstancesAndAreas: () => Promise<application.ServerInstanceDTO[]>;
+  loadServerInstancesAndAreas: () => Promise<application.MappingTargetDTO[]>;
   // 保存したあとに呼ぶ（一覧の再読み込み）
   onChanged: () => Promise<void>;
 }

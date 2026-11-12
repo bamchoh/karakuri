@@ -5,6 +5,7 @@ import {
   UpdateClientPollItem,
   RemoveClientPollItem,
   SetClientPollInterval,
+  SetClientFailThreshold,
   StartClientPolling,
   StopClientPolling,
 } from "../../wailsjs/go/main/App";
@@ -76,6 +77,8 @@ export function ClientPollingView({
   const [intervalInput, setIntervalInput] = useState<string>("");
   // 周期の欄を編集している間は、読み直した値で上書きしない
   const [editingInterval, setEditingInterval] = useState(false);
+  const [thresholdInput, setThresholdInput] = useState<string>("");
+  const [editingThreshold, setEditingThreshold] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [addCommandId, setAddCommandId] = useState(pollable[0]?.id ?? "");
   const [addParams, setAddParams] = useState<
@@ -117,6 +120,21 @@ export function ClientPollingView({
     await load();
   };
 
+  const actualThreshold = polling?.failThreshold;
+  useEffect(() => {
+    if (!editingThreshold && actualThreshold !== undefined) {
+      setThresholdInput(String(actualThreshold));
+    }
+  }, [editingThreshold, actualThreshold]);
+
+  const applyThreshold = async () => {
+    const n = parseInt(thresholdInput, 10);
+    if (!isNaN(n) && n !== polling?.failThreshold) {
+      await run(() => SetClientFailThreshold(client.id, n));
+    }
+    setEditingThreshold(false);
+  };
+
   // 入れた周期を反映する。反映できなかったら（範囲外など）、エラーを出して実際の周期に戻す
   const applyInterval = async () => {
     const ms = parseInt(intervalInput, 10);
@@ -155,6 +173,9 @@ export function ClientPollingView({
     );
 
   const items = polling?.items || [];
+  const mapping = polling?.mapping;
+  // 読み取り項目も、マッピングした変数もなければ、開始しても何もしない
+  const nothingToDo = items.length === 0 && !(mapping && mapping.variables > 0);
   const overrun =
     polling?.running &&
     polling.cycles > 0 &&
@@ -185,7 +206,7 @@ export function ClientPollingView({
         <button
           className={polling?.running ? "btn-danger" : "btn-primary"}
           onClick={handleStartStop}
-          disabled={!polling || (!polling.running && items.length === 0)}
+          disabled={!polling || (!polling.running && nothingToDo)}
         >
           {polling?.running ? (
             <>
@@ -211,6 +232,64 @@ export function ClientPollingView({
           </span>
         )}
       </div>
+
+      {mapping && (
+        <>
+          <div className="vscode-setting-category">変数のマッピング</div>
+          <div className="vscode-setting-item client-mapping-summary">
+            {mapping.variables === 0 ? (
+              <div className="client-note">
+                マッピングした変数はありません。変数画面のマッピングで、この接続先（
+                {client.name}）を選ぶと、ポーリング中に変数と同期します。
+              </div>
+            ) : (
+              <div
+                className="client-mapping-counts"
+                data-testid="client-mapping-summary"
+              >
+                <span>変数 {mapping.variables}</span>
+                <span className="client-status client-status-ok">
+                  正常 {mapping.ok}
+                </span>
+                {mapping.commError > 0 && (
+                  <span className="client-status client-status-error">
+                    通信エラー {mapping.commError}
+                  </span>
+                )}
+                {mapping.writePending > 0 && (
+                  <span className="client-status client-status-exception">
+                    書き込み未反映 {mapping.writePending}
+                  </span>
+                )}
+                {mapping.invalid > 0 && (
+                  <span className="client-status client-status-error">
+                    マッピング不可 {mapping.invalid}
+                  </span>
+                )}
+              </div>
+            )}
+            <label className="client-polling-interval">
+              続けて
+              <input
+                type="number"
+                min={1}
+                max={100}
+                value={thresholdInput}
+                onChange={(e) => {
+                  setEditingThreshold(true);
+                  setThresholdInput(e.target.value);
+                }}
+                onBlur={applyThreshold}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") applyThreshold();
+                }}
+                aria-label="通信エラーにするまでの失敗回数"
+              />
+              回読めなかったら「通信エラー」にする（値は最後に読めたまま残す）
+            </label>
+          </div>
+        </>
+      )}
 
       <div className="vscode-setting-category">読み取り項目の追加</div>
       <div className="vscode-setting-item">

@@ -54,6 +54,8 @@ export function GetHTTPAPIPort():Promise<number>;
 
 export function GetIntervalPresets():Promise<Array<application.IntervalPresetDTO>>;
 
+export function GetMappingTargets():Promise<Array<application.MappingTargetDTO>>;
+
 export function GetMemoryAreas(arg1:string):Promise<Array<application.MemoryAreaDTO>>;
 
 export function GetMonitoringItems():Promise<Array<application.MonitoringItemDTO>>;
@@ -77,6 +79,8 @@ export function GetServerStatus(arg1:string):Promise<string>;
 export function GetStructTypes():Promise<Array<application.StructTypeDTO>>;
 
 export function GetUnitIDSettings(arg1:string):Promise<application.UnitIDSettingsDTO>;
+
+export function GetVariableDeviceStatuses():Promise<Array<application.VariableDeviceStatusDTO>>;
 
 export function GetVariableMappings(arg1:string):Promise<Array<application.ProtocolMappingDTO>>;
 
@@ -103,6 +107,8 @@ export function ReorderMonitoringItem(arg1:string,arg2:number):Promise<void>;
 export function RunScriptOnce(arg1:string):Promise<any>;
 
 export function SendClientRequest(arg1:string,arg2:string):Promise<application.ClientCommandLogDTO>;
+
+export function SetClientFailThreshold(arg1:string,arg2:number):Promise<void>;
 
 export function SetClientPollInterval(arg1:string,arg2:number):Promise<void>;
 
