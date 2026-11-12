@@ -20,7 +20,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **モニタリング**: 任意のレジスタをリアルタイム監視・書き込み（ドラッグ&ドロップ並べ替え対応）
 - **プロトコルマッピング**: 変数を複数プロトコルのメモリアドレスにマッピング可能
 - **REST HTTP API**: アプリをネットワーク経由で外部から操作可能（デフォルトポート 8765）。サーバー管理・レジスタ読み書き・変数管理・プロジェクトエクスポート/インポートに対応
-- **クライアント機能**: Karakuri から外部の機器（Modbus TCP サーバー）につないで、コマンドを送る。ファンクションコードを選んで組み立てる方式と、16 進（PDU）で直接入れる方式がある。送受信のバイト列・応答の解釈・履歴を表示する。読み取り項目を周期的に読むポーリングもできる。変数を接続先のアドレスにマッピングすると、ポーリング中に変数と同期する（通信エラー・書き込み未反映の状態を表示）
+- **クライアント機能**: Karakuri から外部の機器（Modbus TCP サーバー・OPC UA サーバー）につないで、コマンドを送る。コマンド（Modbus はファンクションコード、OPC UA は Read / Write / Browse）を選んで組み立てる方式と、16 進（Modbus は PDU、OPC UA はサービスのリクエスト本体）で直接入れる方式がある。送受信のバイト列・応答の解釈・履歴を表示する。読み取り項目を周期的に読むポーリングもできる。変数を接続先のアドレスにマッピングすると、ポーリング中に変数と同期する（通信エラー・書き込み未反映の状態を表示。Modbus TCP だけ）
 
 ## Build and Development Commands
 
@@ -83,7 +83,7 @@ go build ./...
 
 `frontend/e2e/` に、ブラウザで画面を操作して確認するテストがある。`task dev` が立てる開発用サーバー（`http://localhost:34115`）に接続するため、Go 側の API とプロトコルの実装を含めた動作を確認できる。手順と注意は `frontend/e2e/README.md` を参照。
 
-- 画面ごとのテスト: 通信画面（サーバー）`server-panel.spec.ts`、変数画面 `variable-dialogs.spec.ts` / `node-publishing.spec.ts`、レジスタ画面 `register-panel.spec.ts` / `monitoring.spec.ts`、スクリプト画面 `script-panel.spec.ts`、通信画面（クライアント）`client-panel.spec.ts` / `client-polling.spec.ts` / `client-mapping.spec.ts`
+- 画面ごとのテスト: 通信画面（サーバー）`server-panel.spec.ts`、変数画面 `variable-dialogs.spec.ts` / `node-publishing.spec.ts`、レジスタ画面 `register-panel.spec.ts` / `monitoring.spec.ts`、スクリプト画面 `script-panel.spec.ts`、通信画面（クライアント）`client-panel.spec.ts` / `client-polling.spec.ts` / `client-mapping.spec.ts` / `client-opcua.spec.ts`
 - 画面を変更したら、該当するテストを実行する（なければ追加する）。`shot()` で撮ったスクリーンショット（`frontend/e2e/.screenshots/`）で見た目も確認する
 - データの準備は `api(page, "メソッド名", ...)` で Go 側の API を直接呼び、確認したい操作だけを画面で行う
 - **テストはアプリのサーバー・変数・モニタリング項目・スクリプトをすべて削除する。** 開発サーバーは `KARAKURI_CONFIG_DIR` を一時フォルダに向けて起動する
@@ -167,6 +167,8 @@ internal/
 │       ├── server.go       # Server（uastack サーバーのライフサイクル）
 │       ├── nodes.go        # plcNodes（公開変数 → uastack アドレス空間のノード、値の同期）
 │       ├── types.go        # PLC 型解析・PLC 値 ↔ ua.Variant 変換
+│       ├── client.go       # ClientFactory（OPC UA クライアント。接続先の設定・コマンドの定義・リクエストの組み立てと要約）
+│       ├── client_conn.go  # Client（セッションの接続・送受信・応答の解釈）
 │       └── datastore.go    # emptyDataStore（OPC UA はレジスタを持たない）
 └── infrastructure/   # インフラ層（プロトコル固有実装は含まない）
     ├── httpapi/      # REST HTTP APIサーバー実装
@@ -287,7 +289,7 @@ frontend/src/
 
 #### ServerPanel.tsx
 通信画面（サイドバーの「Connections」）。サーバー（Karakuri が待ち受ける側）とクライアント（外部の機器へつなぐ側・マスター）を 1 つの画面で扱う。左に一覧、右に選んだものの設定（サーバーは `ServerConfigPane`、クライアントは `ClientDetailPane`）を並べる。
-- **一覧**: 上に「SERVERS」、下に「CLIENTS（マスター）」のグループ。それぞれに追加ボタン（「サーバーを追加」「接続先を追加」）。クライアントの行は `.server-tab-item.client-tab-item`
+- **一覧**: 上に「SERVERS」、下に「CLIENTS」のグループ。それぞれに追加ボタン（「サーバーを追加」「接続先を追加」。クライアントのプロトコルが複数あるので、追加ボタンの左でプロトコルを選ぶ）。クライアントの行は `.server-tab-item.client-tab-item`
 - **選択**: `{ kind: "server" | "client", id }` で持つ。選んでいるものが消えたら、先頭のサーバー、なければ先頭のクライアントを選ぶ
 - **クライアント**: 一覧・プロトコル・履歴は `useClients()` が読み込む（一覧は 1 秒ごとに読み直す）。右側のサブタブ（コマンド / ポーリング）と、接続先の設定の欄を開いているかは `ServerPanel` が持ち、接続先を選び直しても保つ
 - **サーバー一覧**: マウント時に `GetServerInstances()` / `GetAvailableProtocols()` を読み、以後は Wails イベント `plc:server-changed` / `plc:protocols-changed` で更新する
@@ -542,7 +544,9 @@ JavaScript（goja）でPLC動作を記述。
 4. **ホスト・フロントエンドの変更不要** - スキーマと能力フラグから自動生成
 5. クライアント（外部の機器へつなぐ側）にも対応するなら、`protocol.ClientFactory` / `protocol.Client`（`internal/domain/protocol/client.go`）を実装し、`protocols.ClientFactories()` に追加する
    - 接続先の設定項目（`ConnectionFields()`）とコマンドの定義（`Commands()`）は `ConfigField` で返す。画面はサーバー設定と同じ `DynamicField` で入力欄を作る
-   - 読み取りのコマンドには `Pollable: true` を付ける（ポーリングに使える）。読み取った値は `ResultValue.Bit` / `Word` にも入れる
+   - 読み取りのコマンドには `Pollable: true` を付ける（ポーリングに使える）。読み取った値をビット・ワードで返すなら `ResultValue.Bit` / `Word` にも入れ、コマンドに `WordValues: true` を付ける（画面で 10 進・16 進などの表示形式を選べる。付けなければ `Value` の文字列をそのまま出す）
+   - 16 進で直接入れる欄に出す説明と入力例は、`protocol.RequestHelpProvider`（`RequestHelp()`）で返す
+   - `ConfigField.Type` に `"password"` を使うと、入力を隠す欄になる（閉じた設定の要約にも出さない）
    - 変数をマッピングできるようにするなら `protocol.MappableClientFactory`（エリア・1 回で読み書きできる個数・読み書きのリクエスト）も実装する。機器の側で書けないエリアは `ReadOnly` にする
    - `Send()` は通信の失敗を error ではなく `CommandResult.Status` で返す。タイムアウトしたら接続を閉じる（遅れて届く応答と取り違えないため）。次の `Send()` でつなぎ直す
 
@@ -697,6 +701,15 @@ JavaScript（goja）でPLC動作を記述。
   - リクエストは PDU（ファンクションコード + データ）。MBAP ヘッダー（トランザクション ID・UnitID）はクライアントが付ける。アドレスは PDU の値（0 始まり）
   - 組み立てられるコマンドは FC01〜06・15・16。16 進で入れれば、ほかのファンクションコードや異常なリクエストも送れる（応答はデータをそのまま表示する）
   - 接続は最初の送信でつなぐ。タイムアウト・通信エラーでは閉じ、例外応答では閉じない。トランザクション ID が違う応答（前のリクエストへの遅れた応答）は読み捨てる
+- **OPC UA**（`internal/protocols/opcua/client.go` / `client_conn.go`、bamchoh/uastack の `client` を使用）
+  - リクエストは「サービスのリクエスト本体」の UA Binary（型の NodeId + 構造体。`encodeMessage()` / `decodeRequest()`）。セキュアチャネル・セッション・リクエストヘッダー（認証トークン・ハンドル・時刻）はクライアントが受け持つ。結果の送信・受信のバイト列も同じ形（リクエスト本体・応答本体）で、チャネルのヘッダーや暗号化は含まない
+  - 組み立てられるコマンドは Read（NodeId と属性。ポーリングに使える）・Write（NodeId・データ型・スカラー / 配列・値）・Browse（子ノードの一覧）。16 進で入れれば、ほかのサービスや複数ノードのリクエストも送れる（解釈を持たない応答は、応答の型の名前だけ出す）。リクエストとして読めないバイト列は、送らずにエラーにする
+  - NodeId は `ns=2;s=Motor1` の形の文字列で入れる（ns= の番号はサーバーごとに決まる。クライアントは名前空間 URI から引かない）
+  - 結果の種類: サーバーがサービスやノードごとの結果を Bad のステータスにしたもの（`BadNodeIdUnknown`・`BadTypeMismatch` など）は `exception`（接続は閉じない）。タイムアウト・通信エラーでは接続を閉じ、次の送信でセッションを作り直す。セッションが無効になったステータス（`BadSessionIdInvalid` など）でも閉じる
+  - 読み取った値は型付きなので `ResultValue.Value` の文字列だけで返す（`Bit` / `Word` は入れない。ポーリングの表示形式の選択は出ない）。スカラーは「Value（Int16）」の 1 行、配列は型の行と要素ごとの行（1000 行まで）
+  - 接続先の設定: エンドポイント URL・セキュリティポリシー（None / Basic256Sha256 / Aes128_Sha256_RsaOaep / Aes256_Sha256_RsaPss / ECC_nistP256 / ECC_nistP384）・セキュリティモード・ユーザー名とパスワード（空なら匿名）・タイムアウト。パスワードはプロジェクトにそのまま保存する
+  - None 以外のポリシーでは、クライアントの証明書を exe と同じフォルダの `pki-client` に作る（サーバーの `pki` とは分ける）。サーバーの証明書は確かめずに受け入れる（`AutoAcceptUntrustedCertificates`）
+  - 変数とのマッピングには対応していない（`MappableClientFactory` はレジスタのエリアとアドレスが前提。ノードへのマッピングは別の仕組みが要る）
 - **ポーリング**（`plc_service_client_polling.go`）: 接続先ごとに読み取り項目の一覧と周期を持ち、ポーリング中は 1 つのゴルーチンが周期ごとに項目を上から順に送る
   - 項目は指定どおりに送る（まとめて読まない。存在しないアドレスが 1 つあると、まとめた全体が例外応答になるため）
   - 読めなかった項目は、最後に読めた値を残す（`values` / `valuesAt`）。画面は status が ok 以外なら値を薄く表示する
@@ -706,7 +719,7 @@ JavaScript（goja）でPLC動作を記述。
   - 止めるときは、ロックの中で取り消しだけして、ゴルーチンの終わりはロックの外で待つ（ゴルーチンは結果を入れるときに `clientManager.mu` を取るため）。接続先の削除・プロジェクトの読み込み・終了でも止める
   - 読み取り項目・周期・表示形式（`format`。画面が決める値で、ホストは意味を持たない）はプロジェクトに保存する。ポーリング中かどうかは保存しない（読み込んだら停止中）
   - 値の表示形式を変えられるよう、`ResultValue` は表示用の文字列に加えて元の値（`Bit` / `Word`）を持つ
-- **テスト**: `internal/protocols/modbus/client_test.go`（フェイクの TCP サーバー）・`client_mapping_test.go`、`internal/infrastructure/adapter/device_sync_test.go`（同期の決まり）、`internal/application/plc_service_clients_test.go` / `plc_service_client_polling_test.go`（`protocoltest.ClientFactory`）・`plc_service_client_sync_test.go`（`protocoltest.DeviceClientFactory`: フェイクの機器つき。`Device.Down` でタイムアウトにできる）、`internal/protocols/integration_test.go` の `TestModbusClient_AgainstOwnServer` / `TestModbusClient_Polling` / `TestModbusClient_VariableMapping`（Karakuri 自身の Modbus TCP サーバーにつなぐ）、画面は `client-panel.spec.ts` / `client-polling.spec.ts` / `client-mapping.spec.ts`
+- **テスト**: `internal/protocols/modbus/client_test.go`（フェイクの TCP サーバー）・`client_mapping_test.go`、`internal/infrastructure/adapter/device_sync_test.go`（同期の決まり）、`internal/application/plc_service_clients_test.go` / `plc_service_client_polling_test.go`（`protocoltest.ClientFactory`）・`plc_service_client_sync_test.go`（`protocoltest.DeviceClientFactory`: フェイクの機器つき。`Device.Down` でタイムアウトにできる）、`internal/protocols/integration_test.go` の `TestModbusClient_AgainstOwnServer` / `TestModbusClient_Polling` / `TestModbusClient_VariableMapping`（Karakuri 自身の Modbus TCP サーバーにつなぐ）、画面は `client-panel.spec.ts` / `client-polling.spec.ts` / `client-mapping.spec.ts`。OPC UA は `internal/protocols/opcua/client_test.go`（Karakuri の OPC UA サーバー、セキュリティポリシーとユーザー名を使う uastack のサーバー、応答しないサーバー）、`integration_test.go` の `TestOPCUAClient_AgainstOwnServer`、画面は `client-opcua.spec.ts`
 - **変数とのマッピング**（`plc_service_client_sync.go`、状態は `adapter.DeviceSync`）: 変数をサーバーのレジスタと同じ形（`ProtocolMapping`、`protocolType` は `client:<接続先の ID>`）で接続先のアドレスにマッピングする。同期はポーリング中だけ行う
   - 周期ごとに、書き込み未反映の変数を書く → 読み取り項目を読む → マッピングした範囲を読む。変数が変わって書き込み未反映が増えたら（周期の変更も）、待たずにポーリングのゴルーチンを起こす（`clientInstance.wake`）
   - 読む範囲は、エリアごとに重なるか隣り合うものだけまとめる。1 回で読める個数（`MaxReadCount`）より大きければ分けて読み、全部読めたら反映する（一部だけの範囲では変数を変えない）

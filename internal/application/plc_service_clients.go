@@ -116,13 +116,18 @@ func (s *PLCService) GetClientProtocols() []ClientProtocolDTO {
 		cmds := f.Commands()
 		cmdDTOs := make([]ClientCommandDTO, len(cmds))
 		for j, c := range cmds {
-			cmdDTOs[j] = ClientCommandDTO{ID: c.ID, DisplayName: c.DisplayName, Fields: toFieldDTOs(c.Fields), Pollable: c.Pollable}
+			cmdDTOs[j] = ClientCommandDTO{ID: c.ID, DisplayName: c.DisplayName, Fields: toFieldDTOs(c.Fields), Pollable: c.Pollable, WordValues: c.WordValues}
 		}
 		result[i] = ClientProtocolDTO{
 			ProtocolType:     string(f.ProtocolType()),
 			DisplayName:      f.DisplayName(),
 			ConnectionFields: toFieldDTOs(f.ConnectionFields()),
 			Commands:         cmdDTOs,
+		}
+		if hp, ok := f.(protocol.RequestHelpProvider); ok {
+			help := hp.RequestHelp()
+			result[i].RequestDescription = help.Description
+			result[i].RequestExample = help.Example
 		}
 	}
 	return result

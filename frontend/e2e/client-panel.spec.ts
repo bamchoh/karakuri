@@ -218,7 +218,7 @@ test("サーバーとクライアントが 1 つの一覧に並び、保存し�
     page.locator(".server-tab-item:not(.client-tab-item)"),
   ).toHaveCount(1);
   await expect(page.locator(".client-tab-item")).toHaveCount(1);
-  await expect(page.getByText("CLIENTS（マスター）")).toBeVisible();
+  await expect(page.getByText("CLIENTS", { exact: true })).toBeVisible();
 
   // 接続先の設定を変えたまま、サーバーへ切り替えようとすると確認する
   await setting(page, "ポート").fill("1502");

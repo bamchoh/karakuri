@@ -68,6 +68,11 @@ func (f *ClientFactory) Commands() []protocol.CommandDefinition {
 	}
 }
 
+// RequestHelp は、16 進で入れるリクエストの説明を返す（protocol.RequestHelpProvider）
+func (f *ClientFactory) RequestHelp() protocol.RequestHelp {
+	return protocol.RequestHelp{Description: "送る文字を 16 進で入れます。", Example: "41 42"}
+}
+
 func (f *ClientFactory) DescribeRequest(request []byte) string {
 	return "echo " + string(request)
 }

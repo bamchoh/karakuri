@@ -71,6 +71,10 @@ export function ClientPollingView({
   onClientsChanged,
 }: ClientPollingViewProps) {
   const pollable = (protocol.commands || []).filter((c) => c.pollable);
+  // 値をビット・ワードで返すコマンド（Modbus の読み取りなど）だけ、表示形式を選べる
+  const wordValueCommands = new Set(
+    pollable.filter((c) => c.wordValues).map((c) => c.id),
+  );
   const [polling, setPolling] = useState<application.ClientPollingDTO | null>(
     null,
   );
@@ -371,18 +375,20 @@ export function ClientPollingView({
                         `（${formatClientElapsed(item.elapsedMs)}）`}
                     </span>
                   )}
-                  <select
-                    className="client-poll-format"
-                    value={item.format || "decimal"}
-                    onChange={(e) => handleFormat(item, e.target.value)}
-                    aria-label="表示形式"
-                  >
-                    {FORMATS.map((f) => (
-                      <option key={f.value} value={f.value}>
-                        {f.label}
-                      </option>
-                    ))}
-                  </select>
+                  {wordValueCommands.has(item.commandId) && (
+                    <select
+                      className="client-poll-format"
+                      value={item.format || "decimal"}
+                      onChange={(e) => handleFormat(item, e.target.value)}
+                      aria-label="表示形式"
+                    >
+                      {FORMATS.map((f) => (
+                        <option key={f.value} value={f.value}>
+                          {f.label}
+                        </option>
+                      ))}
+                    </select>
+                  )}
                   <button
                     className="btn-secondary btn-small"
                     onClick={() =>

@@ -38,13 +38,16 @@ interface ClientDetailPaneProps {
 const noPorts: string[] = [];
 const noop = () => {};
 
-// 設定の欄を閉じているときに出す 1 行の要約（例: "ホスト: 127.0.0.1 / ポート: 502"）
+// 設定の欄を閉じているときに出す 1 行の要約（例: "ホスト: 127.0.0.1 / ポート: 502"）。パスワードと、空の項目は出さない
 function settingsSummary(
   protocol: application.ClientProtocolDTO,
   settings: Record<string, any>,
 ): string {
   return protocol.connectionFields
-    .map((f) => `${f.label}: ${settings[f.name] ?? f.default ?? ""}`)
+    .filter((f) => f.type !== "password")
+    .map((f) => ({ label: f.label, value: settings[f.name] ?? f.default }))
+    .filter((x) => x.value !== undefined && x.value !== "")
+    .map((x) => `${x.label}: ${x.value}`)
     .join(" / ");
 }
 

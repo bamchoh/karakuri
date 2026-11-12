@@ -31,6 +31,16 @@ export function DynamicField({
             disabled={disabled}
           />
         );
+      case "password":
+        return (
+          <input
+            type="password"
+            value={displayValue || ""}
+            onChange={(e) => onChange(e.target.value)}
+            disabled={disabled}
+            autoComplete="off"
+          />
+        );
       case "number":
         return (
           <input

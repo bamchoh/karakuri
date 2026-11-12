@@ -35,6 +35,20 @@ type CommandDefinition struct {
 	Fields      []ConfigField
 	// Pollable は、周期的な読み取り（ポーリング）に使えるコマンドかどうか（読み取りのコマンドだけ true にする）
 	Pollable bool
+	// WordValues は、読み取った値を ResultValue.Bit / Word でも返すコマンドかどうか
+	// （true なら、画面で値の表示形式（10 進・16 進など）を選べる）
+	WordValues bool
+}
+
+// RequestHelp は、リクエストを 16 進で直接入れる欄に出す説明
+type RequestHelp struct {
+	Description string // 何を入れるか（Modbus なら「PDU（ファンクションコード + データ）」）
+	Example     string // 入力例（16 進）
+}
+
+// RequestHelpProvider は、16 進で入れるリクエストの説明を返すファクトリー（任意で実装する）
+type RequestHelpProvider interface {
+	RequestHelp() RequestHelp
 }
 
 // Client は外部の機器へつなぐクライアント。Send は複数のゴルーチンから呼ばれてもよい（実装が 1 つずつ送る）
@@ -59,7 +73,7 @@ const (
 
 // CommandResult はコマンドを 1 回送った結果
 type CommandResult struct {
-	Sent     []byte        // 実際に送ったバイト列（Modbus TCP なら MBAP ヘッダーを含む）
+	Sent     []byte        // 実際に送ったバイト列（Modbus TCP なら MBAP ヘッダーを含む。OPC UA はサービスのリクエスト本体）
 	Received []byte        // 受け取ったバイト列（なければ空）
 	Elapsed  time.Duration // 送ってから応答を受け取るまで（失敗したときは失敗までの時間）
 	Status   CommandStatus

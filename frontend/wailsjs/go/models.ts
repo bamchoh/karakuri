@@ -99,6 +99,7 @@ export namespace application {
 	    displayName: string;
 	    fields: FieldDTO[];
 	    pollable: boolean;
+	    wordValues: boolean;
 	
 	    static createFrom(source: any = {}) {
 	        return new ClientCommandDTO(source);
@@ -110,6 +111,7 @@ export namespace application {
 	        this.displayName = source["displayName"];
 	        this.fields = this.convertValues(source["fields"], FieldDTO);
 	        this.pollable = source["pollable"];
+	        this.wordValues = source["wordValues"];
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
@@ -347,6 +349,8 @@ export namespace application {
 	    displayName: string;
 	    connectionFields: FieldDTO[];
 	    commands: ClientCommandDTO[];
+	    requestDescription: string;
+	    requestExample: string;
 	
 	    static createFrom(source: any = {}) {
 	        return new ClientProtocolDTO(source);
@@ -358,6 +362,8 @@ export namespace application {
 	        this.displayName = source["displayName"];
 	        this.connectionFields = this.convertValues(source["connectionFields"], FieldDTO);
 	        this.commands = this.convertValues(source["commands"], ClientCommandDTO);
+	        this.requestDescription = source["requestDescription"];
+	        this.requestExample = source["requestExample"];
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {

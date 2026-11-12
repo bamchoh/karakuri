@@ -23,7 +23,7 @@ function defaultParams(cmd: application.ClientCommandDTO): Record<string, any> {
 
 // コマンドの組み立て。2 つの入れ方がある:
 // - 組み立てる: コマンド（Modbus ならファンクションコード）を選んで項目を入れる。組み立てたバイト列をその場で 16 進で見せる
-// - 16 進で入れる: 送るバイト列（Modbus なら PDU）を直接入れる。組み立てた内容を写して、一部だけ変えて送ることもできる
+// - 16 進で入れる: 送るバイト列（Modbus なら PDU、OPC UA ならサービスのリクエスト本体）を直接入れる。何を入れるかの説明はプロトコルの実装が返す。組み立てた内容を写して、一部だけ変えて送ることもできる
 export function ClientCommandComposer({
   protocol,
   sending,
@@ -166,9 +166,9 @@ export function ClientCommandComposer({
         <div className="vscode-setting-item">
           <div className="vscode-setting-label">送るリクエスト（16 進）</div>
           <div className="vscode-setting-description">
-            {protocol.displayName} では PDU（ファンクションコード +
-            データ）を入れます。ヘッダーはクライアントが付けます。空白・カンマ・0x
-            は無視します。Enter で送信します。
+            {protocol.requestDescription &&
+              `${protocol.displayName}: ${protocol.requestDescription} `}
+            空白・カンマ・0x は無視します。Enter で送信します。
           </div>
           <div className="vscode-setting-control client-hex-input">
             <input
@@ -178,7 +178,7 @@ export function ClientCommandComposer({
               onKeyDown={(e) => {
                 if (e.key === "Enter") handleSend();
               }}
-              placeholder="03 00 00 00 0A"
+              placeholder={protocol.requestExample}
               aria-label="送るリクエスト（16 進）"
               spellCheck={false}
             />

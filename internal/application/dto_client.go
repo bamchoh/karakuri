@@ -8,6 +8,9 @@ type ClientProtocolDTO struct {
 	DisplayName      string             `json:"displayName"`
 	ConnectionFields []FieldDTO         `json:"connectionFields"`
 	Commands         []ClientCommandDTO `json:"commands"`
+	// 16 進で入れるリクエストの説明と入力例（プロトコルが返さなければ空）
+	RequestDescription string `json:"requestDescription"`
+	RequestExample     string `json:"requestExample"`
 }
 
 // ClientCommandDTO は、項目を入れて組み立てられるコマンド（Modbus ならファンクションコード）
@@ -15,7 +18,8 @@ type ClientCommandDTO struct {
 	ID          string     `json:"id"`
 	DisplayName string     `json:"displayName"`
 	Fields      []FieldDTO `json:"fields"`
-	Pollable    bool       `json:"pollable"` // ポーリング（周期的な読み取り）に使えるか
+	Pollable    bool       `json:"pollable"`   // ポーリング（周期的な読み取り）に使えるか
+	WordValues  bool       `json:"wordValues"` // 読み取った値を bit / word でも返すか（値の表示形式を選べる）
 }
 
 // ClientDTO は接続先
