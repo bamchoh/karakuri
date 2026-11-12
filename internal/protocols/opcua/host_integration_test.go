@@ -20,7 +20,7 @@ func TestServer_ClientWriteReachesHostVariableStore(t *testing.T) {
 	motor, err := variable.NewStructTypeDef("Motor", []variable.StructField{
 		{Name: "speed", DataType: "UINT"},
 		{Name: "label", DataType: "STRING[8]"},
-	}, vars)
+	}, vars.TypeResolver())
 	if err != nil {
 		t.Fatal(err)
 	}

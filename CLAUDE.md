@@ -474,6 +474,7 @@ JavaScript（goja）でPLC動作を記述。
 
 - **データ競合を作らない**: テストは CI で競合検出（`-race`）を有効にして実行される。ゴルーチンに渡す値は、あとで書き換えられるオブジェクトのポインタではなく、その時点の値のコピーにする
   - 変数ストア（`VariableStore`）が返す変数と、リスナーに渡す変数は、その時点の内容のコピー。ストアの中の変数は、ロックの中でしか読み書きしない。値（配列・構造体）は書き換えず、更新のたびに新しい値に差し替える
+  - 構造体型の定義を引く `TypeResolver` は、ストアの外では `VariableStore.TypeResolver()`（引くたびにロックを取る）を使う。`VariableStore` 自身は `TypeResolver` を実装しない。ストアのメソッドの中（ロック済み）では `s.unlocked()` を使う（`sync.RWMutex` は同じゴルーチンから重ねて取れないため）
 
 - **ホスト側のテストはフェイクのプロトコルで動かす**: `protocoltest.NewFactory()` を `PLCService.RegisterFactory()` に登録する。`internal/application` と `internal/infrastructure` のテストは、実際のプロトコルの実装を使わない
 - **REST API**（`internal/infrastructure/httpapi/server_test.go`）: `httptest` でハンドラーを直接呼ぶ。エンドポイントを追加・変更したらここに足す

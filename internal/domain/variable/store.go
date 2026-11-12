@@ -78,22 +78,57 @@ func (s *VariableStore) GetAllNodePublishings(protocolType string) map[string]*N
 	return result
 }
 
-// ResolveStructWordCount はTypeResolverインターフェースの実装
-func (s *VariableStore) ResolveStructWordCount(typeName string) (int, error) {
-	st, ok := s.structTypes[typeName]
-	if !ok {
-		return 0, fmt.Errorf("struct type %s not found", typeName)
+// 構造体型の定義を引く TypeResolver は 2 種類ある。VariableStore 自身は TypeResolver を実装しない
+// （ロックを取る・取らないを、呼び出す場所で必ず選ぶようにするため）。
+//
+//   - unlockedResolver: ストアのメソッドの中（mu をロック済み）で使う。ロックを取らない
+//   - TypeResolver(): ストアの外で使う。引くたびに読み取りロックを取る
+//
+// sync.RWMutex は同じゴルーチンから重ねて取れないので、ロック済みの場所で TypeResolver() を使ってはいけない。
+
+// unlockedResolver は、ロックを取らずに構造体型の定義を引く（mu をロック済みの場所で使う）
+type unlockedResolver struct{ s *VariableStore }
+
+func (r unlockedResolver) ResolveStructWordCount(typeName string) (int, error) {
+	st, err := r.ResolveStructDef(typeName)
+	if err != nil {
+		return 0, err
 	}
 	return st.WordCount, nil
 }
 
-// ResolveStructDef は構造体型定義を返す（TypeResolverインターフェース実装）
-func (s *VariableStore) ResolveStructDef(typeName string) (*StructTypeDef, error) {
-	st, ok := s.structTypes[typeName]
+func (r unlockedResolver) ResolveStructDef(typeName string) (*StructTypeDef, error) {
+	st, ok := r.s.structTypes[typeName]
 	if !ok {
 		return nil, fmt.Errorf("struct type %s not found", typeName)
 	}
 	return st, nil
+}
+
+// lockingResolver は、引くたびに読み取りロックを取って構造体型の定義を引く（ストアの外で使う）
+type lockingResolver struct{ s *VariableStore }
+
+func (r lockingResolver) ResolveStructWordCount(typeName string) (int, error) {
+	r.s.mu.RLock()
+	defer r.s.mu.RUnlock()
+	return unlockedResolver{r.s}.ResolveStructWordCount(typeName)
+}
+
+func (r lockingResolver) ResolveStructDef(typeName string) (*StructTypeDef, error) {
+	r.s.mu.RLock()
+	defer r.s.mu.RUnlock()
+	return unlockedResolver{r.s}.ResolveStructDef(typeName)
+}
+
+// TypeResolver は、ストアの外から構造体型の定義を引くための TypeResolver を返す。
+// 値の変換（ValueToWords など）や NewStructTypeDef に渡す。
+func (s *VariableStore) TypeResolver() TypeResolver {
+	return lockingResolver{s}
+}
+
+// unlocked は、mu をロック済みの場所で使う TypeResolver を返す
+func (s *VariableStore) unlocked() TypeResolver {
+	return unlockedResolver{s}
 }
 
 // RegisterStructType は構造体型を登録する
@@ -216,7 +251,7 @@ func (s *VariableStore) generateDefaultValue(dataType DataType) (interface{}, er
 		if !ok {
 			return nil, fmt.Errorf("struct type %s not found", dataType)
 		}
-		return st.DefaultValueWithResolver(s), nil
+		return st.DefaultValueWithResolver(s.unlocked()), nil
 	}
 	return nil, fmt.Errorf("invalid data type: %s", dataType)
 }
@@ -299,7 +334,7 @@ func (s *VariableStore) CreateVariable(name string, dataType DataType, initialVa
 			}
 			value = arr
 		} else {
-			converted, err := ConvertValueWithResolver(initialValue, dataType, s)
+			converted, err := ConvertValueWithResolver(initialValue, dataType, s.unlocked())
 			if err != nil {
 				// デフォルト配列を生成
 				arr := make([]interface{}, size)
@@ -322,16 +357,16 @@ func (s *VariableStore) CreateVariable(name string, dataType DataType, initialVa
 			return nil, fmt.Errorf("struct type %s not found", dataType)
 		}
 		if initialValue == nil {
-			value = st.DefaultValueWithResolver(s)
+			value = st.DefaultValueWithResolver(s.unlocked())
 		} else if _, ok := initialValue.(map[string]interface{}); ok {
-			converted, err := ConvertValueWithResolver(initialValue, dataType, s)
+			converted, err := ConvertValueWithResolver(initialValue, dataType, s.unlocked())
 			if err != nil {
-				value = st.DefaultValueWithResolver(s)
+				value = st.DefaultValueWithResolver(s.unlocked())
 			} else {
 				value = converted
 			}
 		} else {
-			value = st.DefaultValueWithResolver(s)
+			value = st.DefaultValueWithResolver(s.unlocked())
 		}
 	} else {
 		return nil, fmt.Errorf("invalid data type: %s", dataType)
@@ -408,7 +443,7 @@ func (s *VariableStore) UpdateValueFrom(id string, value interface{}, origin Cha
 		return fmt.Errorf("variable %s not found", id)
 	}
 
-	converted, err := ConvertValueWithResolver(value, v.DataType, s)
+	converted, err := ConvertValueWithResolver(value, v.DataType, s.unlocked())
 	if err != nil {
 		s.mu.Unlock()
 		return fmt.Errorf("failed to set %s: %w", v.Name, err)
@@ -501,7 +536,7 @@ func (s *VariableStore) FindVariableByMapping(protocolType, area string, address
 			m := mappings[i]
 			if m.ProtocolType == protocolType && m.MemoryArea == area {
 				v := s.variables[varID]
-				wordCount := v.DataType.WordCountWithResolver(s)
+				wordCount := v.DataType.WordCountWithResolver(s.unlocked())
 				// アドレス範囲内かチェック
 				if address >= m.Address && address < m.Address+uint32(wordCount) {
 					return v.Clone(), &m
@@ -625,7 +660,7 @@ func (s *VariableStore) Restore(data map[string]interface{}) error {
 					DataType: DataType(fType),
 				})
 			}
-			def, err := NewStructTypeDef(name, fields, s)
+			def, err := NewStructTypeDef(name, fields, s.unlocked())
 			if err != nil {
 				continue
 			}

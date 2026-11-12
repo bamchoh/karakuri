@@ -674,7 +674,7 @@ func TestConvertValue_FromUint64(t *testing.T) {
 // （以前は黙って既定値にしていて、書き込みが成功したように見えていた）
 func TestConvertValueWithResolver_StructFieldError(t *testing.T) {
 	store := NewVariableStore()
-	inner, err := NewStructTypeDef("Inner", []StructField{{Name: "n", DataType: TypeINT}}, store)
+	inner, err := NewStructTypeDef("Inner", []StructField{{Name: "n", DataType: TypeINT}}, store.TypeResolver())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -686,7 +686,7 @@ func TestConvertValueWithResolver_StructFieldError(t *testing.T) {
 		{Name: "label", DataType: TypeSTRING},
 		{Name: "inner", DataType: "Inner"},
 		{Name: "list", DataType: "ARRAY[0..1] OF INT"},
-	}, store)
+	}, store.TypeResolver())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -695,7 +695,7 @@ func TestConvertValueWithResolver_StructFieldError(t *testing.T) {
 	}
 
 	// 変換できる値はそのまま通る。ないフィールドは既定値になる
-	got, err := ConvertValueWithResolver(map[string]interface{}{"count": float64(5), "label": "a"}, "Outer", store)
+	got, err := ConvertValueWithResolver(map[string]interface{}{"count": float64(5), "label": "a"}, "Outer", store.TypeResolver())
 	if err != nil {
 		t.Fatalf("変換できる値がエラーになった: %v", err)
 	}
@@ -712,7 +712,7 @@ func TestConvertValueWithResolver_StructFieldError(t *testing.T) {
 		"field inner":          {"inner": "構造体ではない"},
 	}
 	for want, value := range cases {
-		_, err := ConvertValueWithResolver(value, "Outer", store)
+		_, err := ConvertValueWithResolver(value, "Outer", store.TypeResolver())
 		if err == nil {
 			t.Errorf("%v がエラーにならなかった", value)
 			continue
@@ -726,7 +726,7 @@ func TestConvertValueWithResolver_StructFieldError(t *testing.T) {
 // 変数への書き込みでも、変換できないフィールドがあれば失敗し、値は変わらない
 func TestUpdateValue_StructFieldErrorKeepsValue(t *testing.T) {
 	store := NewVariableStore()
-	point, _ := NewStructTypeDef("Point", []StructField{{Name: "x", DataType: TypeINT}, {Name: "y", DataType: TypeINT}}, store)
+	point, _ := NewStructTypeDef("Point", []StructField{{Name: "x", DataType: TypeINT}, {Name: "y", DataType: TypeINT}}, store.TypeResolver())
 	_ = store.RegisterStructType(point)
 	v, err := store.CreateVariable("P", "Point", map[string]interface{}{"x": float64(1), "y": float64(2)})
 	if err != nil {
