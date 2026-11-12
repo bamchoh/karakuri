@@ -54,6 +54,9 @@ type PLCService struct {
 	monitoringSavedSeq  uint64         // 書き込み済みの通し番号（monitoringSaveMu で保護）
 	monitoringSaveGroup sync.WaitGroup // 実行中の自動保存
 
+	// クライアント（外部の機器へつなぐ側）。自分のロックを持つ（plc_service_clients.go）
+	clients *clientManager
+
 	// アプリケーション状態イベント
 	appEmitter        AppStateEmitter
 	varChangeListener *variableChangeListener
@@ -71,7 +74,22 @@ func NewPLCService() *PLCService {
 		scriptEngine:    scripting.NewScriptEngine(varStore),
 		scripts:         make(map[string]*script.Script),
 		monitoringItems: make(map[string]*MonitoringItemDTO),
+		clients:         newClientManager(varStore),
 	}
+
+	// スクリプトの plc.getVariableStatus() に、外部の機器との同期の状態を渡す
+	service.scriptEngine.SetVariableStatusProvider(func(variableID string) map[string]any {
+		st := service.VariableDeviceStatus(variableID)
+		if st == nil {
+			return nil
+		}
+		return map[string]any{
+			"state":        st.State,
+			"writePending": st.WritePending,
+			"error":        st.Error,
+			"client":       st.ClientName,
+		}
+	})
 
 	// モニタリング設定を読み込み
 	_ = service.LoadMonitoringConfig()
@@ -208,6 +226,9 @@ func (s *PLCService) getServerInstance(protocolType string) (*serverInstance, er
 func (s *PLCService) Shutdown() {
 	// 実行中のモニタリング設定の保存を終わらせる
 	s.monitoringSaveGroup.Wait()
+
+	// 外部の機器との接続を閉じる
+	s.clients.closeAll()
 
 	s.mu.Lock()
 	defer s.mu.Unlock()

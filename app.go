@@ -54,6 +54,9 @@ func (a *App) startup(ctx context.Context) {
 	for _, factory := range protocols.Factories() {
 		a.plcService.RegisterFactory(factory)
 	}
+	for _, factory := range protocols.ClientFactories() {
+		a.plcService.RegisterClientFactory(factory)
+	}
 
 	// REST HTTP API サーバーを起動
 	if err := a.httpAPI.Start(); err != nil {
@@ -294,6 +297,108 @@ func (a *App) ClearConsoleLogs() {
 // GetIntervalPresets は周期プリセットを取得する
 func (a *App) GetIntervalPresets() []application.IntervalPresetDTO {
 	return a.plcService.GetIntervalPresets()
+}
+
+// === クライアント（外部の機器へつなぐ側） ===
+
+// GetClientProtocols はクライアントとして使えるプロトコル（接続先の設定項目・コマンドの定義）を返す
+func (a *App) GetClientProtocols() []application.ClientProtocolDTO {
+	return a.plcService.GetClientProtocols()
+}
+
+// GetClients は接続先の一覧を返す
+func (a *App) GetClients() []application.ClientDTO {
+	return a.plcService.GetClients()
+}
+
+// AddClient は接続先を追加する（設定は既定値）
+func (a *App) AddClient(protocolType string, name string) (*application.ClientDTO, error) {
+	return a.plcService.AddClient(protocolType, name, nil)
+}
+
+// UpdateClient は接続先の名前と設定を変える
+func (a *App) UpdateClient(id string, name string, settings map[string]interface{}) error {
+	return a.plcService.UpdateClient(id, name, settings)
+}
+
+// RemoveClient は接続先を削除する
+func (a *App) RemoveClient(id string) error {
+	return a.plcService.RemoveClient(id)
+}
+
+// DisconnectClient は接続先との接続を閉じる
+func (a *App) DisconnectClient(id string) error {
+	return a.plcService.DisconnectClient(id)
+}
+
+// BuildClientRequest はコマンドと項目の値からリクエストを組み立て、16 進の文字列で返す
+func (a *App) BuildClientRequest(protocolType string, commandID string, params map[string]interface{}) (string, error) {
+	return a.plcService.BuildClientRequest(protocolType, commandID, params)
+}
+
+// SendClientRequest は 16 進で指定したリクエストを接続先に送り、結果を返す
+func (a *App) SendClientRequest(id string, requestHex string) (*application.ClientCommandLogDTO, error) {
+	return a.plcService.SendClientRequest(id, requestHex)
+}
+
+// GetClientCommandLogs は送ったコマンドの履歴を新しい順に返す
+func (a *App) GetClientCommandLogs() []application.ClientCommandLogDTO {
+	return a.plcService.GetClientCommandLogs()
+}
+
+// ClearClientCommandLogs はコマンドの履歴を消す
+func (a *App) ClearClientCommandLogs() {
+	a.plcService.ClearClientCommandLogs()
+}
+
+// GetClientPolling は接続先のポーリングの状態（周期・読み取り項目と最後の結果）を返す
+func (a *App) GetClientPolling(id string) (*application.ClientPollingDTO, error) {
+	return a.plcService.GetClientPolling(id)
+}
+
+// AddClientPollItem はポーリングの読み取り項目を足す
+func (a *App) AddClientPollItem(id string, commandID string, params map[string]interface{}, format string) (*application.ClientPollItemDTO, error) {
+	return a.plcService.AddClientPollItem(id, commandID, params, format)
+}
+
+// UpdateClientPollItem はポーリングの読み取り項目を変える
+func (a *App) UpdateClientPollItem(id string, itemID string, commandID string, params map[string]interface{}, format string) error {
+	return a.plcService.UpdateClientPollItem(id, itemID, commandID, params, format)
+}
+
+// RemoveClientPollItem はポーリングの読み取り項目を削除する
+func (a *App) RemoveClientPollItem(id string, itemID string) error {
+	return a.plcService.RemoveClientPollItem(id, itemID)
+}
+
+// SetClientPollInterval はポーリングの周期（ms）を変える
+func (a *App) SetClientPollInterval(id string, intervalMs int) error {
+	return a.plcService.SetClientPollInterval(id, intervalMs)
+}
+
+// StartClientPolling はポーリングを始める
+func (a *App) StartClientPolling(id string) error {
+	return a.plcService.StartClientPolling(id)
+}
+
+// StopClientPolling はポーリングを止める
+func (a *App) StopClientPolling(id string) error {
+	return a.plcService.StopClientPolling(id)
+}
+
+// SetClientFailThreshold は、読み取りが続けて何回失敗したら「通信エラー」にするかを変える
+func (a *App) SetClientFailThreshold(id string, n int) error {
+	return a.plcService.SetClientFailThreshold(id, n)
+}
+
+// GetMappingTargets は変数をマッピングできる先（サーバーと、接続先）を返す
+func (a *App) GetMappingTargets() []application.MappingTargetDTO {
+	return a.plcService.GetMappingTargets()
+}
+
+// GetVariableDeviceStatuses は、接続先にマッピングした変数の同期の状態を返す
+func (a *App) GetVariableDeviceStatuses() []application.VariableDeviceStatusDTO {
+	return a.plcService.GetVariableDeviceStatuses()
 }
 
 // === プロジェクト管理 ===

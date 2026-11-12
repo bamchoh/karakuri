@@ -27,7 +27,7 @@ export async function openApp(page: Page) {
   await expect(page.locator("#root")).not.toBeEmpty();
 }
 
-// テストで作ったサーバー・変数・構造体型・モニタリング項目・スクリプトをすべて消して、アプリを初期状態に戻す
+// テストで作ったサーバー・変数・構造体型・モニタリング項目・スクリプト・接続先（クライアント）をすべて消して、アプリを初期状態に戻す
 export async function resetApp(page: Page) {
   const vars = await api<{ id: string }[]>(page, "GetVariables");
   for (const v of vars || []) await api(page, "DeleteVariable", v.id);
@@ -45,13 +45,23 @@ export async function resetApp(page: Page) {
   const scripts = await api<{ id: string }[]>(page, "GetScripts");
   for (const s of scripts || []) await api(page, "DeleteScript", s.id);
   await api(page, "ClearConsoleLogs");
+  const clients = await api<{ id: string }[]>(page, "GetClients");
+  for (const c of clients || []) await api(page, "RemoveClient", c.id);
+  await api(page, "ClearClientCommandLogs");
 }
 
 // ===== サーバー画面・レジスタ画面の操作 =====
 
 export async function openServers(page: Page) {
-  await page.getByTitle("Server", { exact: true }).click();
+  await page.getByTitle("Connections", { exact: true }).click();
   await expect(page.locator(".server-vertical-tabs")).toBeVisible();
+}
+
+// 通信画面を開き、クライアントの接続先を一覧から選ぶ（既定ではサーバーが選ばれているため）
+export async function openClient(page: Page, name: string) {
+  await openServers(page);
+  await page.locator(".client-tab-item", { hasText: name }).click();
+  await expect(page.locator(".server-config-pane-name")).toHaveText(name);
 }
 
 // レジスタ画面を開く。tab を渡すとサブタブ（一覧表示 / モニタリング）も切り替える

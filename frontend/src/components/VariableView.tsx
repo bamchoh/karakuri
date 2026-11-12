@@ -3,7 +3,8 @@ import {
   GetVariables,
   GetDataTypes,
   DeleteVariable,
-  GetServerInstances,
+  GetMappingTargets,
+  GetVariableDeviceStatuses,
   GetMemoryAreas,
   GetStructTypes,
 } from "../../wailsjs/go/main/App";
@@ -30,6 +31,46 @@ import {
   FlatRow,
 } from "./variableTypes";
 
+// 接続先にマッピングした変数の同期の状態を読み直す間隔
+const DEVICE_STATUS_REFRESH_MS = 500;
+
+// 同期の状態の表示（問題があるときだけ出す）。stopped は、書き込み未反映があるときだけ出す
+function deviceStatusBadges(statuses: application.VariableDeviceStatusDTO[]) {
+  return statuses.flatMap((st) => {
+    const where = `接続先「${st.clientName}」`;
+    const detail = st.error ? `: ${st.error}` : "";
+    const badges: { key: string; cls: string; label: string; title: string }[] =
+      [];
+    if (st.state === "comm_error") {
+      badges.push({
+        key: `${st.clientId}:err`,
+        cls: "device-status-error",
+        label: "通信エラー",
+        title: `${where}から読めていません（表示は最後に読めた値）${detail}`,
+      });
+    } else if (st.state === "invalid") {
+      badges.push({
+        key: `${st.clientId}:invalid`,
+        cls: "device-status-error",
+        label: "マッピング不可",
+        title: `${where}のマッピングが使えません${detail}`,
+      });
+    }
+    if (st.writePending) {
+      badges.push({
+        key: `${st.clientId}:pending`,
+        cls: "device-status-pending",
+        label: "書き込み未反映",
+        title:
+          st.state === "stopped"
+            ? `${where}のポーリングが止まっているため、まだ書いていません`
+            : `${where}にまだ書けていません。次の周期に送り直します${detail}`,
+      });
+    }
+    return badges;
+  });
+}
+
 export function VariableView() {
   const [variables, setVariables] = useState<application.VariableDTO[]>([]);
   const [dataTypes, setDataTypes] = useState<application.DataTypeInfoDTO[]>([]);
@@ -53,10 +94,14 @@ export function VariableView() {
   // 行DOM要素のref map
   const rowRefs = useRef<Map<string, HTMLTableRowElement>>(new Map());
 
-  // サーバー一覧とメモリエリア（マッピングの表示とダイアログで使う）
+  // マッピングできる先（サーバーとクライアントの接続先）とメモリエリア（マッピングの表示とダイアログで使う）
   const [serverInstances, setServerInstances] = useState<
-    application.ServerInstanceDTO[]
+    application.MappingTargetDTO[]
   >([]);
+  // 接続先にマッピングした変数の同期の状態（変数 ID → 状態）
+  const [deviceStatuses, setDeviceStatuses] = useState<
+    Record<string, application.VariableDeviceStatusDTO[]>
+  >({});
   const [memoryAreasByProtocol, setMemoryAreasByProtocol] = useState<
     Record<string, application.MemoryAreaDTO[]>
   >({});
@@ -90,12 +135,12 @@ export function VariableView() {
     }
   }, []);
 
-  // サーバー一覧とメモリエリアを取得（取得したサーバー一覧を返す）
+  // マッピングできる先とメモリエリアを取得（取得した一覧を返す）
   const loadServerInstancesAndAreas = useCallback(async (): Promise<
-    application.ServerInstanceDTO[]
+    application.MappingTargetDTO[]
   > => {
     try {
-      const instances = await GetServerInstances();
+      const instances = await GetMappingTargets();
       setServerInstances(instances || []);
       const areasMap: Record<string, application.MemoryAreaDTO[]> = {};
       for (const inst of instances || []) {
@@ -142,6 +187,32 @@ export function VariableView() {
     );
     return off;
   }, [loadVariables]);
+
+  // 接続先にマッピングした変数があるときだけ、同期の状態を読み直す
+  const hasClientMappings = variables.some((v) =>
+    (v.mappings || []).some((m) => m.protocolType.startsWith("client:")),
+  );
+  useEffect(() => {
+    if (!hasClientMappings) {
+      setDeviceStatuses({});
+      return;
+    }
+    const load = async () => {
+      try {
+        const list = (await GetVariableDeviceStatuses()) || [];
+        const byVar: Record<string, application.VariableDeviceStatusDTO[]> = {};
+        for (const st of list) {
+          (byVar[st.variableId] ||= []).push(st);
+        }
+        setDeviceStatuses(byVar);
+      } catch {
+        // 読み直しに失敗しても、次の周期でまた読む
+      }
+    };
+    load();
+    const timer = setInterval(load, DEVICE_STATUS_REFRESH_MS);
+    return () => clearInterval(timer);
+  }, [hasClientMappings]);
 
   // キーボードナビゲーション: focusedRowKey が変わったらその行にフォーカスを移す
   useEffect(() => {
@@ -529,7 +600,11 @@ export function VariableView() {
         const addr = isOneOriginArea(m.protocolType, m.memoryArea)
           ? m.address + 1
           : m.address;
-        return `${m.protocolType}:${areaShortName(m.protocolType, m.memoryArea)}:${addr}`;
+        // 接続先は ID ではなく名前（label）で出す。サーバーは protocolType のまま
+        const label =
+          serverInstances.find((t) => t.protocolType === m.protocolType)
+            ?.label || m.protocolType;
+        return `${label}:${areaShortName(m.protocolType, m.memoryArea)}:${addr}`;
       })
       .join(", ");
   };
@@ -611,7 +686,9 @@ export function VariableView() {
           className="btn-secondary"
           disabled={serverInstances.length === 0}
           title={
-            serverInstances.length === 0 ? "サーバーが追加されていません" : ""
+            serverInstances.length === 0
+              ? "サーバーも接続先も追加されていません"
+              : ""
           }
         >
           一括マッピング編集
@@ -689,6 +766,18 @@ export function VariableView() {
                 ) : (
                   <span>{formatScalarValue(row.value, row.dataType)}</span>
                 )}
+                {row.depth === 0 &&
+                  deviceStatusBadges(deviceStatuses[row.variable.id] || []).map(
+                    (b) => (
+                      <span
+                        key={b.key}
+                        className={`device-status-badge ${b.cls}`}
+                        title={b.title}
+                      >
+                        {b.label}
+                      </span>
+                    ),
+                  )}
               </td>
               <td
                 className={`var-mapping${row.depth === 0 ? " clickable" : ""}`}

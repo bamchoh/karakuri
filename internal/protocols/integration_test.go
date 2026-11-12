@@ -51,6 +51,9 @@ func newService(t *testing.T) *application.PLCService {
 	for _, f := range protocols.Factories() {
 		svc.RegisterFactory(f)
 	}
+	for _, f := range protocols.ClientFactories() {
+		svc.RegisterClientFactory(f)
+	}
 	svc.ClearMonitoringItems()
 	t.Cleanup(svc.Shutdown)
 	return svc
@@ -329,6 +332,205 @@ func TestModbus_UnitIDSettings(t *testing.T) {
 	if got := svc.GetDisabledUnitIDs(modbusTCP); !reflect.DeepEqual(got, []int{2}) {
 		t.Errorf("設定変更後 = %v, want [2]", got)
 	}
+}
+
+// ===== クライアント（外部の機器へつなぐ側） =====
+
+// Modbus TCP のクライアントから、Karakuri 自身の Modbus TCP サーバーにつないで読み書きする
+func TestModbusClient_AgainstOwnServer(t *testing.T) {
+	svc := newService(t)
+	port := addModbus(t, svc)
+	must(t, svc.SetUnitIDEnabled(modbusTCP, 2, false))
+	must(t, svc.StartServer(modbusTCP))
+
+	c, err := svc.AddClient(modbusTCP, "自分", map[string]interface{}{"host": "127.0.0.1", "port": port, "unitId": 1, "timeoutMs": 300})
+	must(t, err)
+
+	send := func(cmd string, params map[string]interface{}) *application.ClientCommandLogDTO {
+		t.Helper()
+		req, err := svc.BuildClientRequest(modbusTCP, cmd, params)
+		must(t, err)
+		log, err := svc.SendClientRequest(c.ID, req)
+		must(t, err)
+		return log
+	}
+
+	// FC16 で書くと、サーバーのレジスタに入る
+	if log := send("16", map[string]interface{}{"address": float64(10), "values": "1234, 0xBEEF"}); log.Status != "ok" {
+		t.Fatalf("FC16: %+v", log)
+	}
+	words, err := svc.ReadWords(modbusTCP, hr, 10, 2)
+	must(t, err)
+	if !reflect.DeepEqual(words, []int{1234, 0xBEEF}) {
+		t.Fatalf("サーバーのレジスタ = %v", words)
+	}
+
+	// 画面から書いた値を FC03 で読める
+	must(t, svc.WriteWord(modbusTCP, hr, 12, 42))
+	log := send("3", map[string]interface{}{"address": float64(10), "count": float64(3)})
+	if log.Status != "ok" || len(log.Values) != 3 || log.Values[2].Value != "42 (0x002A)" {
+		t.Fatalf("FC03: %+v", log)
+	}
+	// 2 回目のリクエストなので、トランザクション ID は 2
+	if log.Sent != "00 02 00 00 00 06 01 03 00 0A 00 03" {
+		t.Fatalf("送ったフレーム = %s", log.Sent)
+	}
+
+	// 16 進で直接入れたリクエスト（サーバーが対応しないファンクションコード）は例外応答になる
+	if log, err := svc.SendClientRequest(c.ID, "2B 0E 01 00"); err != nil || log.Status != "exception" || log.Received == "" {
+		t.Fatalf("FC43: %+v, %v", log, err)
+	}
+
+	// オフにした UnitID 宛てはタイムアウトし、次の送信でつなぎ直す
+	must(t, svc.UpdateClient(c.ID, "自分", map[string]interface{}{"host": "127.0.0.1", "port": port, "unitId": 2, "timeoutMs": 200}))
+	if log := send("3", map[string]interface{}{"address": float64(0), "count": float64(1)}); log.Status != "timeout" {
+		t.Fatalf("オフにした UnitID: %+v", log)
+	}
+	if svc.GetClients()[0].Connected {
+		t.Fatal("タイムアウトしたら接続を閉じる")
+	}
+	must(t, svc.UpdateClient(c.ID, "自分", map[string]interface{}{"host": "127.0.0.1", "port": port, "unitId": 1, "timeoutMs": 300}))
+	if log := send("3", map[string]interface{}{"address": float64(10), "count": float64(1)}); log.Status != "ok" {
+		t.Fatalf("つなぎ直し: %+v", log)
+	}
+
+	// サーバーを止めると、接続できないエラーになる
+	must(t, svc.StopServer(modbusTCP))
+	if log := send("3", map[string]interface{}{"address": float64(10), "count": float64(1)}); log.Status == "ok" {
+		t.Fatalf("停止後: %+v", log)
+	}
+}
+
+// ポーリングで、Karakuri 自身の Modbus TCP サーバーのレジスタを周期的に読む
+func TestModbusClient_Polling(t *testing.T) {
+	svc := newService(t)
+	port := addModbus(t, svc)
+	must(t, svc.StartServer(modbusTCP))
+	c, err := svc.AddClient(modbusTCP, "自分", map[string]interface{}{"host": "127.0.0.1", "port": port, "unitId": 1, "timeoutMs": 200})
+	must(t, err)
+	must(t, svc.SetClientPollInterval(c.ID, 50))
+	_, err = svc.AddClientPollItem(c.ID, "3", map[string]interface{}{"address": float64(20), "count": float64(2)}, "")
+	must(t, err)
+	if _, err := svc.AddClientPollItem(c.ID, "16", map[string]interface{}{"address": float64(0), "values": "1"}, ""); err == nil {
+		t.Fatal("書き込みのコマンドはポーリングに使えない")
+	}
+	must(t, svc.StartClientPolling(c.ID))
+	t.Cleanup(func() { _ = svc.StopClientPolling(c.ID) })
+
+	words := func() []int {
+		p, err := svc.GetClientPolling(c.ID)
+		must(t, err)
+		it := p.Items[0]
+		if it.Status != "ok" || len(it.Values) != 2 {
+			return nil
+		}
+		return []int{*it.Values[0].Word, *it.Values[1].Word}
+	}
+	waitUntil := func(what string, cond func() bool) {
+		t.Helper()
+		deadline := time.Now().Add(3 * time.Second)
+		for !cond() {
+			if time.Now().After(deadline) {
+				t.Fatalf("待っても %s にならない", what)
+			}
+			time.Sleep(10 * time.Millisecond)
+		}
+	}
+
+	must(t, svc.WriteWord(modbusTCP, hr, 20, 111))
+	must(t, svc.WriteWord(modbusTCP, hr, 21, 222))
+	waitUntil("[111 222]", func() bool { return reflect.DeepEqual(words(), []int{111, 222}) })
+	must(t, svc.WriteWord(modbusTCP, hr, 21, 333))
+	waitUntil("[111 333]", func() bool { return reflect.DeepEqual(words(), []int{111, 333}) })
+
+	// 応答しない UnitID にすると、タイムアウトになり、最後に読めた値は残る
+	must(t, svc.SetUnitIDEnabled(modbusTCP, 1, false))
+	waitUntil("タイムアウト", func() bool {
+		p, _ := svc.GetClientPolling(c.ID)
+		return p.Items[0].Status == "timeout"
+	})
+	p, _ := svc.GetClientPolling(c.ID)
+	if v := p.Items[0].Values; len(v) != 2 || *v[1].Word != 333 {
+		t.Fatalf("最後に読めた値が残っていない: %+v", v)
+	}
+	// 応答するようにすると、また読める
+	must(t, svc.SetUnitIDEnabled(modbusTCP, 1, true))
+	must(t, svc.WriteWord(modbusTCP, hr, 20, 444))
+	waitUntil("[444 333]", func() bool { return reflect.DeepEqual(words(), []int{444, 333}) })
+}
+
+// 変数を接続先（Karakuri 自身の Modbus TCP サーバー）のアドレスにマッピングして同期する
+func TestModbusClient_VariableMapping(t *testing.T) {
+	svc := newService(t)
+	port := addModbus(t, svc)
+	must(t, svc.StartServer(modbusTCP))
+	c, err := svc.AddClient(modbusTCP, "自分", map[string]interface{}{"host": "127.0.0.1", "port": port, "unitId": 1, "timeoutMs": 100})
+	must(t, err)
+	must(t, svc.SetClientPollInterval(c.ID, 50))
+	must(t, svc.SetClientFailThreshold(c.ID, 2))
+	key := "client:" + c.ID
+
+	// マッピング先に、接続先が出る
+	found := false
+	for _, tg := range svc.GetMappingTargets() {
+		if tg.ProtocolType == key && tg.IsClient {
+			found = true
+		}
+	}
+	if !found || len(svc.GetMemoryAreas(key)) != 4 {
+		t.Fatal("マッピング先に接続先がない")
+	}
+
+	must(t, svc.WriteWord(modbusTCP, hr, 50, 0))
+	must(t, svc.WriteWord(modbusTCP, hr, 51, 321)) // DINT（ビッグエンディアン）= 321
+	v, err := svc.CreateVariable("remote", "DINT", 0)
+	must(t, err)
+	must(t, svc.UpdateVariableMappings(v.ID, []application.ProtocolMappingDTO{{ProtocolType: key, MemoryArea: hr, Address: 50, Endianness: "big"}}))
+	must(t, svc.StartClientPolling(c.ID))
+	t.Cleanup(func() { _ = svc.StopClientPolling(c.ID) })
+
+	status := func() application.VariableDeviceStatusDTO {
+		st := svc.VariableDeviceStatus(v.ID)
+		if st == nil {
+			return application.VariableDeviceStatusDTO{}
+		}
+		return *st
+	}
+	waitUntil := func(what string, cond func() bool) {
+		t.Helper()
+		deadline := time.Now().Add(3 * time.Second)
+		for !cond() {
+			if time.Now().After(deadline) {
+				t.Fatalf("待っても %s にならない（値 %s、状態 %+v）", what, variableValue(t, svc, v.ID), status())
+			}
+			time.Sleep(10 * time.Millisecond)
+		}
+	}
+
+	waitUntil("機器の値を読む", func() bool { return variableValue(t, svc, v.ID) == "321" && status().State == "ok" })
+
+	// 変数を変えると、サーバーのレジスタに書く（2 ワード）
+	must(t, svc.UpdateVariableValue(v.ID, 70000))
+	waitUntil("書く", func() bool {
+		w, _ := svc.ReadWords(modbusTCP, hr, 50, 2)
+		return reflect.DeepEqual(w, []int{1, 70000 - 65536})
+	})
+
+	// 応答しない UnitID にすると、決めた回数で通信エラー。値は残る
+	must(t, svc.SetUnitIDEnabled(modbusTCP, 1, false))
+	waitUntil("通信エラー", func() bool { return status().State == "comm_error" })
+	if variableValue(t, svc, v.ID) != "70000" {
+		t.Fatalf("値が残っていない: %s", variableValue(t, svc, v.ID))
+	}
+	// その間に変えた値は書き込み未反映になり、応答するようになったら書く
+	must(t, svc.UpdateVariableValue(v.ID, 5))
+	waitUntil("書き込み未反映", func() bool { return status().WritePending })
+	must(t, svc.SetUnitIDEnabled(modbusTCP, 1, true))
+	waitUntil("つながったら書く", func() bool {
+		w, _ := svc.ReadWords(modbusTCP, hr, 50, 2)
+		return reflect.DeepEqual(w, []int{0, 5})
+	})
+	waitUntil("状態が戻る", func() bool { st := status(); return st.State == "ok" && !st.WritePending })
 }
 
 // ===== プロジェクトの保存と読み込み =====

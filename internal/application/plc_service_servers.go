@@ -168,34 +168,10 @@ func (s *PLCService) GetProtocolSchema(protocolType string) (*ProtocolSchemaDTO,
 	}
 	variantDTOs := make([]VariantDTO, len(variants))
 	for i, v := range variants {
-		fields := factory.GetConfigFields(v.ID)
-		fieldDTOs := make([]FieldDTO, len(fields))
-		for j, f := range fields {
-			fieldDTOs[j] = FieldDTO{
-				Name:        f.Name,
-				Label:       f.Label,
-				Description: f.Description,
-				Type:        f.Type,
-				Required:    f.Required,
-				Default:     f.Default,
-				Min:         f.Min,
-				Max:         f.Max,
-				Category:    f.Category,
-			}
-			if f.Options != nil {
-				fieldDTOs[j].Options = make([]OptionDTO, len(f.Options))
-				for k, o := range f.Options {
-					fieldDTOs[j].Options[k] = OptionDTO{Value: o.Value, Label: o.Label}
-				}
-			}
-			if f.Condition != nil {
-				fieldDTOs[j].ShowWhen = &ConditionDTO{Field: f.Condition.Field, Value: f.Condition.Value}
-			}
-		}
 		variantDTOs[i] = VariantDTO{
 			ID:          v.ID,
 			DisplayName: v.DisplayName,
-			Fields:      fieldDTOs,
+			Fields:      toFieldDTOs(factory.GetConfigFields(v.ID)),
 		}
 	}
 

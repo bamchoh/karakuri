@@ -12,7 +12,7 @@ const items = [
   {
     id: "server",
     icon: Server,
-    label: "Server",
+    label: "Connections",
   },
   {
     id: "variables",

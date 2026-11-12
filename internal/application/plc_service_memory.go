@@ -2,8 +2,13 @@ package application
 
 // === 汎用メモリ操作API ===
 
-// GetMemoryAreas は利用可能なメモリエリアの一覧を返す
+// GetMemoryAreas は利用可能なメモリエリアの一覧を返す。
+// protocolType が接続先へのマッピングのキー（"client:<ID>"）なら、その接続先のマッピングできるエリアを返す
 func (s *PLCService) GetMemoryAreas(protocolType string) []MemoryAreaDTO {
+	if clientID, ok := clientIDFromMappingKey(protocolType); ok {
+		return s.clients.clientMemoryAreas(clientID)
+	}
+
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -11,22 +16,7 @@ func (s *PLCService) GetMemoryAreas(protocolType string) []MemoryAreaDTO {
 	if err != nil {
 		return nil
 	}
-
-	areas := inst.dataStore.GetAreas()
-	result := make([]MemoryAreaDTO, len(areas))
-	for i, area := range areas {
-		result[i] = MemoryAreaDTO{
-			ID:             area.ID,
-			DisplayName:    area.DisplayName,
-			IsBit:          area.IsBit,
-			Size:           int(area.Size),
-			ReadOnly:       area.ReadOnly,
-			ByteAddressing: area.ByteAddressing,
-			OneOrigin:      area.OneOrigin,
-			ShortName:      area.ShortName,
-		}
-	}
-	return result
+	return toMemoryAreaDTOs(inst.dataStore.GetAreas())
 }
 
 // ReadBits は指定エリアの複数ビット値を読み込む

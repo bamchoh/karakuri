@@ -1105,7 +1105,20 @@ button:disabled {
   background: var(--bg-panel);
   border-radius: 4px;
   border: 1px solid var(--border);
-  height: 60px;
+  /* 文章が折り返しても枠からはみ出さないよう、高さは内容に合わせて伸ばす */
+  min-height: 60px;
+  line-height: 1.6;
+  align-self: flex-start;
+}
+
+.server-instance-empty p {
+  margin: 0;
+}
+
+/* 文中の ⊞ アイコンを文字の高さにそろえる */
+.server-instance-empty svg {
+  vertical-align: -2px;
+  margin: 0 0.15rem;
 }
 
 /* 縦タブレイアウト */
@@ -2037,4 +2050,428 @@ button:disabled {
   color: #ffa500;
   font-size: 0.85em;
   flex-shrink: 0;
+}
+
+/* ----- クライアント画面 ----- */
+.client-add-protocol {
+  font-size: 0.75rem;
+  padding: 2px 4px;
+  background: var(--bg-input);
+  color: var(--text-main);
+  border: 1px solid var(--border);
+  border-radius: 2px;
+}
+
+.client-note {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+
+.client-settings-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  padding: 0.5rem 1rem;
+}
+
+.client-settings-actions .client-note {
+  margin-right: auto;
+}
+
+.client-mode-switch {
+  display: flex;
+  gap: 1.5rem;
+  font-size: 0.875rem;
+}
+
+.client-mode-switch label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  cursor: pointer;
+}
+
+.client-hex {
+  font-family: "Consolas", "Courier New", monospace;
+  font-size: 0.85rem;
+  color: #d4d4d4;
+  word-break: break-all;
+}
+
+.client-hex-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.client-hex-row .client-hex {
+  padding: 0.35rem 0.5rem;
+  background: #020f06;
+  border: 1px solid #1a3d22;
+  border-radius: 2px;
+  min-height: 1.2em;
+  flex: 1;
+  max-width: 400px;
+}
+
+.vscode-setting-control.client-hex-input {
+  max-width: 600px;
+}
+
+.vscode-setting-control.client-hex-input input {
+  font-family: "Consolas", "Courier New", monospace;
+}
+
+.client-build-error,
+.client-result-error {
+  color: #f87171;
+  font-size: 0.85rem;
+}
+
+.client-send-row {
+  display: flex;
+  padding: 0.5rem 1rem 0.75rem;
+}
+
+.client-send-row .btn-primary {
+  display: inline-flex;
+  align-items: center;
+}
+
+.client-log {
+  padding: 0.75rem 1rem;
+  text-align: left;
+}
+
+.client-result {
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 0.6rem 0.75rem;
+  background: var(--bg-elevated);
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.client-result-empty {
+  padding: 0.5rem 0;
+}
+
+.client-result-header {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  font-size: 0.875rem;
+}
+
+.client-result-elapsed {
+  margin-left: auto;
+  color: var(--text-muted);
+  font-size: 0.8rem;
+}
+
+.client-status {
+  font-size: 0.75rem;
+  padding: 1px 6px;
+  border-radius: 3px;
+  white-space: nowrap;
+}
+
+.client-status.client-status-ok {
+  background: rgba(16, 185, 129, 0.15);
+  color: #34d399;
+}
+
+.client-status.client-status-exception {
+  background: rgba(245, 158, 11, 0.15);
+  color: #fbbf24;
+}
+
+.client-status.client-status-timeout,
+.client-status.client-status-error {
+  background: rgba(239, 68, 68, 0.15);
+  color: #f87171;
+}
+
+.client-bytes {
+  border-collapse: collapse;
+  font-size: 0.85rem;
+}
+
+.client-bytes th {
+  text-align: left;
+  font-weight: 500;
+  color: var(--text-muted);
+  padding: 0.15rem 0.75rem 0.15rem 0;
+  white-space: nowrap;
+  vertical-align: top;
+}
+
+.variable-table.client-values {
+  max-width: 400px;
+}
+
+.variable-table.client-values th {
+  width: 140px;
+  white-space: nowrap;
+}
+
+.variable-table.client-values th,
+.variable-table.client-values td {
+  padding: 0.25rem 0.75rem;
+}
+
+.client-history-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin: 1rem 0 0.5rem;
+  font-size: 0.875rem;
+}
+
+.client-history-header .btn-small {
+  display: inline-flex;
+  align-items: center;
+}
+
+.client-history-scroll {
+  max-height: 320px;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+}
+
+.variable-table.client-history th {
+  position: sticky;
+  top: 0;
+}
+
+.variable-table.client-history td {
+  padding: 0.35rem 0.75rem;
+  vertical-align: top;
+}
+
+.variable-table.client-history tbody tr {
+  cursor: pointer;
+}
+
+.variable-table tbody tr.client-history-selected,
+.variable-table tbody tr.client-history-selected:hover {
+  background: rgba(34, 197, 94, 0.12);
+}
+
+.variable-table.client-history td.client-history-time,
+.variable-table.client-history td.client-history-elapsed {
+  white-space: nowrap;
+  color: var(--text-muted);
+}
+
+.client-history-request {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+/* ----- クライアント画面: ポーリング ----- */
+.sub-tab-nav.client-sub-tabs {
+  margin: 0.75rem 1rem 0.25rem;
+}
+
+.client-polling-badge {
+  font-size: 0.7rem;
+  padding: 0 4px;
+  border-radius: 3px;
+  background: rgba(16, 185, 129, 0.15);
+  color: #34d399;
+  white-space: nowrap;
+}
+
+.vscode-setting-item.client-polling-controls {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.client-polling-controls .btn-primary,
+.client-polling-controls .btn-danger,
+.client-send-row .btn-secondary {
+  display: inline-flex;
+  align-items: center;
+}
+
+.client-polling-interval {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.875rem;
+}
+
+.client-polling-interval input {
+  width: 100px;
+  padding: 0.4rem 0.5rem;
+  border: 1px solid #1a3d22;
+  background: #071510;
+  color: #eaeaea;
+  border-radius: 2px;
+  font-size: 0.875rem;
+}
+
+.client-polling-overrun {
+  color: #fbbf24;
+  font-size: 0.8rem;
+}
+
+.client-polling-empty {
+  padding: 0.75rem 1rem;
+  text-align: left;
+}
+
+.client-poll-items {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  padding: 0.75rem 1rem;
+  text-align: left;
+}
+
+.client-poll-item {
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 0.6rem 0.75rem;
+  background: var(--bg-elevated);
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.client-poll-item .client-result-header {
+  flex-wrap: wrap;
+}
+
+.client-poll-counts {
+  color: var(--text-muted);
+  font-size: 0.8rem;
+}
+
+.client-poll-format {
+  font-size: 0.75rem;
+  padding: 2px 4px;
+  background: var(--bg-input);
+  color: var(--text-main);
+  border: 1px solid var(--border);
+  border-radius: 2px;
+}
+
+.client-status.client-status-skipped,
+.client-status.client-status-none {
+  background: rgba(139, 148, 158, 0.15);
+  color: var(--text-muted);
+}
+
+.client-poll-values {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 2px 1rem;
+  font-size: 0.85rem;
+}
+
+/* 読めなかったとき: 最後に読めた値を薄く出す */
+.client-poll-values.stale {
+  opacity: 0.45;
+}
+
+.client-poll-value {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.5rem;
+  border-bottom: 1px solid #1a3d22;
+  padding: 1px 0;
+}
+
+.client-poll-value-label {
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.client-poll-value-text {
+  font-family: "Consolas", "Courier New", monospace;
+}
+
+/* ----- 変数と接続先の同期の状態 ----- */
+.device-status-badge {
+  margin-left: 0.5rem;
+  font-size: 0.7rem;
+  padding: 0 4px;
+  border-radius: 3px;
+  white-space: nowrap;
+  cursor: help;
+}
+
+.device-status-badge.device-status-error {
+  background: rgba(239, 68, 68, 0.15);
+  color: #f87171;
+}
+
+.device-status-badge.device-status-pending {
+  background: rgba(245, 158, 11, 0.15);
+  color: #fbbf24;
+}
+
+.vscode-setting-item.client-mapping-summary {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.client-mapping-counts {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.875rem;
+}
+
+.client-polling-interval input[aria-label="通信エラーにするまでの失敗回数"] {
+  width: 60px;
+}
+
+/* ----- 通信画面: サーバーとクライアントの一覧 ----- */
+.server-panel-header.client-group-header {
+  margin-top: 1.25rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--border);
+}
+
+.server-list-empty {
+  padding: 0.4rem 0.5rem;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  text-align: left;
+}
+
+/* 接続先の設定の欄を開閉する見出し */
+.vscode-setting-category.client-settings-toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  width: 100%;
+  border: none;
+  border-bottom: 1px solid #1a3d22;
+  border-radius: 0;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.vscode-setting-category.client-settings-toggle:hover {
+  background: rgba(34, 197, 94, 0.05);
+}
+
+.client-settings-summary {
+  margin-left: 0.75rem;
+  font-size: 0.8rem;
+  font-weight: 400;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
