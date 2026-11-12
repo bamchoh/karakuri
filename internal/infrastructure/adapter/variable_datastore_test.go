@@ -486,3 +486,104 @@ func TestVariableBackedDataStore_ImplementsDataStore(t *testing.T) {
 		t.Error("VariableBackedDataStore should implement protocol.DataStore")
 	}
 }
+
+// =====================================================================
+// 同期の確実さ
+// =====================================================================
+
+// 1 回の書き込みが複数の変数にまたがっても、すべての変数が、書き込みが戻った時点で更新されている。
+// （以前は反映を別のゴルーチンに回し、処理中は他の反映を捨てていたため、一部の変数が更新されないことがあった）
+func TestVariableBackedDataStore_WriteWords_UpdatesEveryVariableImmediately(t *testing.T) {
+	adapter, _, varStore := setupAdapter("test")
+
+	const n = 50
+	ids := make([]string, n)
+	for i := 0; i < n; i++ {
+		v, err := varStore.CreateVariable("v"+string(rune('A'+i/26))+string(rune('a'+i%26)), variable.TypeINT, float64(0))
+		if err != nil {
+			t.Fatal(err)
+		}
+		ids[i] = v.ID
+		_ = varStore.SetMappings(v.ID, []variable.ProtocolMapping{
+			{ProtocolType: "test", MemoryArea: "holding", Address: uint32(100 + i), Endianness: "big"},
+		})
+	}
+
+	for round := 1; round <= 20; round++ {
+		values := make([]uint16, n)
+		for i := range values {
+			values[i] = uint16(round*100 + i)
+		}
+		if err := adapter.WriteWords("holding", 100, values); err != nil {
+			t.Fatalf("WriteWords: %v", err)
+		}
+		// 待たずに確認する
+		for i, id := range ids {
+			got, _ := varStore.GetVariable(id)
+			if got.Value != int16(round*100+i) {
+				t.Fatalf("round %d: 変数 %d = %v, want %d", round, i, got.Value, round*100+i)
+			}
+		}
+	}
+}
+
+// レジスタへの書き込みと変数の変更が同時に起きても、どちらの反映も捨てない
+func TestVariableBackedDataStore_ConcurrentWritesAreNotDropped(t *testing.T) {
+	adapter, inner, varStore := setupAdapter("test")
+	a, _ := varStore.CreateVariable("a", variable.TypeINT, float64(0))
+	b, _ := varStore.CreateVariable("b", variable.TypeINT, float64(0))
+	_ = varStore.SetMappings(a.ID, []variable.ProtocolMapping{{ProtocolType: "test", MemoryArea: "holding", Address: 10, Endianness: "big"}})
+	_ = varStore.SetMappings(b.ID, []variable.ProtocolMapping{{ProtocolType: "test", MemoryArea: "holding", Address: 20, Endianness: "big"}})
+
+	// a はレジスタ側から、b は変数側から、同時に書き続ける
+	const rounds = 500
+	var wg sync.WaitGroup
+	wg.Add(2)
+	go func() {
+		defer wg.Done()
+		for i := 1; i <= rounds; i++ {
+			_ = adapter.WriteWord("holding", 10, uint16(i))
+		}
+	}()
+	go func() {
+		defer wg.Done()
+		for i := 1; i <= rounds; i++ {
+			_ = varStore.UpdateValue(b.ID, float64(i))
+		}
+	}()
+	wg.Wait()
+
+	// どちらも最後の値が、変数とレジスタの両方に入っている
+	gotA, _ := varStore.GetVariable(a.ID)
+	if gotA.Value != int16(rounds) {
+		t.Errorf("レジスタから書いた変数 a = %v, want %d", gotA.Value, rounds)
+	}
+	if w, _ := inner.ReadWord("holding", 20); w != rounds {
+		t.Errorf("変数 b のレジスタ = %d, want %d", w, rounds)
+	}
+}
+
+// 変数を変えたとき、レジスタに書くのは 1 回だけ（レジスタ → 変数 → レジスタと行き来しない）
+func TestVariableBackedDataStore_NoEcho(t *testing.T) {
+	adapter, _, varStore := setupAdapter("test")
+	v, _ := varStore.CreateVariable("v", variable.TypeINT, float64(0))
+	_ = varStore.SetMappings(v.ID, []variable.ProtocolMapping{{ProtocolType: "test", MemoryArea: "holding", Address: 10, Endianness: "big"}})
+
+	counter := &countingListener{}
+	varStore.AddListener(counter)
+	defer varStore.RemoveListener(counter)
+
+	// レジスタへの書き込み 1 回につき、変数の変更の通知は 1 回
+	if err := adapter.WriteWord("holding", 10, 5); err != nil {
+		t.Fatal(err)
+	}
+	if counter.count != 1 {
+		t.Errorf("レジスタへの書き込み 1 回で、変数の変更が %d 回通知された", counter.count)
+	}
+}
+
+type countingListener struct{ count int }
+
+func (l *countingListener) OnVariableChanged(*variable.Variable, []variable.ProtocolMapping, string, interface{}) {
+	l.count++
+}

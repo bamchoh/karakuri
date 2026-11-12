@@ -10,7 +10,7 @@ import (
 
 const VERSION = "1.0.0"
 
-// ProtocolOPCUA は OPC UA プラグインのプロトコルタイプ
+// ProtocolOPCUA は OPC UA のプロトコルタイプ
 const ProtocolOPCUA protocol.ProtocolType = "opcua"
 
 var _ protocol.ServerFactory = (*Factory)(nil)

@@ -1,6 +1,8 @@
 package adapter
 
 import (
+	"context"
+
 	"karakuri/internal/domain/protocol"
 	"karakuri/internal/domain/variable"
 )
@@ -64,4 +66,24 @@ func (a *variableStoreAccessorImpl) GetStructFields(typeName string) []protocol.
 		}
 	}
 	return result
+}
+
+// SubscribeVariableChanges は、変数が変わるたびに onChange（変わった変数の ID）を呼ぶ。
+// ctx が終わるまで戻らない。ノード公開型のプロトコルが、値の変化をすぐ反映するために使う。
+// onChange は変数を変更した側のゴルーチンで呼ばれるので、すぐに戻ること。
+func (a *variableStoreAccessorImpl) SubscribeVariableChanges(ctx context.Context, onChange func(variableID string)) error {
+	l := &changeNotifier{onChange: onChange}
+	a.vs.AddListener(l)
+	defer a.vs.RemoveListener(l)
+	<-ctx.Done()
+	return nil
+}
+
+// changeNotifier は変数の変更を、変数 ID だけの通知に変える
+type changeNotifier struct {
+	onChange func(variableID string)
+}
+
+func (n *changeNotifier) OnVariableChanged(v *variable.Variable, _ []variable.ProtocolMapping, _ string, _ interface{}) {
+	n.onChange(v.ID)
 }

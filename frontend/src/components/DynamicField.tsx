@@ -1,6 +1,6 @@
 import { application } from "../../wailsjs/go/models";
 
-// サーバー設定の 1 項目。プラグインが返す項目の定義（種類・選択肢・範囲）に合わせて入力欄を出す
+// サーバー設定の 1 項目。プロトコルの実装が返す項目の定義（種類・選択肢・範囲）に合わせて入力欄を出す
 interface DynamicFieldProps {
   field: application.FieldDTO;
   value: any;

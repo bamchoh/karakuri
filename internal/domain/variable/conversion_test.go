@@ -631,7 +631,7 @@ func TestWordsToValue_UnsupportedType(t *testing.T) {
 	}
 }
 
-// MessagePack から読んだ符号なし整数は uint64 で届く（プラグインからの書き込み）
+// uint64 の値も、各数値型に変換できる
 func TestConvertValue_FromUint64(t *testing.T) {
 	cases := []struct {
 		dataType DataType

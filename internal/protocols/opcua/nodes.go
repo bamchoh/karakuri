@@ -23,7 +23,7 @@ const (
 	resyncInterval = time.Second
 )
 
-// changeSubscriber はホストの変数変更ストリームを購読できる accessor（pluginruntime の実装が満たす）
+// changeSubscriber は変数の変更の通知を受けられる accessor（アプリの accessor が満たす。テストのフェイクは持たなくてよい）
 type changeSubscriber interface {
 	SubscribeVariableChanges(ctx context.Context, onChange func(variableID string)) error
 }
