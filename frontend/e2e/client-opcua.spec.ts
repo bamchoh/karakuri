@@ -323,3 +323,156 @@ test("ポーリングで値を追う（表示形式の選択は出さない）",
   await shot(page, "client-opcua-polling");
   await view.getByRole("button", { name: "停止" }).click();
 });
+
+test("サブスクリプションで値の変化が届く（配列・多次元配列は要素ごとに出る）", async ({
+  page,
+}) => {
+  // 配列と多次元配列の変数も公開する
+  const extra: Record<string, { id: string }> = {};
+  const arrays: [string, string, unknown][] = [
+    ["Values", "ARRAY[0..2] OF INT", [0, 0, 0]],
+    [
+      "Grid",
+      "ARRAY[0..1, 0..1] OF INT",
+      [
+        [0, 0],
+        [0, 0],
+      ],
+    ],
+  ];
+  for (const [name, type, initial] of arrays) {
+    extra[name] = await api<{ id: string }>(
+      page,
+      "CreateVariable",
+      name,
+      type,
+      initial,
+    );
+    await api(page, "UpdateVariableNodePublishing", extra[name].id, "opcua", {
+      protocolType: "opcua",
+      enabled: true,
+      accessMode: "readwrite",
+    });
+  }
+  const valuesNode = nodeId.replace(";s=Counter", ";s=Values");
+  const gridNode = nodeId.replace(";s=Counter", ";s=Grid");
+
+  const c = await addClient(page);
+  await api(page, "SetClientSubscriptionInterval", c.id, 100);
+  await page
+    .locator(".sub-tab-button", { hasText: "サブスクリプション" })
+    .click();
+  const view = page.locator(".client-subscription");
+  await expect(view).toBeVisible();
+  await expect(view.getByLabel("通知の間隔（ms）")).toHaveValue("100");
+  // 監視項目がなければ始められない
+  await expect(view.getByRole("button", { name: "開始" })).toBeDisabled();
+
+  // NodeId を 1 行に 1 つ入れると、行の数だけ監視項目ができる
+  await setting(view, "NodeId").fill(
+    `${nodeId}\n${valuesNode}\n${gridNode}\n${nodeId.replace(";s=Counter", ";s=NoSuchNode")}`,
+  );
+  await view.getByRole("button", { name: "項目を追加" }).click();
+  const items = page.getByTestId("client-subscription-item");
+  await expect(items).toHaveCount(4);
+  await expect(setting(view, "NodeId")).toHaveValue("");
+  await expect(items.nth(0)).toContainText("停止中");
+
+  // 読めない NodeId は追加できない
+  await setting(view, "NodeId").fill("Motor1");
+  await view.getByRole("button", { name: "項目を追加" }).click();
+  await expect(view.locator(".config-error")).toContainText("NodeId");
+  await expect(items).toHaveCount(4);
+
+  // 始めると、いまの値が届く
+  await view.getByRole("button", { name: "開始" }).click();
+  await expect(page.getByTestId("client-subscription-state")).toHaveText(
+    "監視中",
+  );
+  const value = (i: number, label: string) =>
+    items
+      .nth(i)
+      .locator(".client-poll-value", {
+        has: page.locator(".client-poll-value-label", {
+          hasText: new RegExp("^" + escapeRegExp(label) + "$"),
+        }),
+      })
+      .locator(".client-poll-value-text");
+  await expect(value(0, "Value（Int16）")).toHaveText("5");
+  await expect(value(1, "Value")).toHaveText("Int16 の配列（3 個）");
+  await expect(value(1, "[2]")).toHaveText("0");
+  await expect(value(2, "Value")).toHaveText("Int16 の配列（2 × 2）");
+  await expect(value(2, "[1][0]")).toHaveText("0");
+  // サーバーにないノードは、その項目だけ理由を出す
+  await expect(items.nth(3).locator(".client-status")).toHaveText("例外応答");
+  await expect(items.nth(3)).toContainText("BadNodeIdUnknown");
+  await expect(
+    page.locator(".client-tab-item .client-polling-badge"),
+  ).toHaveText("監視中");
+  await expect(
+    page.locator(".sub-tab-button", { hasText: "サブスクリプション" }),
+  ).toContainText("（監視中）");
+
+  // 変数を変えると、変わった値が届く
+  await api(page, "UpdateVariableValue", counterId, 77);
+  await api(page, "UpdateVariableFieldValue", extra.Values.id, "[2]", 30);
+  await api(page, "UpdateVariableFieldValue", extra.Grid.id, "[1][0]", 40);
+  await expect(value(0, "Value（Int16）")).toHaveText("77");
+  await expect(value(1, "[2]")).toHaveText("30");
+  await expect(value(2, "[1][0]")).toHaveText("40");
+  await shot(page, "client-opcua-subscription");
+
+  // サーバーを止めると「つながっていません」になり、届いていた値は薄く残る。起動し直すと戻る
+  await api(page, "StopServer", "opcua");
+  await expect(page.getByTestId("client-subscription-state")).toHaveText(
+    "つながっていません",
+  );
+  await expect(items.nth(0).locator(".client-poll-values")).toHaveClass(
+    /stale/,
+  );
+  await expect(value(0, "Value（Int16）")).toHaveText("77");
+  await api(page, "UpdateVariableValue", counterId, 88);
+  await api(page, "StartServer", "opcua");
+  await expect(page.getByTestId("client-subscription-state")).toHaveText(
+    "監視中",
+    { timeout: 20000 },
+  );
+  await expect(value(0, "Value（Int16）")).toHaveText("88");
+
+  // 項目を消しても、残りの項目の監視は続く
+  await items.nth(3).getByLabel("監視項目を削除").click();
+  await expect(items).toHaveCount(3);
+  await api(page, "UpdateVariableValue", counterId, 99);
+  await expect(value(0, "Value（Int16）")).toHaveText("99");
+
+  await view.getByRole("button", { name: "停止" }).click();
+  await expect(page.getByTestId("client-subscription-state")).toHaveCount(0);
+  await expect(
+    page.locator(".client-tab-item .client-polling-badge"),
+  ).toHaveCount(0);
+});
+
+test("サブスクリプションのタブは、対応するプロトコルの接続先だけに出る", async ({
+  page,
+}) => {
+  await addClient(page);
+  await api(page, "AddClient", "modbus-tcp", "MB");
+  await page
+    .locator(".sub-tab-button", { hasText: "サブスクリプション" })
+    .click();
+  await expect(page.locator(".client-subscription")).toBeVisible();
+
+  // Modbus の接続先に切り替えると、タブがなく、コマンドのタブを出す
+  await page.locator(".client-tab-item", { hasText: "MB" }).click();
+  await expect(page.locator(".server-config-pane-name")).toHaveText("MB");
+  await expect(
+    page.locator(".sub-tab-button", { hasText: "サブスクリプション" }),
+  ).toHaveCount(0);
+  await expect(
+    page.locator(".sub-tab-button.active", { hasText: "コマンド" }),
+  ).toBeVisible();
+
+  // OPC UA の接続先に戻ると、選んでいたタブに戻る
+  await page.locator(".client-tab-item", { hasText: "UA" }).click();
+  await expect(page.locator(".client-subscription")).toBeVisible();
+});

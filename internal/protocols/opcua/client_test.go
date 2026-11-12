@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -498,5 +499,201 @@ func TestClient_SecurityAndUserName(t *testing.T) {
 		if res := c.Send(context.Background(), req); res.Status != protocol.CommandError || c.Connected() {
 			t.Errorf("%s: %+v", name, res)
 		}
+	}
+}
+
+// subscriptionRecorder は、RunSubscription からの知らせをためる
+type subscriptionRecorder struct {
+	mu     sync.Mutex
+	state  protocol.CommandStatus // 監視全体の最後の状態
+	stateN int                    // 「監視中」になった回数
+	err    string
+	items  map[string]protocol.SubscriptionEvent // 項目ごとの最後の知らせ
+	counts map[string]int
+}
+
+func newSubscriptionRecorder() *subscriptionRecorder {
+	return &subscriptionRecorder{items: map[string]protocol.SubscriptionEvent{}, counts: map[string]int{}}
+}
+
+func (r *subscriptionRecorder) onEvent(ev protocol.SubscriptionEvent) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if ev.ItemID == "" {
+		r.state, r.err = ev.Status, ev.Error
+		if ev.Status == protocol.CommandOK {
+			r.stateN++
+		}
+		return
+	}
+	r.items[ev.ItemID] = ev
+	r.counts[ev.ItemID]++
+}
+
+func (r *subscriptionRecorder) item(id string) protocol.SubscriptionEvent {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.items[id]
+}
+
+func (r *subscriptionRecorder) overall() (protocol.CommandStatus, int) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.state, r.stateN
+}
+
+func TestClientFactory_ExpandMonitoredItems(t *testing.T) {
+	f := &ClientFactory{}
+	specs, err := f.ExpandMonitoredItems(map[string]interface{}{"nodeId": " ns=2;s=A \n\ni=2258\n"})
+	if err != nil || len(specs) != 2 || specs[0].Summary != "ns=2;s=A" || specs[0].Params["nodeId"] != "ns=2;s=A" || specs[1].Params["nodeId"] != "i=2258" {
+		t.Fatalf("specs = %+v, %v", specs, err)
+	}
+	// できた項目の入力を、もう一度入れても同じ項目になる（プロジェクトの読み込み）
+	again, err := f.ExpandMonitoredItems(specs[1].Params)
+	if err != nil || len(again) != 1 || again[0].Summary != "i=2258" {
+		t.Fatalf("again = %+v, %v", again, err)
+	}
+	for _, in := range []string{"", "ns=2;s=A\nMotor1"} {
+		if _, err := f.ExpandMonitoredItems(map[string]interface{}{"nodeId": in}); err == nil {
+			t.Errorf("%q: エラーにならない", in)
+		}
+	}
+}
+
+// サブスクリプションで、スカラー・配列・多次元配列の値の変化が届く。切れたら、つなぎ直して続ける
+func TestClient_Subscription(t *testing.T) {
+	acc := newFakeAccessor()
+	acc.publish("v-int", "Counter", "INT", "readwrite", int64(42))
+	acc.publish("v-arr", "Values", "ARRAY[0..2] OF DINT", "readwrite", []interface{}{int64(1), int64(2), int64(3)})
+	acc.publish("v-mat", "Grid", "ARRAY[0..1, 0..1] OF INT", "readwrite", []interface{}{
+		[]interface{}{int64(1), int64(2)}, []interface{}{int64(3), int64(4)},
+	})
+	srv, _, ns := startTestServer(t, acc)
+	url := fmt.Sprintf("opc.tcp://127.0.0.1:%d", srv.config.Port)
+	c := newTestClient(t, map[string]interface{}{"endpointUrl": url, "timeoutMs": 3000})
+	node := func(name string) map[string]interface{} {
+		return map[string]interface{}{"nodeId": fmt.Sprintf("ns=%d;s=%s", ns, name)}
+	}
+
+	rec := newSubscriptionRecorder()
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		c.(protocol.SubscribingClient).RunSubscription(ctx, protocol.SubscriptionRequest{
+			Interval: 50 * time.Millisecond,
+			Items: []protocol.MonitoredItemRequest{
+				{ID: "counter", Params: node("Counter")},
+				{ID: "values", Params: node("Values")},
+				{ID: "grid", Params: node("Grid")},
+				{ID: "missing", Params: node("NoSuchNode")},
+				{ID: "broken", Params: map[string]interface{}{"nodeId": "???"}},
+			},
+		}, rec.onEvent)
+	}()
+	stopped := false
+	stop := func() {
+		if !stopped {
+			stopped = true
+			cancel()
+			<-done
+		}
+	}
+	defer stop()
+
+	// 始めると、いまの値が届く
+	waitFor(t, func() bool {
+		st, _ := rec.overall()
+		return st == protocol.CommandOK && valueOf(rec.item("counter").Values, "Value（Int16）") == "42" &&
+			len(rec.item("values").Values) == 4 && len(rec.item("grid").Values) == 5
+	})
+	if !c.Connected() {
+		t.Error("監視中は接続中")
+	}
+	if ev := rec.item("values"); valueOf(ev.Values, "Value") != "Int32 の配列（3 個）" || valueOf(ev.Values, "[2]") != "3" {
+		t.Errorf("配列: %+v", ev)
+	}
+	if ev := rec.item("grid"); valueOf(ev.Values, "Value") != "Int16 の配列（2 × 2）" || valueOf(ev.Values, "[1][0]") != "3" {
+		t.Errorf("多次元配列: %+v", ev)
+	}
+	// サーバーにないノード・読めない NodeId は、その項目だけ断られる（ほかの項目は監視できる）
+	if ev := rec.item("missing"); ev.Status != protocol.CommandException || !strings.Contains(ev.Error, "BadNodeIdUnknown") {
+		t.Errorf("ないノード: %+v", ev)
+	}
+	if ev := rec.item("broken"); ev.Status != protocol.CommandError || ev.Error == "" {
+		t.Errorf("読めない NodeId: %+v", ev)
+	}
+
+	// 値が変わると届く
+	must := func(err error) {
+		t.Helper()
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	must(acc.WriteVariableValue("v-int", int64(43)))
+	must(acc.WriteVariableValue("v-arr", []interface{}{int64(1), int64(20), int64(3)}))
+	must(acc.WriteVariableValue("v-mat", []interface{}{[]interface{}{int64(1), int64(2)}, []interface{}{int64(30), int64(4)}}))
+	waitFor(t, func() bool {
+		return valueOf(rec.item("counter").Values, "Value（Int16）") == "43" &&
+			valueOf(rec.item("values").Values, "[1]") == "20" && valueOf(rec.item("grid").Values, "[1][0]") == "30"
+	})
+
+	// コマンドがタイムアウト・失敗して接続を閉じても、監視は続く（別のセッションで動く）
+	_ = c.Close()
+	must(acc.WriteVariableValue("v-int", int64(44)))
+	waitFor(t, func() bool { return valueOf(rec.item("counter").Values, "Value（Int16）") == "44" })
+
+	// サーバーを止めると「つながっていない」になり、起動し直すと、つなぎ直して値が届く
+	_, okCount := rec.overall()
+	must(srv.Stop())
+	waitFor(t, func() bool { st, _ := rec.overall(); return st == protocol.CommandError })
+	must(acc.WriteVariableValue("v-int", int64(45)))
+	must(srv.Start(context.Background()))
+	if srv.nodes.ns != ns {
+		t.Fatalf("名前空間の番号が変わった: %d → %d", ns, srv.nodes.ns)
+	}
+	deadline := time.Now().Add(20 * time.Second)
+	for {
+		st, n := rec.overall()
+		if st == protocol.CommandOK && n > okCount && valueOf(rec.item("counter").Values, "Value（Int16）") == "45" {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("起動し直しても戻らない: state=%s counter=%+v", st, rec.item("counter"))
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+
+	// 止めると、接続を閉じて戻る
+	stop()
+	if c.Connected() {
+		t.Error("止めたら未接続")
+	}
+}
+
+// つながらない相手でも、取り消せばすぐに戻る。つながらない間は、理由を知らせる
+func TestClient_Subscription_Unreachable(t *testing.T) {
+	c := newTestClient(t, map[string]interface{}{"endpointUrl": fmt.Sprintf("opc.tcp://127.0.0.1:%d", freePort(t)), "timeoutMs": 500})
+	rec := newSubscriptionRecorder()
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		c.(protocol.SubscribingClient).RunSubscription(ctx, protocol.SubscriptionRequest{
+			Interval: 100 * time.Millisecond,
+			Items:    []protocol.MonitoredItemRequest{{ID: "a", Params: map[string]interface{}{"nodeId": "i=2258"}}},
+		}, rec.onEvent)
+	}()
+	waitFor(t, func() bool {
+		rec.mu.Lock()
+		defer rec.mu.Unlock()
+		return rec.state == protocol.CommandError && strings.Contains(rec.err, "接続できませんでした")
+	})
+	cancel()
+	select {
+	case <-done:
+	case <-time.After(3 * time.Second):
+		t.Fatal("取り消しても戻らない")
 	}
 }

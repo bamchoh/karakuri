@@ -37,17 +37,25 @@ type Client struct {
 
 	mu   sync.Mutex                      // Send と Close を 1 つずつにする
 	conn atomic.Pointer[uaclient.Client] // 書くのは mu の中だけ。Connected はロックなしで読む
+
+	// サブスクリプション用の接続（client_subscription.go）。監視中だけ入っている
+	subConn atomic.Pointer[uaclient.Client]
 }
 
 var _ protocol.Client = (*Client)(nil)
 
-// Connected は接続中かどうかを返す
+// Connected は接続中かどうかを返す（コマンド用の接続か、サブスクリプション用の接続がつながっていれば true）
 func (c *Client) Connected() bool {
-	conn := c.conn.Load()
-	return conn != nil && conn.State() == uaclient.StateConnected
+	for _, conn := range []*uaclient.Client{c.conn.Load(), c.subConn.Load()} {
+		if conn != nil && conn.State() == uaclient.StateConnected {
+			return true
+		}
+	}
+	return false
 }
 
-// Close は接続を閉じる（送信中なら、終わるまで待つ）
+// Close はコマンド用の接続を閉じる（送信中なら、終わるまで待つ）。
+// サブスクリプション用の接続は、RunSubscription の ctx を取り消すと閉じる
 func (c *Client) Close() error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -66,26 +74,7 @@ func (c *Client) closeLocked(wait time.Duration) {
 }
 
 func (c *Client) dial(ctx context.Context) (*uaclient.Client, error) {
-	host, _ := os.Hostname()
-	if host == "" {
-		host = "localhost"
-	}
-	cfg := uaclient.Config{
-		ApplicationName: "Karakuri",
-		ApplicationURI:  "urn:" + host + ":karakuri:client",
-		ProductURI:      "urn:karakuri",
-		SecurityPolicy:  c.settings.policyURI(),
-		SecurityMode:    c.settings.messageSecurityMode(),
-		RequestTimeout:  c.timeout,
-	}
-	if c.settings.SecurityPolicy != policyNone {
-		cfg.PKIDir = clientPKIDir()
-		cfg.AutoAcceptUntrustedCertificates = true
-	}
-	if c.settings.UserName != "" {
-		cfg.Identity = uaclient.UserName(c.settings.UserName, c.settings.Password)
-	}
-	return uaclient.Dial(ctx, c.settings.EndpointURL, cfg)
+	return uaclient.Dial(ctx, c.settings.EndpointURL, c.dialConfig())
 }
 
 func isTimeout(err error) bool {

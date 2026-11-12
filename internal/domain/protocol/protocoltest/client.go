@@ -3,6 +3,7 @@ package protocoltest
 import (
 	"context"
 	"fmt"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -115,8 +116,9 @@ type Client struct {
 	factory   *ClientFactory
 	Settings  map[string]interface{}
 	connected atomic.Bool
-	closed    atomic.Int32 // Close を呼ばれた回数
-	sent      atomic.Int32 // Send を呼ばれた回数
+	closed    atomic.Int32    // Close を呼ばれた回数
+	sent      atomic.Int32    // Send を呼ばれた回数
+	subs      []*Subscription // factory.mu で守る
 }
 
 func (c *Client) Send(_ context.Context, request []byte) protocol.CommandResult {
@@ -150,3 +152,83 @@ func (c *Client) CloseCount() int { return int(c.closed.Load()) }
 
 // SendCount は Send を呼ばれた回数を返す
 func (c *Client) SendCount() int { return int(c.sent.Load()) }
+
+// ===== サブスクリプション =====
+
+// MonitoredItemFields は監視項目の入力項目を返す（protocol.SubscriptionClientFactory）
+func (f *ClientFactory) MonitoredItemFields() []protocol.ConfigField {
+	return []protocol.ConfigField{{Name: "keys", Label: "キー", Type: "text", Required: true}}
+}
+
+// ExpandMonitoredItems は "a,b" を、キーごとの監視項目にする
+func (f *ClientFactory) ExpandMonitoredItems(params map[string]interface{}) ([]protocol.MonitoredItemSpec, error) {
+	s, _ := params["keys"].(string)
+	var specs []protocol.MonitoredItemSpec
+	for _, key := range strings.Split(s, ",") {
+		if key = strings.TrimSpace(key); key != "" {
+			specs = append(specs, protocol.MonitoredItemSpec{Params: map[string]interface{}{"keys": key}, Summary: "watch " + key})
+		}
+	}
+	if len(specs) == 0 {
+		return nil, fmt.Errorf("キーを入力してください")
+	}
+	return specs, nil
+}
+
+// Subscription は、フェイクのクライアントで動いている監視 1 つ
+type Subscription struct {
+	Request protocol.SubscriptionRequest
+	events  chan protocol.SubscriptionEvent
+	done    chan struct{}
+}
+
+// Emit は監視からの知らせを 1 つ送る（監視が終わっていたら false）
+func (s *Subscription) Emit(ev protocol.SubscriptionEvent) bool {
+	select {
+	case s.events <- ev:
+		return true
+	case <-s.done:
+		return false
+	}
+}
+
+// EmitValue は、キー key の項目に値を届ける
+func (s *Subscription) EmitValue(key, value string) bool {
+	for _, it := range s.Request.Items {
+		if it.Params["keys"] == key {
+			return s.Emit(protocol.SubscriptionEvent{
+				ItemID: it.ID, Status: protocol.CommandOK,
+				Values: []protocol.ResultValue{{Label: key, Value: value}},
+			})
+		}
+	}
+	return false
+}
+
+// Done は、監視が終わったら閉じる
+func (s *Subscription) Done() <-chan struct{} { return s.done }
+
+// RunSubscription は「監視中」を知らせたあと、Emit で送られた知らせを流す（protocol.SubscribingClient）
+func (c *Client) RunSubscription(ctx context.Context, req protocol.SubscriptionRequest, onEvent func(protocol.SubscriptionEvent)) {
+	sub := &Subscription{Request: req, events: make(chan protocol.SubscriptionEvent), done: make(chan struct{})}
+	defer close(sub.done)
+	c.factory.mu.Lock()
+	c.subs = append(c.subs, sub)
+	c.factory.mu.Unlock()
+	onEvent(protocol.SubscriptionEvent{Status: protocol.CommandOK})
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case ev := <-sub.events:
+			onEvent(ev)
+		}
+	}
+}
+
+// Subscriptions は、このクライアントで始まった監視（始まった順。終わったものも含む）を返す
+func (c *Client) Subscriptions() []*Subscription {
+	c.factory.mu.Lock()
+	defer c.factory.mu.Unlock()
+	return append([]*Subscription(nil), c.subs...)
+}

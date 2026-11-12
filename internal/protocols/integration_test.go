@@ -808,7 +808,45 @@ func TestOPCUAClient_AgainstOwnServer(t *testing.T) {
 	must(t, svc.UpdateVariableValue(counter.ID, 88))
 	waitUntil("88", func() bool { s, v := polled(); return s == "ok" && v == "88" })
 
-	// プロジェクトに保存して読み込んでも、接続先と読み取り項目が残る
+	// サブスクリプションでも、変数の変化が届く（配列は要素ごとに出る）
+	values, err := svc.CreateVariable("Values", "ARRAY[0..2] OF INT", []interface{}{1, 2, 3})
+	must(t, err)
+	must(t, svc.UpdateVariableNodePublishing(values.ID, opcUA, &application.NodePublishingDTO{
+		ProtocolType: opcUA, Enabled: true, AccessMode: "readwrite",
+	}))
+	valuesNode := strings.Replace(nodeID, ";s=Counter", ";s=Values", 1)
+	must(t, svc.SetClientSubscriptionInterval(c.ID, 50))
+	added, err := svc.AddClientSubscriptionItems(c.ID, map[string]interface{}{"nodeId": nodeID + "\n" + valuesNode})
+	must(t, err)
+	if len(added) != 2 || added[1].Summary != valuesNode {
+		t.Fatalf("監視項目: %+v", added)
+	}
+	must(t, svc.StartClientSubscription(c.ID))
+	t.Cleanup(func() { _ = svc.StopClientSubscription(c.ID) })
+	subscribed := func(i int, label string) string {
+		sub, err := svc.GetClientSubscription(c.ID)
+		must(t, err)
+		for _, v := range sub.Items[i].Values {
+			if v.Label == label {
+				return v.Value
+			}
+		}
+		return ""
+	}
+	waitUntil("監視の最初の値", func() bool {
+		return subscribed(0, "Value（Int16）") == "88" && subscribed(1, "[2]") == "3"
+	})
+	must(t, svc.UpdateVariableValue(counter.ID, 99))
+	must(t, svc.UpdateVariableFieldValue(values.ID, "[2]", 30))
+	waitUntil("監視の変化", func() bool {
+		return subscribed(0, "Value（Int16）") == "99" && subscribed(1, "[2]") == "30"
+	})
+	if sub, _ := svc.GetClientSubscription(c.ID); sub.State != "ok" || !svc.GetClients()[0].Subscribing {
+		t.Fatalf("監視の状態: %+v", sub)
+	}
+	must(t, svc.StopClientSubscription(c.ID))
+
+	// プロジェクトに保存して読み込んでも、接続先と読み取り項目・監視項目が残る
 	must(t, svc.StopClientPolling(c.ID))
 	project := svc.ExportProject()
 	must(t, svc.ImportProject(project))
@@ -818,5 +856,8 @@ func TestOPCUAClient_AgainstOwnServer(t *testing.T) {
 	}
 	if p, err := svc.GetClientPolling(clients[0].ID); err != nil || len(p.Items) != 1 || p.Items[0].Summary != "Read "+nodeID+" の Value" {
 		t.Fatalf("読み込んだ読み取り項目: %+v, %v", p, err)
+	}
+	if sub, err := svc.GetClientSubscription(clients[0].ID); err != nil || sub.Running || sub.IntervalMs != 50 || len(sub.Items) != 2 || sub.Items[1].Summary != valuesNode {
+		t.Fatalf("読み込んだ監視項目: %+v, %v", sub, err)
 	}
 }

@@ -106,3 +106,55 @@ type MappableClientFactory interface {
 	// BuildWriteRequest は area の address からワード（ワードのエリア）かビット（ビットのエリア）を書くリクエストを作る
 	BuildWriteRequest(area string, address uint32, words []uint16, bits []bool) ([]byte, error)
 }
+
+// --- サブスクリプション（値の変化の通知） ---
+//
+// ポーリングはホストが周期ごとに読むが、サブスクリプションは機器の側が値の変化を知らせる（OPC UA など）。
+// 対応するプロトコルは、ファクトリーで SubscriptionClientFactory を、クライアントで SubscribingClient を実装する。
+
+// SubscriptionClientFactory は、サブスクリプションに対応するクライアントのファクトリー（任意で実装する）
+type SubscriptionClientFactory interface {
+	// MonitoredItemFields は、監視項目を追加するときの入力項目を返す
+	MonitoredItemFields() []ConfigField
+	// ExpandMonitoredItems は入力を検証し、監視項目にする。1 回の入力から、いくつも作ってよい
+	// （OPC UA は NodeId を 1 行に 1 つ入れると、行の数だけ作る）
+	ExpandMonitoredItems(params map[string]interface{}) ([]MonitoredItemSpec, error)
+}
+
+// MonitoredItemSpec は監視項目 1 つの内容（ExpandMonitoredItems が返す）
+type MonitoredItemSpec struct {
+	Params  map[string]interface{} // この項目だけを表す入力（保存し、SubscriptionRequest で渡す）
+	Summary string                 // 一覧に出す 1 行の要約
+}
+
+// SubscribingClient は、サブスクリプションに対応するクライアント（SubscriptionClientFactory の NewClient が返す Client が実装する）
+type SubscribingClient interface {
+	// RunSubscription は監視を始め、ctx が取り消されるまで戻らない。
+	// 値の通知と状態の変化は onEvent で知らせる（1 つずつ呼ぶ。同時には呼ばない）。
+	// つながらない・切れたときは、状態を知らせてから、自分でつなぎ直す。
+	// Send の接続とは別に動く（コマンドのタイムアウトで監視が切れないようにする）
+	RunSubscription(ctx context.Context, req SubscriptionRequest, onEvent func(SubscriptionEvent))
+}
+
+// SubscriptionRequest は、監視する内容
+type SubscriptionRequest struct {
+	Interval time.Duration // 機器が通知をまとめて送る間隔
+	Items    []MonitoredItemRequest
+}
+
+// MonitoredItemRequest は監視項目 1 つ。ID はホストが付けた ID（SubscriptionEvent.ItemID で返す）
+type MonitoredItemRequest struct {
+	ID     string
+	Params map[string]interface{}
+}
+
+// SubscriptionEvent は、サブスクリプションからの知らせ。
+//
+// ItemID が空なら、監視全体の状態: Status が ok なら監視中、それ以外ならつながっていない（Error に理由。つなぎ直している）。
+// ItemID があれば、その項目の知らせ: ok なら Values が新しい値。exception なら、機器がその項目を断った（Error に理由）
+type SubscriptionEvent struct {
+	ItemID string
+	Status CommandStatus
+	Error  string
+	Values []ResultValue
+}

@@ -20,7 +20,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **モニタリング**: 任意のレジスタをリアルタイム監視・書き込み（ドラッグ&ドロップ並べ替え対応）
 - **プロトコルマッピング**: 変数を複数プロトコルのメモリアドレスにマッピング可能
 - **REST HTTP API**: アプリをネットワーク経由で外部から操作可能（デフォルトポート 8765）。サーバー管理・レジスタ読み書き・変数管理・プロジェクトエクスポート/インポートに対応
-- **クライアント機能**: Karakuri から外部の機器（Modbus TCP サーバー・OPC UA サーバー）につないで、コマンドを送る。コマンド（Modbus はファンクションコード、OPC UA は Read / Write / Browse）を選んで組み立てる方式と、16 進（Modbus は PDU、OPC UA はサービスのリクエスト本体）で直接入れる方式がある。送受信のバイト列・応答の解釈・履歴を表示する。読み取り項目を周期的に読むポーリングもできる。変数を接続先のアドレスにマッピングすると、ポーリング中に変数と同期する（通信エラー・書き込み未反映の状態を表示。Modbus TCP だけ）
+- **クライアント機能**: Karakuri から外部の機器（Modbus TCP サーバー・OPC UA サーバー）につないで、コマンドを送る。コマンド（Modbus はファンクションコード、OPC UA は Read / Write / Browse）を選んで組み立てる方式と、16 進（Modbus は PDU、OPC UA はサービスのリクエスト本体）で直接入れる方式がある。送受信のバイト列・応答の解釈・履歴を表示する。読み取り項目を周期的に読むポーリングもできる。OPC UA は、サブスクリプション（値が変わったときに機器の側から知らせが届く）にも対応する。変数を接続先のアドレスにマッピングすると、ポーリング中に変数と同期する（通信エラー・書き込み未反映の状態を表示。Modbus TCP だけ）
 
 ## Build and Development Commands
 
@@ -169,6 +169,7 @@ internal/
 │       ├── types.go        # PLC 型解析・PLC 値 ↔ ua.Variant 変換
 │       ├── client.go       # ClientFactory（OPC UA クライアント。接続先の設定・コマンドの定義・リクエストの組み立てと要約）
 │       ├── client_conn.go  # Client（セッションの接続・送受信・応答の解釈）
+│       ├── client_subscription.go # サブスクリプション（監視項目の定義・別のセッションでの監視・つなぎ直し）
 │       └── datastore.go    # emptyDataStore（OPC UA はレジスタを持たない）
 └── infrastructure/   # インフラ層（プロトコル固有実装は含まない）
     ├── httpapi/      # REST HTTP APIサーバー実装
@@ -284,6 +285,7 @@ frontend/src/
 │   ├── ClientCommandLog.tsx    # コマンドの結果と履歴
 │   ├── ClientSavedCommands.tsx # 保存したコマンドの一覧（「新しいコマンド」・送信・編集・削除）
 │   ├── ClientPollingView.tsx   # ポーリング（周期・読み取り項目の追加・最後の結果と値）
+│   ├── ClientSubscriptionView.tsx # サブスクリプション（通知の間隔・監視項目の追加・届いた値）。対応するプロトコルの接続先だけ
 │   └── clientFormat.ts         # クライアント（通信画面の右側）で共通の表示の書式（状態の名前・時刻・かかった時間）
 └── App.tsx                 # タブベースのメインUI
 ```
@@ -292,7 +294,7 @@ frontend/src/
 通信画面（サイドバーの「Connections」）。サーバー（Karakuri が待ち受ける側）とクライアント（外部の機器へつなぐ側・マスター）を 1 つの画面で扱う。左に一覧、右に選んだものの設定（サーバーは `ServerConfigPane`、クライアントは `ClientDetailPane`）を並べる。
 - **一覧**: 上に「SERVERS」、下に「CLIENTS」のグループ。それぞれに追加ボタン（「サーバーを追加」「接続先を追加」。クライアントのプロトコルが複数あるので、追加ボタンの左でプロトコルを選ぶ）。クライアントの行は `.server-tab-item.client-tab-item`
 - **選択**: `{ kind: "server" | "client", id }` で持つ。選んでいるものが消えたら、先頭のサーバー、なければ先頭のクライアントを選ぶ
-- **クライアント**: 一覧・プロトコル・履歴は `useClients()` が読み込む（一覧は 1 秒ごとに読み直す）。右側のサブタブ（コマンド / ポーリング）と、接続先の設定の欄を開いているかは `ServerPanel` が持ち、接続先を選び直しても保つ
+- **クライアント**: 一覧・プロトコル・履歴は `useClients()` が読み込む（一覧は 1 秒ごとに読み直す）。右側のサブタブ（コマンド / ポーリング / サブスクリプション）と、接続先の設定の欄を開いているかは `ServerPanel` が持ち、接続先を選び直しても保つ
 - **サーバー一覧**: マウント時に `GetServerInstances()` / `GetAvailableProtocols()` を読み、以後は Wails イベント `plc:server-changed` / `plc:protocols-changed` で更新する
 - **サーバー追加**: `AddServerDialog` で未追加のプロトコルから選択して追加（`AddServer(protocolType, variant)`）。ダイアログは開くたびにマウントし、選択中のプロトコルを自分で持つ
 - **個別操作**: 一覧の再生・停止ボタンで起動と停止、設定の右上のごみ箱で削除（起動中は削除できない）
@@ -448,6 +450,8 @@ JavaScript（goja）でPLC動作を記述。
   - `AddClientPollItem(id, commandID, params, format)`, `UpdateClientPollItem(id, itemID, commandID, params, format)`, `RemoveClientPollItem(id, itemID)`: 読み取り項目（`Pollable` のコマンドだけ。1 つの接続先に 50 個まで）
   - `SetClientPollInterval(id, ms)`（50〜3600000）, `StartClientPolling(id)`, `StopClientPolling(id)`
   - `SetClientFailThreshold(id, n)`（1〜100、既定 3）: 読み取りが続けて何回失敗したら、マッピングした変数を「通信エラー」にするか
+  - `GetClientSubscription(id)`: サブスクリプションの状態（間隔・監視中か・全体の状態・監視項目と最後に届いた値）
+  - `AddClientSubscriptionItems(id, params)`（1 回の入力から、いくつも足されることがある）, `RemoveClientSubscriptionItem(id, itemID)`, `SetClientSubscriptionInterval(id, ms)`, `StartClientSubscription(id)`, `StopClientSubscription(id)`
   - `GetMappingTargets()`: 変数をマッピングできる先（サーバーと、マッピングできる接続先）
   - `GetVariableDeviceStatuses()`: 接続先にマッピングした変数の同期の状態（`state`: `""`（まだ読めていない）/ `ok` / `comm_error` / `invalid` / `stopped`、`writePending`、`error`）
 - **HTTP API 設定**:
@@ -550,6 +554,7 @@ JavaScript（goja）でPLC動作を記述。
    - 読み取りのコマンドには `Pollable: true` を付ける（ポーリングに使える）。読み取った値をビット・ワードで返すなら `ResultValue.Bit` / `Word` にも入れ、コマンドに `WordValues: true` を付ける（画面で 10 進・16 進などの表示形式を選べる。付けなければ `Value` の文字列をそのまま出す）
    - 16 進で直接入れる欄に出す説明と入力例は、`protocol.RequestHelpProvider`（`RequestHelp()`）で返す
    - `ConfigField.Type` に `"password"` を使うと、入力を隠す欄になる（閉じた設定の要約にも出さない）。`"textarea"` は複数行の欄
+   - 値の変化の通知（サブスクリプション）に対応するなら、ファクトリーで `protocol.SubscriptionClientFactory`（監視項目の入力項目・入力から監視項目を作る）、クライアントで `protocol.SubscribingClient`（`RunSubscription()`）を実装する。`RunSubscription()` は ctx が取り消されるまで戻らず、つながらない・切れたときは状態を知らせてから自分でつなぎ直す。`onEvent` は同時に呼ばない
    - 変数をマッピングできるようにするなら `protocol.MappableClientFactory`（エリア・1 回で読み書きできる個数・読み書きのリクエスト）も実装する。機器の側で書けないエリアは `ReadOnly` にする
    - `Send()` は通信の失敗を error ではなく `CommandResult.Status` で返す。タイムアウトしたら接続を閉じる（遅れて届く応答と取り違えないため）。次の `Send()` でつなぎ直す
 
@@ -722,7 +727,20 @@ JavaScript（goja）でPLC動作を記述。
   - 読み取った値は型付きなので `ResultValue.Value` の文字列だけで返す（`Bit` / `Word` は入れない。ポーリングの表示形式の選択は出ない）。スカラーは「Value（Int16）」の 1 行、配列は型の行と要素ごとの行（1000 行まで）
   - 接続先の設定: エンドポイント URL・セキュリティポリシー（None / Basic256Sha256 / Aes128_Sha256_RsaOaep / Aes256_Sha256_RsaPss / ECC_nistP256 / ECC_nistP384）・セキュリティモード・ユーザー名とパスワード（空なら匿名）・タイムアウト。パスワードはプロジェクトにそのまま保存する
   - None 以外のポリシーでは、クライアントの証明書を exe と同じフォルダの `pki-client` に作る（サーバーの `pki` とは分ける）。サーバーの証明書は確かめずに受け入れる（`AutoAcceptUntrustedCertificates`）
+  - **サブスクリプション**（`client_subscription.go`）: 監視項目 1 つが、1 つのノードの Value 属性の MonitoredItem（サンプリング間隔はサブスクリプションの間隔と同じ、キューは 1）。NodeId を 1 行に 1 つ入れると、行の数だけ監視項目ができる
+    - コマンド（`Send`）とは別のセッションで動かす（コマンドのタイムアウトで接続を閉じても、監視が切れないようにするため）。`Connected()` は、どちらかがつながっていれば true
+    - 接続が切れたら uastack がつなぎ直し（`AutoReconnect`）、サブスクリプションと MonitoredItem を作り直す。それでも続けられないとき（サーバーがサブスクリプションを捨てたなど）と、最初からつながらないときは、1〜5 秒おきに接続から作り直す
+    - サーバーにないノードなど、サーバーが断った項目はその項目だけ `exception` にする（ほかの項目は監視できる）
+    - 値の行は Read と同じ（`variantRows()`）。配列は型の行と要素ごとの行（`[2]`）、多次元配列は `[1][0]` の形
   - 変数とのマッピングには対応していない（`MappableClientFactory` はレジスタのエリアとアドレスが前提。ノードへのマッピングは別の仕組みが要る）
+- **サブスクリプション**（`plc_service_client_subscription.go`）: 対応するプロトコル（`protocol.SubscriptionClientFactory`。いまは OPC UA だけ）の接続先だけが使える。接続先ごとに監視項目の一覧（200 個まで）と通知の間隔（50〜3600000 ms、既定 1000）を持ち、監視中は 1 つのゴルーチンが `RunSubscription()` を動かして、知らせ（値・状態）を項目に入れる
+  - ポーリングとの違い: こちらから周期的に読まない。機器の側が値の変化を知らせる。コマンドの履歴にも入れない
+  - 監視全体の状態（`state`）: `connecting`（つなごうとしている）/ `ok`（監視中）/ `error`（つながっていない。プロトコルの実装がつなぎ直している。理由は `error`）。停止中は空
+  - 項目は、最後に届いた値を残す（切れても・止めても残す）。画面は、監視できていない間は値を薄く表示する
+  - 監視中に項目の追加・削除、間隔の変更、接続先の設定の変更をしたら、監視を作り直す（止めて、始め直す。項目の状態は「まだ届いていない」に戻る）。最後の項目を消したら止まる。作り直す前の監視からの知らせは捨てる（`recordSubscriptionEvent()` が、いまの監視かどうかを確かめる）
+  - 止めるときはポーリングと同じ（ロックの中で取り消しだけして、終わりはロックの外で待つ）。接続先の削除・プロジェクトの読み込み・終了でも止める
+  - 監視項目と間隔はプロジェクトに保存する（`ClientSnapshotDTO.Subscription`）。監視中かどうかは保存しない
+  - 画面は、通信画面の右側の 3 つ目のタブ（`ClientSubscriptionView`）。対応していないプロトコルの接続先にはタブを出さない
 - **ポーリング**（`plc_service_client_polling.go`）: 接続先ごとに読み取り項目の一覧と周期を持ち、ポーリング中は 1 つのゴルーチンが周期ごとに項目を上から順に送る
   - 項目は指定どおりに送る（まとめて読まない。存在しないアドレスが 1 つあると、まとめた全体が例外応答になるため）
   - 読めなかった項目は、最後に読めた値を残す（`values` / `valuesAt`）。画面は status が ok 以外なら値を薄く表示する
@@ -732,7 +750,7 @@ JavaScript（goja）でPLC動作を記述。
   - 止めるときは、ロックの中で取り消しだけして、ゴルーチンの終わりはロックの外で待つ（ゴルーチンは結果を入れるときに `clientManager.mu` を取るため）。接続先の削除・プロジェクトの読み込み・終了でも止める
   - 読み取り項目・周期・表示形式（`format`。画面が決める値で、ホストは意味を持たない）はプロジェクトに保存する。ポーリング中かどうかは保存しない（読み込んだら停止中）
   - 値の表示形式を変えられるよう、`ResultValue` は表示用の文字列に加えて元の値（`Bit` / `Word`）を持つ
-- **テスト**: `internal/protocols/modbus/client_test.go`（フェイクの TCP サーバー）・`client_mapping_test.go`、`internal/infrastructure/adapter/device_sync_test.go`（同期の決まり）、`internal/application/plc_service_clients_test.go` / `plc_service_client_polling_test.go`（`protocoltest.ClientFactory`）・`plc_service_client_sync_test.go`（`protocoltest.DeviceClientFactory`: フェイクの機器つき。`Device.Down` でタイムアウトにできる）、`internal/protocols/integration_test.go` の `TestModbusClient_AgainstOwnServer` / `TestModbusClient_Polling` / `TestModbusClient_VariableMapping`（Karakuri 自身の Modbus TCP サーバーにつなぐ）、画面は `client-panel.spec.ts` / `client-polling.spec.ts` / `client-mapping.spec.ts`。OPC UA は `internal/protocols/opcua/client_test.go`（Karakuri の OPC UA サーバー、セキュリティポリシーとユーザー名を使う uastack のサーバー、応答しないサーバー）、`integration_test.go` の `TestOPCUAClient_AgainstOwnServer`、画面は `client-opcua.spec.ts`
+- **テスト**: `internal/protocols/modbus/client_test.go`（フェイクの TCP サーバー）・`client_mapping_test.go`、`internal/infrastructure/adapter/device_sync_test.go`（同期の決まり）、`internal/application/plc_service_clients_test.go` / `plc_service_client_polling_test.go`（`protocoltest.ClientFactory`）・`plc_service_client_sync_test.go`（`protocoltest.DeviceClientFactory`: フェイクの機器つき。`Device.Down` でタイムアウトにできる）、`internal/protocols/integration_test.go` の `TestModbusClient_AgainstOwnServer` / `TestModbusClient_Polling` / `TestModbusClient_VariableMapping`（Karakuri 自身の Modbus TCP サーバーにつなぐ）、画面は `client-panel.spec.ts` / `client-polling.spec.ts` / `client-mapping.spec.ts`。OPC UA は `internal/protocols/opcua/client_test.go`（Karakuri の OPC UA サーバー、セキュリティポリシーとユーザー名を使う uastack のサーバー、応答しないサーバー）、`integration_test.go` の `TestOPCUAClient_AgainstOwnServer`、画面は `client-opcua.spec.ts`。サブスクリプションのホスト側は `internal/application/plc_service_client_subscription_test.go`（`protocoltest.ClientFactory` の監視は、テストから `Subscription.Emit()` で知らせを送れる）
 - **変数とのマッピング**（`plc_service_client_sync.go`、状態は `adapter.DeviceSync`）: 変数をサーバーのレジスタと同じ形（`ProtocolMapping`、`protocolType` は `client:<接続先の ID>`）で接続先のアドレスにマッピングする。同期はポーリング中だけ行う
   - 周期ごとに、書き込み未反映の変数を書く → 読み取り項目を読む → マッピングした範囲を読む。変数が変わって書き込み未反映が増えたら（周期の変更も）、待たずにポーリングのゴルーチンを起こす（`clientInstance.wake`）
   - 読む範囲は、エリアごとに重なるか隣り合うものだけまとめる。1 回で読める個数（`MaxReadCount`）より大きければ分けて読み、全部読めたら反映する（一部だけの範囲では変数を変えない）

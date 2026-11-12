@@ -14,6 +14,10 @@ export function AddClientSavedCommand(arg1, arg2) {
   return window['go']['main']['App']['AddClientSavedCommand'](arg1, arg2);
 }
 
+export function AddClientSubscriptionItems(arg1, arg2) {
+  return window['go']['main']['App']['AddClientSubscriptionItems'](arg1, arg2);
+}
+
 export function AddMonitoringItem(arg1) {
   return window['go']['main']['App']['AddMonitoringItem'](arg1);
 }
@@ -88,6 +92,10 @@ export function GetClientProtocols() {
 
 export function GetClientSavedCommands(arg1) {
   return window['go']['main']['App']['GetClientSavedCommands'](arg1);
+}
+
+export function GetClientSubscription(arg1) {
+  return window['go']['main']['App']['GetClientSubscription'](arg1);
 }
 
 export function GetClients() {
@@ -210,6 +218,10 @@ export function RemoveClientSavedCommand(arg1, arg2) {
   return window['go']['main']['App']['RemoveClientSavedCommand'](arg1, arg2);
 }
 
+export function RemoveClientSubscriptionItem(arg1, arg2) {
+  return window['go']['main']['App']['RemoveClientSubscriptionItem'](arg1, arg2);
+}
+
 export function RemoveServer(arg1) {
   return window['go']['main']['App']['RemoveServer'](arg1);
 }
@@ -242,6 +254,10 @@ export function SetClientPollInterval(arg1, arg2) {
   return window['go']['main']['App']['SetClientPollInterval'](arg1, arg2);
 }
 
+export function SetClientSubscriptionInterval(arg1, arg2) {
+  return window['go']['main']['App']['SetClientSubscriptionInterval'](arg1, arg2);
+}
+
 export function SetDisabledUnitIDs(arg1, arg2) {
   return window['go']['main']['App']['SetDisabledUnitIDs'](arg1, arg2);
 }
@@ -258,6 +274,10 @@ export function StartClientPolling(arg1) {
   return window['go']['main']['App']['StartClientPolling'](arg1);
 }
 
+export function StartClientSubscription(arg1) {
+  return window['go']['main']['App']['StartClientSubscription'](arg1);
+}
+
 export function StartScript(arg1) {
   return window['go']['main']['App']['StartScript'](arg1);
 }
@@ -268,6 +288,10 @@ export function StartServer(arg1) {
 
 export function StopClientPolling(arg1) {
   return window['go']['main']['App']['StopClientPolling'](arg1);
+}
+
+export function StopClientSubscription(arg1) {
+  return window['go']['main']['App']['StopClientSubscription'](arg1);
 }
 
 export function StopScript(arg1) {

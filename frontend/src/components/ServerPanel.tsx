@@ -464,6 +464,14 @@ export const ServerPanel = forwardRef<ServerPanelHandle, ServerPanelProps>(
                       ポーリング中
                     </span>
                   )}
+                  {c.subscribing && (
+                    <span
+                      className="client-polling-badge"
+                      title="サブスクリプションで監視中"
+                    >
+                      監視中
+                    </span>
+                  )}
                 </div>
               </div>
             ))}
