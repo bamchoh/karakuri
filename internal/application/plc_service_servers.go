@@ -191,6 +191,18 @@ func (s *PLCService) GetAvailableProtocols() []ProtocolInfoDTO {
 	return result
 }
 
+// stopPluginIfUnused は、プロトコルのサーバーが追加されていなければプラグインのプロセスを止める
+func (s *PLCService) stopPluginIfUnused(pt protocol.ProtocolType) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if _, inUse := s.servers[pt]; inUse {
+		return
+	}
+	if stopper, ok := s.factories[pt].(pluginStopper); ok {
+		stopper.StopProcess()
+	}
+}
+
 // GetProtocolSchema はプロトコルスキーマを返す
 func (s *PLCService) GetProtocolSchema(protocolType string) (*ProtocolSchemaDTO, error) {
 	s.mu.RLock()
@@ -198,6 +210,13 @@ func (s *PLCService) GetProtocolSchema(protocolType string) (*ProtocolSchemaDTO,
 	s.mu.RUnlock()
 	if !ok {
 		return nil, fmt.Errorf("protocol not found: %s", protocolType)
+	}
+
+	// 設定項目はプラグインに問い合わせるため、プロセスが動いていなければ起動される。
+	// サーバーを追加していないプロトコルでは、問い合わせのために起動したプロセスを終わったら止める
+	// （止めないと、そのプロトコルのサーバーを追加・削除するまでプロセスが残る）
+	if checker, ok := factory.(pluginRunningChecker); ok && !checker.IsProcessRunning() {
+		defer s.stopPluginIfUnused(protocol.ProtocolType(protocolType))
 	}
 
 	variants := factory.ConfigVariants()

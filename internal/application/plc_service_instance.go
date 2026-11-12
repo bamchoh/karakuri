@@ -17,6 +17,8 @@ type (
 	pluginStopper interface{ StopProcess() }
 	// pluginCrashChecker はプラグインのプロセスが異常終了したかを調べられる
 	pluginCrashChecker interface{ IsProcessCrashed() bool }
+	// pluginRunningChecker はプラグインのプロセスが動いているかを調べられる
+	pluginRunningChecker interface{ IsProcessRunning() bool }
 	// pluginReconnector はプラグインへの接続を張り直せる（debug_port などで起動したプラグイン向け）
 	pluginReconnector interface{ ForceReconnect() error }
 )
