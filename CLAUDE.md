@@ -83,7 +83,7 @@ go build ./...
 
 `frontend/e2e/` に、ブラウザで画面を操作して確認するテストがある。`task dev` が立てる開発用サーバー（`http://localhost:34115`）に接続するため、Go 側の API とプロトコルの実装を含めた動作を確認できる。手順と注意は `frontend/e2e/README.md` を参照。
 
-- 画面ごとのテスト: 通信画面（サーバー）`server-panel.spec.ts`、変数画面 `variable-dialogs.spec.ts` / `node-publishing.spec.ts`、レジスタ画面 `register-panel.spec.ts` / `monitoring.spec.ts`、スクリプト画面 `script-panel.spec.ts`、通信画面（クライアント）`client-panel.spec.ts` / `client-polling.spec.ts` / `client-mapping.spec.ts` / `client-opcua.spec.ts`
+- 画面ごとのテスト: 通信画面（サーバー）`server-panel.spec.ts`、変数画面 `variable-dialogs.spec.ts` / `node-publishing.spec.ts`、レジスタ画面 `register-panel.spec.ts` / `monitoring.spec.ts`、スクリプト画面 `script-panel.spec.ts`、通信画面（クライアント）`client-panel.spec.ts` / `client-polling.spec.ts` / `client-mapping.spec.ts` / `client-saved-commands.spec.ts` / `client-opcua.spec.ts`
 - 画面を変更したら、該当するテストを実行する（なければ追加する）。`shot()` で撮ったスクリーンショット（`frontend/e2e/.screenshots/`）で見た目も確認する
 - データの準備は `api(page, "メソッド名", ...)` で Go 側の API を直接呼び、確認したい操作だけを画面で行う
 - **テストはアプリのサーバー・変数・モニタリング項目・スクリプトをすべて削除する。** 開発サーバーは `KARAKURI_CONFIG_DIR` を一時フォルダに向けて起動する
@@ -280,8 +280,9 @@ frontend/src/
 │   ├── ScriptPanel.tsx     # スクリプト管理（一覧・編集・1 回実行・コンソール）
 │   ├── useClients.ts       # クライアントの接続先の一覧・使えるプロトコル・履歴の読み込み（通信画面で使う）
 │   ├── ClientDetailPane.tsx    # 通信画面の右側（クライアントを選んだとき）: 接続先の設定（折りたためる）・コマンド・結果と履歴・ポーリング
-│   ├── ClientCommandComposer.tsx # コマンドの組み立て（項目から組み立てる / 16 進で入れる）
+│   ├── ClientCommandDialog.tsx # コマンドのダイアログ（項目から組み立てる / 16 進で入れる・送信・保存。新しいコマンドと保存したコマンドの編集で共通）
 │   ├── ClientCommandLog.tsx    # コマンドの結果と履歴
+│   ├── ClientSavedCommands.tsx # 保存したコマンドの一覧（「新しいコマンド」・送信・編集・削除）
 │   ├── ClientPollingView.tsx   # ポーリング（周期・読み取り項目の追加・最後の結果と値）
 │   └── clientFormat.ts         # クライアント（通信画面の右側）で共通の表示の書式（状態の名前・時刻・かかった時間）
 └── App.tsx                 # タブベースのメインUI
@@ -393,6 +394,7 @@ JavaScript（goja）でPLC動作を記述。
   - TIME/DATE シンタックスシュガー: `plc.readTimeMs()`, `plc.writeTimeMs()`, `plc.readDateSec()`, `plc.writeDateSec()`, `plc.readTimeOfDayMs()`, `plc.writeTimeOfDayMs()`, `plc.readDateAndTimeSec()`, `plc.writeDateAndTimeSec()`（変数の読み取り・パース・フォーマット・書き込みをワンステップで実行）
   - TIME/DATE 文字列変換: `plc.parseTime()`, `plc.formatTime()`, `plc.parseDate()`, `plc.formatDate()`, `plc.parseTimeOfDay()`, `plc.formatTimeOfDay()`, `plc.parseDateAndTime()`, `plc.formatDateAndTime()`
   - 外部の機器との同期の状態: `plc.getVariableStatus(name)`（クライアントの接続先にマッピングした変数。`{ state, writePending, error, client }`、マッピングしていなければ `null`）
+  - 外部の機器へ送る: `plc.sendCommand(client, command)`（保存したコマンドを、接続先とコマンドの名前で指定）、`plc.sendRequest(client, hex)`（16 進で指定）。応答かタイムアウトまで待って `{ status, error, values: [{ label, value, word?, bit? }], sent, received, elapsedMs, summary, label }` を返す。見つからない・16 進が読めないときも例外にせず `status: "error"`。名前が重なれば追加した順で最初のもの。履歴の `label` は「スクリプト「名前」: コマンド名」（実装は `plc_service_client_script.go` の `scriptClientSender`、エンジンへは `ScriptEngine.SetClientSender()` で渡す）
 
 ### Wailsバインディング
 
@@ -441,6 +443,7 @@ JavaScript（goja）でPLC動作を記述。
   - `BuildClientRequest(protocolType, commandID, params)`: コマンドと項目の値からリクエストを組み立て、16 進の文字列で返す
   - `SendClientRequest(id, requestHex)`: 16 進で指定したリクエストを送る。タイムアウト・例外応答などは結果の `status`（`ok` / `exception` / `timeout` / `error`）で返す
   - `GetClientCommandLogs()`, `ClearClientCommandLogs()`: 送ったコマンドの履歴（新しい順、最大 200 件）
+  - 保存したコマンド: `GetClientSavedCommands(id)`, `AddClientSavedCommand(id, input)`, `UpdateClientSavedCommand(id, commandID, input)`, `RenameClientSavedCommand(id, commandID, name)`, `RemoveClientSavedCommand(id, commandID)`, `SendClientSavedCommand(id, commandID)`（`input` は `ClientSavedCommandInputDTO`: `mode` が `build` なら `commandId` / `params`、`hex` なら `request`）
   - `GetClientPolling(id)`: ポーリングの状態（周期・実行中か・周回数・読み取り項目と最後の結果）
   - `AddClientPollItem(id, commandID, params, format)`, `UpdateClientPollItem(id, itemID, commandID, params, format)`, `RemoveClientPollItem(id, itemID)`: 読み取り項目（`Pollable` のコマンドだけ。1 つの接続先に 50 個まで）
   - `SetClientPollInterval(id, ms)`（50〜3600000）, `StartClientPolling(id)`, `StopClientPolling(id)`
@@ -697,6 +700,14 @@ JavaScript（goja）でPLC動作を記述。
 - **作り**: `PLCService` の `clients`（`clientManager`、`plc_service_clients.go`）が接続先・ファクトリー・履歴を持つ。通信を待つ間に `PLCService.mu` を持たないよう、自分のロックを使う。接続を閉じる処理（送信中なら終わるまで待つ）は、そのロックの外で呼ぶ
 - **接続先**: いくつでも追加できる（サーバーと違い、プロトコルごとに 1 つではない）。設定を変えるとクライアントを作り直す。プロジェクトに保存する（`ProjectDataDTO.Clients`）
 - **送信の流れ**: 画面は、組み立てる方式でも `BuildClientRequest()` で 16 進にしてから `SendClientRequest()` で送る（送る経路は 1 つ）
+- **保存したコマンド**（`plc_service_client_commands.go`）: 接続先ごとに、組み立てたコマンドを名前を付けて保存しておき、あとから送る（グループはない。最初はグループで作ったが、保存して使うまでの手順が多いのでやめた）
+  - 保存するとき、組み立てたもの（`mode: "build"`、コマンドの ID と項目の値）か 16 進で入れたもの（`mode: "hex"`）から、送るバイト列を作っておく。送るときはそれを送る（`SendClientSavedCommand()`、履歴の `label` にコマンドの名前）
+  - 名前が空なら、内容の要約を名前にする。1 つの接続先に 200 個まで
+  - 画面: 「コマンド」タブには「保存したコマンド」の一覧と「結果と履歴」だけを並べる。組み立ては `ClientCommandDialog` で行う
+    - 「新しいコマンド」で空のダイアログ、一覧の ✎ で保存したコマンドの中身と名前が入ったダイアログを開く（✎ のときの保存は上書き）
+    - ダイアログのボタンは「閉じる」「送信」「保存して閉じる」。「送信」はダイアログを開いたまま送り、結果をダイアログの下に出す（保存せずに試せる。結果は画面の履歴にも残る）
+    - ダイアログの中の誤り（16 進が読めないなど）は、ダイアログの中に出す。Enter で送信、Esc で閉じる（`FocusTrap` は開いた直後 100ms の Enter を無視するので、e2e で開いてすぐ Enter を押すと送られない。16 進の欄は自分で Enter を受けて送る）
+  - プロジェクトに保存する（`ClientSnapshotDTO.SavedCommands`。ID は読み込むときに作り直し、使えないコマンドは読み飛ばす）
 - **Modbus TCP**（`internal/protocols/modbus/client.go`）
   - リクエストは PDU（ファンクションコード + データ）。MBAP ヘッダー（トランザクション ID・UnitID）はクライアントが付ける。アドレスは PDU の値（0 始まり）
   - 組み立てられるコマンドは FC01〜06・15・16。16 進で入れれば、ほかのファンクションコードや異常なリクエストも送れる（応答はデータをそのまま表示する）

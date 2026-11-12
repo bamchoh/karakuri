@@ -6,6 +6,8 @@ export function AddClient(arg1:string,arg2:string):Promise<application.ClientDTO
 
 export function AddClientPollItem(arg1:string,arg2:string,arg3:Record<string, any>,arg4:string):Promise<application.ClientPollItemDTO>;
 
+export function AddClientSavedCommand(arg1:string,arg2:application.ClientSavedCommandInputDTO):Promise<application.ClientSavedCommandDTO>;
+
 export function AddMonitoringItem(arg1:application.MonitoringItemDTO):Promise<application.MonitoringItemDTO>;
 
 export function AddServer(arg1:string,arg2:string):Promise<void>;
@@ -41,6 +43,8 @@ export function GetClientCommandLogs():Promise<Array<application.ClientCommandLo
 export function GetClientPolling(arg1:string):Promise<application.ClientPollingDTO>;
 
 export function GetClientProtocols():Promise<Array<application.ClientProtocolDTO>>;
+
+export function GetClientSavedCommands(arg1:string):Promise<Array<application.ClientSavedCommandDTO>>;
 
 export function GetClients():Promise<Array<application.ClientDTO>>;
 
@@ -100,13 +104,19 @@ export function RemoveClient(arg1:string):Promise<void>;
 
 export function RemoveClientPollItem(arg1:string,arg2:string):Promise<void>;
 
+export function RemoveClientSavedCommand(arg1:string,arg2:string):Promise<void>;
+
 export function RemoveServer(arg1:string):Promise<void>;
+
+export function RenameClientSavedCommand(arg1:string,arg2:string,arg3:string):Promise<void>;
 
 export function ReorderMonitoringItem(arg1:string,arg2:number):Promise<void>;
 
 export function RunScriptOnce(arg1:string):Promise<any>;
 
 export function SendClientRequest(arg1:string,arg2:string):Promise<application.ClientCommandLogDTO>;
+
+export function SendClientSavedCommand(arg1:string,arg2:string):Promise<application.ClientCommandLogDTO>;
 
 export function SetClientFailThreshold(arg1:string,arg2:number):Promise<void>;
 
@@ -133,6 +143,8 @@ export function StopServer(arg1:string):Promise<void>;
 export function UpdateClient(arg1:string,arg2:string,arg3:Record<string, any>):Promise<void>;
 
 export function UpdateClientPollItem(arg1:string,arg2:string,arg3:string,arg4:Record<string, any>,arg5:string):Promise<void>;
+
+export function UpdateClientSavedCommand(arg1:string,arg2:string,arg3:application.ClientSavedCommandInputDTO):Promise<void>;
 
 export function UpdateMonitoringItem(arg1:application.MonitoringItemDTO):Promise<void>;
 

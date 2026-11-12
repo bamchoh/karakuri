@@ -75,17 +75,24 @@ function setting(scope: Page | Locator, label: string) {
     .first();
 }
 
-const composer = (page: Page) => page.locator(".client-composer");
+// コマンドのダイアログ（組み立て・16 進の入力・送信）
+const composer = (page: Page) => page.locator(".client-command-dialog");
 const preview = (page: Page) => page.getByTestId("client-preview");
 const result = (page: Page) => page.getByTestId("client-result");
 const sendButton = (page: Page) =>
-  composer(page).getByRole("button", { name: "送信" });
+  composer(page).getByRole("button", { name: "送信", exact: true });
 const valueRow = (page: Page, label: string) =>
   result(page).locator(".client-values tr", {
     has: page.locator("th", {
       hasText: new RegExp("^" + escapeRegExp(label) + "$"),
     }),
   });
+
+// 「新しいコマンド」でダイアログを開く
+async function openCommandDialog(page: Page) {
+  await page.getByRole("button", { name: "新しいコマンド" }).click();
+  await expect(composer(page)).toBeVisible();
+}
 
 // 接続先を API で追加し、画面で選ぶ
 async function addClient(page: Page) {
@@ -154,6 +161,7 @@ test("プロトコルを選んで接続先を追加し、設定を保存でき�
 
 test("Read・Write・Browse を組み立てて送れる", async ({ page }) => {
   await addClient(page);
+  await openCommandDialog(page);
 
   // Read: 公開変数の値と型が出る
   await setting(composer(page), "NodeId").fill(nodeId);
@@ -223,6 +231,7 @@ test("複数のノードをまとめて読み書きできる", async ({ page }) 
   });
   const labelNode = nodeId.replace(";s=Counter", ";s=Label");
   await addClient(page);
+  await openCommandDialog(page);
 
   // Read: NodeId を 1 行に 1 つ入れる
   await setting(composer(page), "NodeId").fill(`${nodeId}\n${labelNode}`);
@@ -269,11 +278,12 @@ test("16 進で入れる欄に OPC UA の説明が出て、組み立てた内容
   page,
 }) => {
   await addClient(page);
+  await openCommandDialog(page);
   await setting(composer(page), "NodeId").fill(nodeId);
   await expect(preview(page)).not.toHaveText("");
   await composer(page).getByRole("button", { name: "16 進で編集" }).click();
   await expect(
-    composer(page).locator(".vscode-setting-description"),
+    composer(page).locator(".vscode-setting-description").first(),
   ).toContainText("サービスのリクエスト本体");
   await sendButton(page).click();
   await expect(result(page).locator(".client-status")).toHaveText("正常");

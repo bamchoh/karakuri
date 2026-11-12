@@ -2485,3 +2485,97 @@ button:disabled {
   overflow: hidden;
   text-overflow: ellipsis;
 }
+
+/* ----- クライアント: 保存したコマンド ----- */
+.client-name-editor {
+  min-width: 240px;
+  padding: 0.35rem 0.5rem;
+  border: 1px solid #1a3d22;
+  background: #071510;
+  color: #eaeaea;
+  border-radius: 2px;
+  font-size: 0.875rem;
+}
+
+.client-name-editor:focus {
+  outline: none;
+  border-color: #22c55e;
+}
+
+.client-saved-actions .btn-small {
+  display: inline-flex;
+  align-items: center;
+}
+
+.client-groups-empty {
+  padding: 0.5rem 1rem 0.75rem;
+  text-align: left;
+}
+
+.client-groups-empty svg {
+  vertical-align: -2px;
+  margin: 0 0.15rem;
+}
+
+.client-history-scroll.client-saved-scroll {
+  margin: 0 1rem 0.75rem;
+  max-height: 280px;
+}
+
+.variable-table.client-saved-commands td {
+  padding: 0.35rem 0.75rem;
+  vertical-align: middle;
+}
+
+.variable-table.client-saved-commands td.client-saved-name {
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.variable-table.client-saved-commands td.client-saved-actions {
+  white-space: nowrap;
+  text-align: right;
+}
+
+.client-saved-actions .btn-small + .btn-small {
+  margin-left: 0.25rem;
+}
+
+/* 保存したコマンドの一覧の上（「新しいコマンド」） */
+.client-saved-toolbar {
+  display: flex;
+  padding: 0.6rem 1rem 0.5rem;
+}
+
+.client-saved-toolbar .btn-primary {
+  display: inline-flex;
+  align-items: center;
+}
+
+/* コマンドのダイアログ */
+.dialog.client-command-dialog {
+  width: min(720px, 92vw);
+  max-width: 92vw;
+}
+
+.client-command-dialog .dialog-buttons button {
+  display: inline-flex;
+  align-items: center;
+}
+
+.client-result.client-dialog-result {
+  margin: 0.75rem 1rem 0.25rem;
+  text-align: left;
+}
+
+.client-log-label {
+  font-weight: 600;
+  color: var(--accent);
+  white-space: nowrap;
+}
+
+.client-send-row {
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.5rem 0;
+}

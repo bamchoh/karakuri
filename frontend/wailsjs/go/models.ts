@@ -163,6 +163,7 @@ export namespace application {
 	    error?: string;
 	    summary: string;
 	    values: ClientResultValueDTO[];
+	    label?: string;
 	
 	    static createFrom(source: any = {}) {
 	        return new ClientCommandLogDTO(source);
@@ -182,6 +183,7 @@ export namespace application {
 	        this.error = source["error"];
 	        this.summary = source["summary"];
 	        this.values = this.convertValues(source["values"], ClientResultValueDTO);
+	        this.label = source["label"];
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
@@ -385,6 +387,50 @@ export namespace application {
 		}
 	}
 	
+	export class ClientSavedCommandDTO {
+	    id: string;
+	    name: string;
+	    mode: string;
+	    commandId?: string;
+	    params?: Record<string, any>;
+	    request: string;
+	    summary: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new ClientSavedCommandDTO(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.name = source["name"];
+	        this.mode = source["mode"];
+	        this.commandId = source["commandId"];
+	        this.params = source["params"];
+	        this.request = source["request"];
+	        this.summary = source["summary"];
+	    }
+	}
+	export class ClientSavedCommandInputDTO {
+	    name: string;
+	    mode: string;
+	    commandId: string;
+	    params: Record<string, any>;
+	    request: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new ClientSavedCommandInputDTO(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.name = source["name"];
+	        this.mode = source["mode"];
+	        this.commandId = source["commandId"];
+	        this.params = source["params"];
+	        this.request = source["request"];
+	    }
+	}
 	
 	export class ConfigVariantDTO {
 	    id: string;

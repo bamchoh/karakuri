@@ -44,11 +44,18 @@ function setting(scope: Page | Locator, label: string) {
     .first();
 }
 
-const composer = (page: Page) => page.locator(".client-composer");
+// コマンドのダイアログ（組み立て・16 進の入力・送信）
+const composer = (page: Page) => page.locator(".client-command-dialog");
 const preview = (page: Page) => page.getByTestId("client-preview");
 const result = (page: Page) => page.getByTestId("client-result");
 const sendButton = (page: Page) =>
-  composer(page).getByRole("button", { name: "送信" });
+  composer(page).getByRole("button", { name: "送信", exact: true });
+
+// 「新しいコマンド」でダイアログを開く
+async function openCommandDialog(page: Page) {
+  await page.getByRole("button", { name: "新しいコマンド" }).click();
+  await expect(composer(page)).toBeVisible();
+}
 
 // 接続先を API で追加し（127.0.0.1:MODBUS_PORT）、画面で選ぶ
 async function addClient(page: Page, settings: Record<string, unknown> = {}) {
@@ -99,6 +106,7 @@ test("ファンクションコードで組み立てて書き込み・読み取�
   page,
 }) => {
   await addClient(page);
+  await openCommandDialog(page);
 
   // FC16: 組み立てたリクエストがその場で 16 進で出る
   await setting(composer(page), "コマンド").selectOption({
@@ -136,6 +144,7 @@ test("ファンクションコードで組み立てて書き込み・読み取�
 
 test("項目の誤りは組み立ての欄に出て、送信できない", async ({ page }) => {
   await addClient(page);
+  await openCommandDialog(page);
   await setting(composer(page), "コマンド").selectOption({
     label: "FC03 保持レジスタの読み取り",
   });
@@ -148,6 +157,7 @@ test("16 進で入れたリクエストを送れる。組み立てた内容を�
   page,
 }) => {
   await addClient(page);
+  await openCommandDialog(page);
   await writeWord(page, 2, 0xabcd);
 
   await setting(composer(page), "コマンド").selectOption({
@@ -181,6 +191,7 @@ test("応答しない UnitID はタイムアウトになり、履歴から送り
 }) => {
   await api(page, "SetUnitIDEnabled", "modbus-tcp", 2, false);
   await addClient(page, { unitId: 2, timeoutMs: 200 });
+  await openCommandDialog(page);
 
   await sendButton(page).click();
   await expect(result(page).locator(".client-status")).toHaveText(
@@ -191,7 +202,9 @@ test("応答しない UnitID はタイムアウトになり、履歴から送り
   );
   await expect(page.locator(".server-status-badge")).toHaveText("未接続");
 
-  // UnitID を応答するようにして、履歴の行から送り直す
+  // UnitID を応答するようにして、ダイアログを閉じ、履歴の行から送り直す
+  await page.keyboard.press("Escape");
+  await expect(composer(page)).toBeHidden();
   await api(page, "SetUnitIDEnabled", "modbus-tcp", 2, true);
   await page
     .locator(".client-history tbody tr")

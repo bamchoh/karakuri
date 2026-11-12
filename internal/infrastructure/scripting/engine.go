@@ -48,6 +48,29 @@ type ScriptEngine struct {
 	// statusOf は、外部の機器にマッピングした変数の同期の状態を返す（plc.getVariableStatus 用）。
 	// 変数 ID を受け取り、マッピングしていなければ nil を返す
 	statusOf func(variableID string) map[string]any
+	// clientSender は外部の機器へコマンドを送る（plc.sendCommand / plc.sendRequest 用）
+	clientSender ClientSender
+}
+
+// ClientSender は、スクリプトから外部の機器（クライアントの接続先）へコマンドを送るためのもの（plc.sendCommand / plc.sendRequest 用）。
+// 戻り値は JavaScript のオブジェクトにする内容（status・error・values など）。見つからない・送れないときも、
+// 例外ではなく status が "error" の内容を返す。scriptName は履歴に出すスクリプトの名前
+type ClientSender interface {
+	SendCommand(scriptName, client, command string) map[string]any
+	SendRequest(scriptName, client, requestHex string) map[string]any
+}
+
+// SetClientSender は plc.sendCommand() / plc.sendRequest() が使う送り先を設定する
+func (e *ScriptEngine) SetClientSender(s ClientSender) {
+	e.mu.Lock()
+	e.clientSender = s
+	e.mu.Unlock()
+}
+
+func (e *ScriptEngine) getClientSender() ClientSender {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	return e.clientSender
 }
 
 // SetVariableStatusProvider は plc.getVariableStatus() が使う、変数の同期の状態を返す関数を設定する
@@ -124,6 +147,25 @@ func (e *ScriptEngine) createVM(scriptID, scriptName string) *goja.Runtime {
 
 	// PLCオブジェクト - 変数アクセス用
 	plc := vm.NewObject()
+
+	// sendCommand(client, command) - 保存したコマンドを、接続先とコマンドの名前で指定して送る。
+	// sendRequest(client, hex) - 16 進で指定したリクエストを送る。
+	// どちらも応答（またはタイムアウト）まで待ち、{ status, error, values, sent, received, elapsedMs, ... } を返す
+	noSender := map[string]any{"status": "error", "error": "外部の機器へ送る機能が使えません"}
+	plc.Set("sendCommand", func(client, command string) any {
+		s := e.getClientSender()
+		if s == nil {
+			return noSender
+		}
+		return s.SendCommand(scriptName, client, command)
+	})
+	plc.Set("sendRequest", func(client, requestHex string) any {
+		s := e.getClientSender()
+		if s == nil {
+			return noSender
+		}
+		return s.SendRequest(scriptName, client, requestHex)
+	})
 
 	// addConsoleWarn はコンソールログに警告を追加するヘルパー
 	addConsoleWarn := func(msg string) {
