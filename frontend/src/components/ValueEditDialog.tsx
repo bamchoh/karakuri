@@ -21,7 +21,6 @@ import {
   parseArrayTypeFE,
   parseBigIntInput,
   parseNumericInput,
-  valuePathToFieldPath,
 } from "./variableTypes";
 
 export interface ValueEditDialogHandle {
@@ -105,11 +104,10 @@ export const ValueEditDialog = forwardRef<ValueEditDialogHandle, Props>(
       if (!editingVariable) return;
       try {
         if (editingRow && editingRow.valuePath.length > 0) {
-          // フィールドパスを使って部分更新
-          const fieldPath = valuePathToFieldPath(editingRow.valuePath);
+          // フィールドパス（配列の添字は外部インデックス）を使って部分更新
           await UpdateVariableFieldValue(
             editingVariable.id,
-            fieldPath,
+            editingRow.fieldPath,
             coerceFloatIfNeeded(editData, editingRow.dataType),
           );
         } else {
