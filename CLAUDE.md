@@ -245,6 +245,7 @@ internal/
   - `Node.OnWrite` でクライアントの書き込みを `WriteVariableValue` / `WriteVariableFieldValue` に転送
 - **pluginruntime** (`internal/pluginruntime/`): プラグイン共通の gRPC サーバー実装（Modbus / OPC UA 共通）
   - `GetMetadata()` はファクトリーの `GetProtocolCapabilities()` を返す
+  - DataStore（レジスタ）は `Server.dataStore()` が最初に必要になったときに 1 つだけ作り、サーバーの起動・停止をまたいで使い続ける。ホストはサーバーを追加した時点（起動前）から読み書きし、変数の値も一度だけ書き込むため、起動のたびに作り直してはいけない
   - `CreateAndStart()`: ファクトリーが `VariableStoreInjector` なら `host_grpc_addr` に接続して `RemoteVariableStoreAccessor`（`variable_accessor.go`）を注入
   - `OnNodePublishingUpdated()`: サーバーが `NodePublishingAware` なら転送
   - `NewManifest(factory, entrypoint)`: ホストの `PluginManifest` と同じ JSON 形式（`capabilities` は snake_case）でマニフェストを作る

@@ -18,8 +18,12 @@ type Server struct {
 
 	mu      sync.Mutex
 	factory protocol.ServerFactory
-	store   protocol.DataStore
 	server  protocol.ProtocolServer
+
+	// store はプロトコルのメモリ（レジスタ）。dataStore() で最初に必要になったときに 1 つだけ作り、
+	// サーバーの起動・停止をまたいで使い続ける。直接は参照しない
+	store     protocol.DataStore
+	storeOnce sync.Once
 
 	// accessor はホストの変数ストアへの接続（SupportsNodePublishing=true のプラグインのみ）
 	accessor *RemoteVariableStoreAccessor
@@ -42,6 +46,21 @@ func NewServer(factory protocol.ServerFactory) *Server {
 		factory:    factory,
 		commEvents: newCommEventHub(),
 	}
+}
+
+// dataStore はプロトコルのメモリ（レジスタ）を返す。最初に呼ばれたときに 1 つだけ作る。
+//
+// ホストは、サーバーを追加した時点（起動する前）から DataStore を読み書きし、
+// 変数の値も一度だけ書き込む。そのため、起動前から存在し、起動し直しても同じものである必要がある。
+func (s *Server) dataStore() protocol.DataStore {
+	s.storeOnce.Do(func() {
+		s.store = s.factory.CreateDataStore()
+		if changeHookStore, ok := s.store.(ChangeHookDataStore); ok {
+			// プロトコルのクライアントの書き込みを SubscribeChanges ストリームへ流す
+			changeHookStore.SetChangeHook(s.onDataChange)
+		}
+	})
+	return s.store
 }
 
 // Register は gRPC サーバーにサービスを登録する
@@ -201,14 +220,8 @@ func (s *Server) CreateAndStart(ctx context.Context, req *pb.CreateAndStartReque
 		injector.InjectVariableStore(accessor)
 	}
 
-	// DataStore を作成
-	innerStore := factory.CreateDataStore()
-	s.store = innerStore
-
-	if changeHookStore, ok := innerStore.(ChangeHookDataStore); ok {
-		// 変更フックを設定（Modbus クライアントの書き込みを SubscribeChanges ストリームに転送）
-		changeHookStore.SetChangeHook(s.onDataChange)
-	}
+	// DataStore は起動のたびに作り直さない（停止中に書いた値や、起動し直す前の値を保つ）
+	innerStore := s.dataStore()
 
 	// サーバーを作成・起動
 	srv, err := factory.CreateServer(config, innerStore)
@@ -392,10 +405,11 @@ func (s *Server) SetDisabledUnitIDs(ctx context.Context, req *pb.SetDisabledUnit
 // ===== DataStoreService =====
 
 func (s *Server) GetAreas(ctx context.Context, _ *pb.Empty) (*pb.GetAreasResponse, error) {
-	if s.store == nil {
+	store := s.dataStore()
+	if store == nil {
 		return &pb.GetAreasResponse{}, nil
 	}
-	areas := s.store.GetAreas()
+	areas := store.GetAreas()
 	pbAreas := make([]*pb.MemoryArea, len(areas))
 	for i, a := range areas {
 		pbAreas[i] = &pb.MemoryArea{
@@ -413,10 +427,11 @@ func (s *Server) GetAreas(ctx context.Context, _ *pb.Empty) (*pb.GetAreasRespons
 }
 
 func (s *Server) ReadBit(ctx context.Context, req *pb.ReadBitRequest) (*pb.ReadBitResponse, error) {
-	if s.store == nil {
+	store := s.dataStore()
+	if store == nil {
 		return nil, fmt.Errorf("DataStore 未初期化")
 	}
-	v, err := s.store.ReadBit(req.Area, req.Address)
+	v, err := store.ReadBit(req.Area, req.Address)
 	if err != nil {
 		return nil, err
 	}
@@ -424,21 +439,23 @@ func (s *Server) ReadBit(ctx context.Context, req *pb.ReadBitRequest) (*pb.ReadB
 }
 
 func (s *Server) WriteBit(ctx context.Context, req *pb.WriteBitRequest) (*pb.Empty, error) {
-	if s.store == nil {
+	store := s.dataStore()
+	if store == nil {
 		return nil, fmt.Errorf("DataStore 未初期化")
 	}
 	// ホストからの書き込みフラグを立てて循環通知を防止
 	s.setHostWriting(true)
-	err := s.store.WriteBit(req.Area, req.Address, req.Value)
+	err := store.WriteBit(req.Area, req.Address, req.Value)
 	s.setHostWriting(false)
 	return &pb.Empty{}, err
 }
 
 func (s *Server) ReadBits(ctx context.Context, req *pb.ReadBitsRequest) (*pb.ReadBitsResponse, error) {
-	if s.store == nil {
+	store := s.dataStore()
+	if store == nil {
 		return nil, fmt.Errorf("DataStore 未初期化")
 	}
-	vals, err := s.store.ReadBits(req.Area, req.Address, uint16(req.Count))
+	vals, err := store.ReadBits(req.Area, req.Address, uint16(req.Count))
 	if err != nil {
 		return nil, err
 	}
@@ -446,20 +463,22 @@ func (s *Server) ReadBits(ctx context.Context, req *pb.ReadBitsRequest) (*pb.Rea
 }
 
 func (s *Server) WriteBits(ctx context.Context, req *pb.WriteBitsRequest) (*pb.Empty, error) {
-	if s.store == nil {
+	store := s.dataStore()
+	if store == nil {
 		return nil, fmt.Errorf("DataStore 未初期化")
 	}
 	s.setHostWriting(true)
-	err := s.store.WriteBits(req.Area, req.Address, req.Values)
+	err := store.WriteBits(req.Area, req.Address, req.Values)
 	s.setHostWriting(false)
 	return &pb.Empty{}, err
 }
 
 func (s *Server) ReadWord(ctx context.Context, req *pb.ReadWordRequest) (*pb.ReadWordResponse, error) {
-	if s.store == nil {
+	store := s.dataStore()
+	if store == nil {
 		return nil, fmt.Errorf("DataStore 未初期化")
 	}
-	v, err := s.store.ReadWord(req.Area, req.Address)
+	v, err := store.ReadWord(req.Area, req.Address)
 	if err != nil {
 		return nil, err
 	}
@@ -467,20 +486,22 @@ func (s *Server) ReadWord(ctx context.Context, req *pb.ReadWordRequest) (*pb.Rea
 }
 
 func (s *Server) WriteWord(ctx context.Context, req *pb.WriteWordRequest) (*pb.Empty, error) {
-	if s.store == nil {
+	store := s.dataStore()
+	if store == nil {
 		return nil, fmt.Errorf("DataStore 未初期化")
 	}
 	s.setHostWriting(true)
-	err := s.store.WriteWord(req.Area, req.Address, uint16(req.Value))
+	err := store.WriteWord(req.Area, req.Address, uint16(req.Value))
 	s.setHostWriting(false)
 	return &pb.Empty{}, err
 }
 
 func (s *Server) ReadWords(ctx context.Context, req *pb.ReadWordsRequest) (*pb.ReadWordsResponse, error) {
-	if s.store == nil {
+	store := s.dataStore()
+	if store == nil {
 		return nil, fmt.Errorf("DataStore 未初期化")
 	}
-	vals, err := s.store.ReadWords(req.Area, req.Address, uint16(req.Count))
+	vals, err := store.ReadWords(req.Area, req.Address, uint16(req.Count))
 	if err != nil {
 		return nil, err
 	}
@@ -492,7 +513,8 @@ func (s *Server) ReadWords(ctx context.Context, req *pb.ReadWordsRequest) (*pb.R
 }
 
 func (s *Server) WriteWords(ctx context.Context, req *pb.WriteWordsRequest) (*pb.Empty, error) {
-	if s.store == nil {
+	store := s.dataStore()
+	if store == nil {
 		return nil, fmt.Errorf("DataStore 未初期化")
 	}
 	vals := make([]uint16, len(req.Values))
@@ -500,16 +522,17 @@ func (s *Server) WriteWords(ctx context.Context, req *pb.WriteWordsRequest) (*pb
 		vals[i] = uint16(v)
 	}
 	s.setHostWriting(true)
-	err := s.store.WriteWords(req.Area, req.Address, vals)
+	err := store.WriteWords(req.Area, req.Address, vals)
 	s.setHostWriting(false)
 	return &pb.Empty{}, err
 }
 
 func (s *Server) Snapshot(ctx context.Context, _ *pb.Empty) (*pb.SnapshotResponse, error) {
-	if s.store == nil {
+	store := s.dataStore()
+	if store == nil {
 		return &pb.SnapshotResponse{}, nil
 	}
-	snap := s.store.Snapshot()
+	snap := store.Snapshot()
 	b, err := json.Marshal(snap)
 	if err != nil {
 		return nil, err
@@ -518,22 +541,24 @@ func (s *Server) Snapshot(ctx context.Context, _ *pb.Empty) (*pb.SnapshotRespons
 }
 
 func (s *Server) Restore(ctx context.Context, req *pb.RestoreRequest) (*pb.Empty, error) {
-	if s.store == nil {
+	store := s.dataStore()
+	if store == nil {
 		return &pb.Empty{}, nil
 	}
 	var snap map[string]interface{}
 	if err := json.Unmarshal(req.SnapshotJson, &snap); err != nil {
 		return nil, err
 	}
-	s.store.Restore(snap)
+	store.Restore(snap)
 	return &pb.Empty{}, nil
 }
 
 func (s *Server) ClearAll(ctx context.Context, _ *pb.Empty) (*pb.Empty, error) {
-	if s.store == nil {
+	store := s.dataStore()
+	if store == nil {
 		return &pb.Empty{}, nil
 	}
-	s.store.ClearAll()
+	store.ClearAll()
 	return &pb.Empty{}, nil
 }
 
