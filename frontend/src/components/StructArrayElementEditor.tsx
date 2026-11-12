@@ -18,29 +18,18 @@ export const StructArrayElementEditor = ({
 }) => {
   const [isExpanded, setIsExpanded] = useState(false);
   return (
-    <div
-      style={{
-        border: "1px solid #444",
-        borderRadius: "3px",
-        padding: "2px 4px",
-      }}
-    >
+    <div className="struct-elem">
       <div
-        style={{
-          display: "flex",
-          alignItems: "center",
-          cursor: "pointer",
-          gap: "4px",
-        }}
+        className="struct-elem-header"
         onClick={() => setIsExpanded(!isExpanded)}
       >
-        <span style={{ fontSize: "0.8em" }}>
+        <span className="struct-elem-index">
           {isExpanded ? "\u25BC" : "\u25B6"}
         </span>
-        <span style={{ fontSize: "0.8em", color: "#aaa" }}>{elemType}</span>
+        <span className="struct-elem-type">{elemType}</span>
       </div>
       {isExpanded && (
-        <div style={{ marginTop: "4px" }}>
+        <div className="struct-elem-body">
           {renderEditor(elemType, elem, onChange)}
         </div>
       )}

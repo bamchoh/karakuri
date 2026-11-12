@@ -166,9 +166,8 @@ export function RegisterWriteDialog({
 
               <div className="bit-buttons">
                 <button
-                  className="btn-primary"
+                  className="btn-primary bit-on-button"
                   onClick={() => handleBitWrite(true)}
-                  style={{ marginRight: "8px" }}
                 >
                   ON
                 </button>

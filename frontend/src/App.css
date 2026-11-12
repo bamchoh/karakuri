@@ -1655,3 +1655,386 @@ button:disabled {
 
   min-height: 0;
 }
+
+/* ============================================================
+   コンポーネントのインラインスタイルから移したもの。
+   画面ごとの見た目はここに書き、コンポーネントには style を書かない
+   （値が実行時に決まるもの — 字下げ・メニューの位置・ドラッグ中の移動 — だけ style で指定する）
+   ============================================================ */
+
+/* ----- ダイアログの大きさとスクロール ----- */
+.dialog.dialog-scrollable {
+  max-height: 80vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.dialog.dialog-w450 {
+  min-width: 450px;
+}
+
+.dialog.dialog-w500 {
+  min-width: 500px;
+}
+
+.dialog.dialog-bulk {
+  min-width: 700px;
+  max-width: 95vw;
+}
+
+/* スクロールしない部分（上に固定する欄） */
+.dialog-content.dialog-content-fixed {
+  flex: none;
+  padding-bottom: 0;
+}
+
+/* スクロールする部分 */
+.dialog-content.dialog-content-scroll {
+  flex: 1;
+  overflow-y: auto;
+}
+
+/* ラベルの下に入力欄を置く行 */
+.dialog-row.dialog-row-stacked {
+  flex-direction: column;
+  align-items: flex-start;
+}
+
+.dialog-note {
+  font-size: 0.85em;
+  color: #aaa;
+  margin: 8px 0 0;
+}
+
+.empty-note {
+  color: #888;
+  text-align: center;
+}
+
+/* ----- パネル（サーバー画面・スクリプト画面） ----- */
+.panel.panel-fill {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.panel-header-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.icon-left {
+  margin-right: 0.5rem;
+}
+
+.error-message.config-error {
+  margin: 0.5rem 1rem;
+}
+
+/* ----- サーバー設定: シリアルポートの選択 ----- */
+.serial-port-field {
+  display: flex;
+  gap: 8px;
+}
+
+.serial-port-field .serial-port-select {
+  flex: 1;
+}
+
+.serial-port-field .serial-port-refresh {
+  padding: 4px 8px;
+}
+
+/* ----- レジスタ画面 ----- */
+.monitoring-table td.monitoring-protocol {
+  font-size: 0.75rem;
+  color: #9ca3af;
+}
+
+.bit-buttons .bit-on-button {
+  margin-right: 8px;
+}
+
+/* ----- 変数一覧 ----- */
+/* フォーカスのある行・見出し行の色は、マウスを乗せても変えない */
+.variable-table tbody tr.row-focused,
+.variable-table tbody tr.row-focused:hover {
+  background-color: rgba(100, 160, 255, 0.12);
+  outline: 1px solid rgba(100, 160, 255, 0.4);
+}
+
+.variable-table tbody tr.row-header,
+.variable-table tbody tr.row-header:hover {
+  background-color: rgba(255, 255, 255, 0.03);
+}
+
+.variable-table tbody tr.row-root-header {
+  font-weight: bold;
+}
+
+.variable-table td.clickable {
+  cursor: pointer;
+}
+
+.variable-table td.var-type.var-type-child {
+  font-size: 0.85em;
+}
+
+.var-name-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.var-expand-icon {
+  font-size: 0.7em;
+  width: 12px;
+  display: inline-block;
+}
+
+.var-name-leaf {
+  padding-left: 16px;
+}
+
+.var-value-summary {
+  color: #888;
+  font-size: 0.85em;
+}
+
+.var-mapping-none {
+  font-size: 0.85em;
+  color: #aaa;
+}
+
+/* ----- 値の編集ダイアログ ----- */
+.dialog .value-input {
+  flex: 1;
+}
+
+.value-editor-root {
+  width: 100%;
+}
+
+.value-array-row {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+  margin-bottom: 2px;
+}
+
+.value-array-index {
+  font-size: 0.8em;
+  color: #888;
+  min-width: 30px;
+}
+
+.value-field {
+  margin-bottom: 4px;
+}
+
+.value-field-header {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+}
+
+.value-field-name {
+  font-size: 0.85em;
+  font-weight: bold;
+  min-width: 80px;
+}
+
+.value-field-type {
+  font-size: 0.75em;
+  color: #888;
+}
+
+.value-field-body {
+  margin-left: 8px;
+}
+
+/* 構造体の配列の 1 要素（折りたたみ） */
+.struct-elem {
+  border: 1px solid #444;
+  border-radius: 3px;
+  padding: 2px 4px;
+}
+
+.struct-elem-header {
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+  gap: 4px;
+}
+
+.struct-elem-index {
+  font-size: 0.8em;
+}
+
+.struct-elem-type {
+  font-size: 0.8em;
+  color: #aaa;
+}
+
+.struct-elem-body {
+  margin-top: 4px;
+}
+
+/* ----- 構造体型の管理ダイアログ ----- */
+.btn-small.struct-edit-button {
+  margin-right: 0.5rem;
+}
+
+.struct-fields-header {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 0.5rem;
+}
+
+.btn-secondary.struct-add-field {
+  margin-top: 0.5rem;
+}
+
+/* ----- マッピング設定ダイアログ ----- */
+/* 見出しの行と入力欄の行で、列の幅をそろえる */
+.dialog-row .mapping-col {
+  flex: 1;
+}
+
+.mapping-col-spacer {
+  width: 60px;
+}
+
+.dialog-section.publish-section {
+  margin-top: 16px;
+}
+
+.publish-title {
+  margin: 0 0 8px 0;
+}
+
+.dialog-row.publish-row {
+  align-items: center;
+  gap: 8px;
+}
+
+.dialog-row label.publish-protocol {
+  min-width: 80px;
+}
+
+.dialog-row label.publish-check {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.publish-nodeid {
+  font-size: 11px;
+  color: #888;
+}
+
+/* ----- 一括マッピング編集ダイアログ ----- */
+.dialog-content.bulk-table-area {
+  padding-top: 8px;
+}
+
+.variable-table th.col-name {
+  text-align: left;
+  min-width: 140px;
+}
+
+.variable-table th.col-type {
+  text-align: left;
+  min-width: 100px;
+}
+
+.variable-table th.col-words {
+  text-align: center;
+  min-width: 60px;
+}
+
+.variable-table th.col-publish {
+  text-align: center;
+  min-width: 80px;
+}
+
+.variable-table th.col-access {
+  min-width: 130px;
+}
+
+.variable-table th.col-nodeid {
+  min-width: 100px;
+  font-size: 0.8em;
+  color: #888;
+}
+
+.variable-table th.col-area {
+  min-width: 140px;
+}
+
+.variable-table th.col-address {
+  min-width: 110px;
+}
+
+.variable-table th.col-endian {
+  min-width: 100px;
+}
+
+.th-note {
+  font-size: 0.75em;
+  color: #888;
+  margin-left: 4px;
+}
+
+.variable-table td.cell-name {
+  font-weight: bold;
+}
+
+.variable-table td.cell-type {
+  font-size: 0.85em;
+  color: #aaa;
+}
+
+.variable-table td.cell-center {
+  text-align: center;
+}
+
+.variable-table td.cell-nodeid {
+  font-size: 0.8em;
+  color: #888;
+}
+
+.bulk-address-cell {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.dialog .variable-table td input.bulk-address-input {
+  width: 80px;
+}
+
+/* アドレスが重なっている行。入力欄の枠の色は、フォーカスがあっても変えない */
+.variable-table tbody tr.bulk-row-conflict,
+.variable-table tbody tr.bulk-row-conflict:hover {
+  background: rgba(255, 150, 0, 0.08);
+}
+
+.dialog .variable-table td input.bulk-address-input.conflict,
+.dialog .variable-table td input.bulk-address-input.conflict:focus {
+  border-color: #ffa500;
+}
+
+.bulk-conflict-icon {
+  color: #ffa500;
+}
+
+.bulk-conflict-banner {
+  padding: 6px 16px;
+  background: rgba(255, 150, 0, 0.15);
+  border-top: 1px solid rgba(255, 150, 0, 0.4);
+  color: #ffa500;
+  font-size: 0.85em;
+  flex-shrink: 0;
+}

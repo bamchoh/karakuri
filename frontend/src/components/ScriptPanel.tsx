@@ -292,15 +292,12 @@ export function ScriptPanel() {
     );
 
   return (
-    <div
-      className="panel"
-      style={{ display: "flex", flexDirection: "column", height: "100%" }}
-    >
+    <div className="panel panel-fill">
       <Group orientation="horizontal">
         <Panel className="server-tab-list" defaultSize="25%">
           <div className="server-panel-header">
             <span>SCRIPTS</span>
-            <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+            <div className="panel-header-actions">
               <button
                 onClick={handleNew}
                 className="toolbar-icon-button"

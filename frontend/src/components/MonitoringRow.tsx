@@ -59,7 +59,7 @@ export function MonitoringRow({
         <span className="drag-handle">⠿</span>
       </td>
       {serverInstances.length > 1 && (
-        <td style={{ fontSize: "0.75rem", color: "#9ca3af" }}>
+        <td className="monitoring-protocol">
           {server?.displayName || item.protocolType}
         </td>
       )}

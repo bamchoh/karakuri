@@ -137,9 +137,9 @@ export const ValueEditDialog = forwardRef<ValueEditDialogHandle, Props>(
       if (dataType === "BOOL") {
         return (
           <select
+            className="value-input"
             value={value ? "true" : "false"}
             onChange={(e) => onChange(e.target.value === "true")}
-            style={{ flex: 1 }}
           >
             <option value="true">TRUE</option>
             <option value="false">FALSE</option>
@@ -152,6 +152,7 @@ export const ValueEditDialog = forwardRef<ValueEditDialogHandle, Props>(
           : 0;
         return (
           <input
+            className="value-input"
             type="text"
             value={value ?? ""}
             onChange={(e) =>
@@ -160,7 +161,6 @@ export const ValueEditDialog = forwardRef<ValueEditDialogHandle, Props>(
               )
             }
             onFocus={(e) => e.target.select()}
-            style={{ flex: 1 }}
             maxLength={maxLen > 0 ? maxLen : undefined}
             placeholder={maxLen > 0 ? `最大${maxLen}バイト` : undefined}
           />
@@ -174,6 +174,7 @@ export const ValueEditDialog = forwardRef<ValueEditDialogHandle, Props>(
             : "0〜18446744073709551615 (0x/0b対応)";
         return (
           <input
+            className="value-input"
             type="text"
             value={String(value ?? "0")}
             onChange={(e) => {
@@ -187,7 +188,6 @@ export const ValueEditDialog = forwardRef<ValueEditDialogHandle, Props>(
                 onChange(normalized);
               }
             }}
-            style={{ flex: 1 }}
             placeholder={placeholder}
           />
         );
@@ -196,6 +196,7 @@ export const ValueEditDialog = forwardRef<ValueEditDialogHandle, Props>(
       if (dataType === "REAL" || dataType === "LREAL") {
         return (
           <input
+            className="value-input"
             type="text"
             value={String(value ?? "0")}
             onChange={(e) => {
@@ -207,7 +208,6 @@ export const ValueEditDialog = forwardRef<ValueEditDialogHandle, Props>(
               const parsed = parseFloat(e.target.value);
               onChange(isNaN(parsed) ? 0 : parsed);
             }}
-            style={{ flex: 1 }}
             placeholder="例: 3.14"
           />
         );
@@ -227,11 +227,11 @@ export const ValueEditDialog = forwardRef<ValueEditDialogHandle, Props>(
         };
         return (
           <input
+            className="value-input"
             type="text"
             value={value ?? ""}
             onChange={(e) => onChange(e.target.value)}
             onFocus={(e) => e.target.select()}
-            style={{ flex: 1 }}
             placeholder={placeholders[dataType] || ""}
           />
         );
@@ -239,6 +239,7 @@ export const ValueEditDialog = forwardRef<ValueEditDialogHandle, Props>(
       // 数値型
       return (
         <input
+          className="value-input"
           type="text"
           value={value ?? 0}
           onChange={(e) => {
@@ -254,7 +255,6 @@ export const ValueEditDialog = forwardRef<ValueEditDialogHandle, Props>(
               onChange(parsed);
             }
           }}
-          style={{ flex: 1 }}
           placeholder="10進, 0x(16進), 0b(2進)"
         />
       );
@@ -281,20 +281,8 @@ export const ValueEditDialog = forwardRef<ValueEditDialogHandle, Props>(
         return (
           <div style={{ marginLeft: indent }}>
             {value.map((elem: any, i: number) => (
-              <div
-                key={i}
-                style={{
-                  display: "flex",
-                  gap: "4px",
-                  alignItems: "center",
-                  marginBottom: "2px",
-                }}
-              >
-                <span
-                  style={{ fontSize: "0.8em", color: "#888", minWidth: "30px" }}
-                >
-                  [{i}]
-                </span>
+              <div className="value-array-row" key={i}>
+                <span className="value-array-index">[{i}]</span>
                 {elemIsStruct ? (
                   <StructArrayElementEditor
                     elemType={elemType}
@@ -328,24 +316,12 @@ export const ValueEditDialog = forwardRef<ValueEditDialogHandle, Props>(
         return (
           <div style={{ marginLeft: indent }}>
             {st.fields.map((field) => (
-              <div key={field.name} style={{ marginBottom: "4px" }}>
-                <div
-                  style={{ display: "flex", gap: "4px", alignItems: "center" }}
-                >
-                  <span
-                    style={{
-                      fontSize: "0.85em",
-                      fontWeight: "bold",
-                      minWidth: "80px",
-                    }}
-                  >
-                    {field.name}
-                  </span>
-                  <span style={{ fontSize: "0.75em", color: "#888" }}>
-                    ({field.dataType})
-                  </span>
+              <div className="value-field" key={field.name}>
+                <div className="value-field-header">
+                  <span className="value-field-name">{field.name}</span>
+                  <span className="value-field-type">({field.dataType})</span>
                 </div>
-                <div style={{ marginLeft: "8px" }}>
+                <div className="value-field-body">
                   {renderValueEditor(
                     field.dataType,
                     value[field.name],
@@ -370,19 +346,10 @@ export const ValueEditDialog = forwardRef<ValueEditDialogHandle, Props>(
       <FocusTrap onConfirm={handleUpdateRow}>
         <div
           ref={editDialogRef}
-          className="dialog"
-          style={{
-            minWidth: "450px",
-            maxHeight: "80vh",
-            display: "flex",
-            flexDirection: "column",
-          }}
+          className="dialog dialog-scrollable dialog-w450"
         >
           <h3>値を編集</h3>
-          <div
-            className="dialog-content"
-            style={{ flex: 1, overflowY: "auto" }}
-          >
+          <div className="dialog-content dialog-content-scroll">
             <div className="dialog-row">
               <label>変数名:</label>
               <span className="dialog-value">
@@ -395,12 +362,9 @@ export const ValueEditDialog = forwardRef<ValueEditDialogHandle, Props>(
                 {editingRow ? editingRow.dataType : editingVariable.dataType}
               </span>
             </div>
-            <div
-              className="dialog-row"
-              style={{ flexDirection: "column", alignItems: "flex-start" }}
-            >
+            <div className="dialog-row dialog-row-stacked">
               <label>値:</label>
-              <div style={{ width: "100%" }}>
+              <div className="value-editor-root">
                 {editingRow
                   ? renderValueEditor(
                       editingRow.dataType,

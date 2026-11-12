@@ -643,65 +643,45 @@ export function VariableView() {
                   ? (e) => handleContextMenu(e, row.variable)
                   : undefined
               }
-              style={{
-                backgroundColor:
-                  focusedRowKey === row.key
-                    ? "rgba(100, 160, 255, 0.12)"
-                    : row.isHeader
-                      ? "rgba(255,255,255,0.03)"
-                      : undefined,
-                outline:
-                  focusedRowKey === row.key
-                    ? "1px solid rgba(100,160,255,0.4)"
-                    : undefined,
-                fontWeight:
-                  row.depth === 0 && row.isHeader ? "bold" : undefined,
-              }}
+              className={[
+                focusedRowKey === row.key
+                  ? "row-focused"
+                  : row.isHeader
+                    ? "row-header"
+                    : "",
+                row.depth === 0 && row.isHeader ? "row-root-header" : "",
+              ]
+                .filter(Boolean)
+                .join(" ")}
             >
               <td
-                className="var-name"
-                style={{
-                  paddingLeft: `${8 + row.depth * 16}px`,
-                  cursor: row.isHeader ? "pointer" : undefined,
-                }}
+                className={`var-name${row.isHeader ? " clickable" : ""}`}
+                // 入れ子の深さに応じた字下げ（値が行ごとに変わるので、ここだけ style で指定する）
+                style={{ paddingLeft: `${8 + row.depth * 16}px` }}
                 onClick={row.isHeader ? () => toggleExpand(row.key) : undefined}
               >
                 {row.isHeader ? (
-                  <span
-                    style={{
-                      display: "inline-flex",
-                      alignItems: "center",
-                      gap: "4px",
-                    }}
-                  >
-                    <span
-                      style={{
-                        fontSize: "0.7em",
-                        width: "12px",
-                        display: "inline-block",
-                      }}
-                    >
+                  <span className="var-name-toggle">
+                    <span className="var-expand-icon">
                       {expandedRows.has(row.key) ? "\u25BC" : "\u25B6"}
                     </span>
                     {row.displayName}
                   </span>
                 ) : (
-                  <span style={{ paddingLeft: "16px" }}>{row.displayName}</span>
+                  <span className="var-name-leaf">{row.displayName}</span>
                 )}
               </td>
               <td
-                className="var-type"
-                style={{ fontSize: row.isHeader ? undefined : "0.85em" }}
+                className={`var-type${row.isHeader ? "" : " var-type-child"}`}
               >
                 <span>{row.dataType}</span>
               </td>
               <td
                 className="var-value"
                 onClick={() => valueEditDialogRef.current?.openRow(row)}
-                style={{ cursor: "pointer" }}
               >
                 {row.isHeader ? (
-                  <span style={{ color: "#888", fontSize: "0.85em" }}>
+                  <span className="var-value-summary">
                     {isArrayType(row.dataType) && Array.isArray(row.value)
                       ? `(${row.value.length} 要素)`
                       : `{${row.dataType}}`}
@@ -711,13 +691,12 @@ export function VariableView() {
                 )}
               </td>
               <td
-                className="var-mapping"
+                className={`var-mapping${row.depth === 0 ? " clickable" : ""}`}
                 onClick={
                   row.depth === 0
                     ? () => mappingDialogRef.current?.open(row.variable)
                     : undefined
                 }
-                style={{ cursor: row.depth === 0 ? "pointer" : undefined }}
               >
                 {row.depth === 0 ? (
                   <span>
@@ -750,7 +729,7 @@ export function VariableView() {
                     })()}
                   </span>
                 ) : (
-                  <span style={{ fontSize: "0.85em", color: "#aaa" }}>
+                  <span className="var-mapping-none">
                     {formatMappingsWithOffset(
                       row.variable.mappings,
                       row.wordOffset,
