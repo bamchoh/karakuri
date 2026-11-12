@@ -10,6 +10,10 @@ export function AddClientPollItem(arg1, arg2, arg3, arg4) {
   return window['go']['main']['App']['AddClientPollItem'](arg1, arg2, arg3, arg4);
 }
 
+export function AddClientSavedCommand(arg1, arg2) {
+  return window['go']['main']['App']['AddClientSavedCommand'](arg1, arg2);
+}
+
 export function AddMonitoringItem(arg1) {
   return window['go']['main']['App']['AddMonitoringItem'](arg1);
 }
@@ -80,6 +84,10 @@ export function GetClientPolling(arg1) {
 
 export function GetClientProtocols() {
   return window['go']['main']['App']['GetClientProtocols']();
+}
+
+export function GetClientSavedCommands(arg1) {
+  return window['go']['main']['App']['GetClientSavedCommands'](arg1);
 }
 
 export function GetClients() {
@@ -198,8 +206,16 @@ export function RemoveClientPollItem(arg1, arg2) {
   return window['go']['main']['App']['RemoveClientPollItem'](arg1, arg2);
 }
 
+export function RemoveClientSavedCommand(arg1, arg2) {
+  return window['go']['main']['App']['RemoveClientSavedCommand'](arg1, arg2);
+}
+
 export function RemoveServer(arg1) {
   return window['go']['main']['App']['RemoveServer'](arg1);
+}
+
+export function RenameClientSavedCommand(arg1, arg2, arg3) {
+  return window['go']['main']['App']['RenameClientSavedCommand'](arg1, arg2, arg3);
 }
 
 export function ReorderMonitoringItem(arg1, arg2) {
@@ -212,6 +228,10 @@ export function RunScriptOnce(arg1) {
 
 export function SendClientRequest(arg1, arg2) {
   return window['go']['main']['App']['SendClientRequest'](arg1, arg2);
+}
+
+export function SendClientSavedCommand(arg1, arg2) {
+  return window['go']['main']['App']['SendClientSavedCommand'](arg1, arg2);
 }
 
 export function SetClientFailThreshold(arg1, arg2) {
@@ -264,6 +284,10 @@ export function UpdateClient(arg1, arg2, arg3) {
 
 export function UpdateClientPollItem(arg1, arg2, arg3, arg4, arg5) {
   return window['go']['main']['App']['UpdateClientPollItem'](arg1, arg2, arg3, arg4, arg5);
+}
+
+export function UpdateClientSavedCommand(arg1, arg2, arg3) {
+  return window['go']['main']['App']['UpdateClientSavedCommand'](arg1, arg2, arg3);
 }
 
 export function UpdateMonitoringItem(arg1) {

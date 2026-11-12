@@ -1,14 +1,25 @@
-import { useState, forwardRef, useImperativeHandle, useEffect } from "react";
+import {
+  useState,
+  forwardRef,
+  useImperativeHandle,
+  useEffect,
+  useCallback,
+} from "react";
 import {
   UpdateClient,
   DisconnectClient,
   SendClientRequest,
   ClearClientCommandLogs,
+  GetClientSavedCommands,
+  AddClientSavedCommand,
+  UpdateClientSavedCommand,
+  SendClientSavedCommand,
 } from "../../wailsjs/go/main/App";
 import { application } from "../../wailsjs/go/models";
 import { ChevronDown, ChevronRight, Trash2, Unplug } from "lucide-react";
 import { DynamicField } from "./DynamicField";
-import { ClientCommandComposer } from "./ClientCommandComposer";
+import { ClientCommandDialog, CommandSaveInput } from "./ClientCommandDialog";
+import { ClientSavedCommands } from "./ClientSavedCommands";
 import { ClientCommandLog } from "./ClientCommandLog";
 import { ClientPollingView } from "./ClientPollingView";
 
@@ -78,6 +89,27 @@ export const ClientDetailPane = forwardRef<
   const [error, setError] = useState<string | null>(null);
   const [selectedSeq, setSelectedSeq] = useState<number | null>(null);
 
+  // 保存したコマンド
+  const [savedCommands, setSavedCommands] = useState<
+    application.ClientSavedCommandDTO[]
+  >([]);
+  // コマンドのダイアログ（editing が null なら新しいコマンド）。閉じているときは null
+  const [dialog, setDialog] = useState<{
+    editing: application.ClientSavedCommandDTO | null;
+  } | null>(null);
+
+  const loadSavedCommands = useCallback(async () => {
+    try {
+      setSavedCommands((await GetClientSavedCommands(client.id)) || []);
+    } catch (e) {
+      setError(String(e));
+    }
+  }, [client.id]);
+
+  useEffect(() => {
+    loadSavedCommands();
+  }, [loadSavedCommands]);
+
   useEffect(() => {
     onDirtyChange(dirty);
   }, [dirty, onDirtyChange]);
@@ -116,14 +148,25 @@ export const ClientDetailPane = forwardRef<
     setDirty(true);
   };
 
-  // リクエスト（16 進）を送る。保存していない設定があれば、先に保存する
+  // 履歴のリクエスト（16 進）を送り直す。保存していない設定があれば、先に保存する
   const send = async (requestHex: string) => {
+    if (sending) return;
+    try {
+      setError(null);
+      await sendFromDialog(requestHex);
+    } catch (e) {
+      setError(String(e));
+    }
+  };
+
+  // 保存したコマンドを送る（履歴にはコマンドの名前が付く）
+  const sendSaved = async (command: application.ClientSavedCommandDTO) => {
     if (sending) return;
     if (dirty && !(await saveSettings())) return;
     setSending(true);
     try {
       setError(null);
-      const entry = await SendClientRequest(client.id, requestHex);
+      const entry = await SendClientSavedCommand(client.id, command.id);
       setSelectedSeq(entry.seq);
     } catch (e) {
       setError(String(e));
@@ -131,6 +174,36 @@ export const ClientDetailPane = forwardRef<
       setSending(false);
       await Promise.all([onLogsChanged(), onClientsChanged()]);
     }
+  };
+
+  // ダイアログから送る。失敗（16 進が読めないなど）は例外のまま返し、ダイアログが表示する
+  const sendFromDialog = async (
+    requestHex: string,
+  ): Promise<application.ClientCommandLogDTO> => {
+    if (dirty && !(await saveSettings())) {
+      throw new Error("接続先の設定を保存できませんでした");
+    }
+    setSending(true);
+    try {
+      const entry = await SendClientRequest(client.id, requestHex);
+      setSelectedSeq(entry.seq);
+      return entry;
+    } finally {
+      setSending(false);
+      await Promise.all([onLogsChanged(), onClientsChanged()]);
+    }
+  };
+
+  // ダイアログの内容を保存する（編集中のコマンドがあれば上書き）。失敗は例外のまま返し、ダイアログが表示する
+  const saveFromDialog = async (input: CommandSaveInput) => {
+    const dto = application.ClientSavedCommandInputDTO.createFrom(input);
+    const editing = dialog?.editing;
+    if (editing) {
+      await UpdateClientSavedCommand(client.id, editing.id, dto);
+    } else {
+      await AddClientSavedCommand(client.id, dto);
+    }
+    await loadSavedCommands();
   };
 
   const handleDisconnect = async () => {
@@ -269,11 +342,28 @@ export const ClientDetailPane = forwardRef<
 
         {subTab === "command" ? (
           <>
-            <ClientCommandComposer
-              protocol={protocol}
+            <div className="vscode-setting-category">
+              保存したコマンド（{savedCommands.length}）
+            </div>
+            <ClientSavedCommands
+              clientId={client.id}
+              commands={savedCommands}
+              onChanged={loadSavedCommands}
               sending={sending}
-              onSend={send}
+              onNew={() => setDialog({ editing: null })}
+              onEdit={(c) => setDialog({ editing: c })}
+              onSend={sendSaved}
             />
+            {dialog && (
+              <ClientCommandDialog
+                protocol={protocol}
+                editing={dialog.editing}
+                sending={sending}
+                onSend={sendFromDialog}
+                onSave={saveFromDialog}
+                onClose={() => setDialog(null)}
+              />
+            )}
 
             <div className="vscode-setting-category">結果と履歴</div>
             <ClientCommandLog

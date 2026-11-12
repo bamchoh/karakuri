@@ -533,6 +533,36 @@ func TestModbusClient_VariableMapping(t *testing.T) {
 	waitUntil("状態が戻る", func() bool { st := status(); return st.State == "ok" && !st.WritePending })
 }
 
+// スクリプトから、保存したコマンドと 16 進のリクエストを、Karakuri 自身の Modbus TCP サーバーへ送る
+func TestModbusClient_FromScript(t *testing.T) {
+	svc := newService(t)
+	port := addModbus(t, svc)
+	must(t, svc.StartServer(modbusTCP))
+	c, err := svc.AddClient(modbusTCP, "自分", map[string]interface{}{"host": "127.0.0.1", "port": port, "unitId": 1, "timeoutMs": 300})
+	must(t, err)
+	_, err = svc.AddClientSavedCommand(c.ID, application.ClientSavedCommandInputDTO{
+		Name: "先頭 2 個", Mode: "build", CommandID: "3", Params: map[string]interface{}{"address": float64(0), "count": float64(2)},
+	})
+	must(t, err)
+	must(t, svc.WriteWord(modbusTCP, hr, 0, 11))
+	must(t, svc.WriteWord(modbusTCP, hr, 1, 22))
+
+	res, err := svc.RunScriptOnce(`
+		const r = plc.sendCommand("自分", "先頭 2 個");
+		const w = plc.sendRequest("自分", "06 00 05 00 2A"); // FC06: アドレス 5 に 42
+		return r.status + ":" + (r.values[0].word + r.values[1].word) + "/" + w.status;
+	`)
+	must(t, err)
+	if fmt.Sprint(res) != "ok:33/ok" {
+		t.Fatalf("script = %v", res)
+	}
+	words, err := svc.ReadWords(modbusTCP, hr, 5, 1)
+	must(t, err)
+	if words[0] != 42 {
+		t.Fatalf("スクリプトから書いた値 = %v", words)
+	}
+}
+
 // ===== プロジェクトの保存と読み込み =====
 
 func TestProject_ImportReplacesServersAndState(t *testing.T) {

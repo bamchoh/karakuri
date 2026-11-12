@@ -391,6 +391,36 @@ func (a *App) SetClientFailThreshold(id string, n int) error {
 	return a.plcService.SetClientFailThreshold(id, n)
 }
 
+// GetClientSavedCommands は接続先の保存したコマンドを返す
+func (a *App) GetClientSavedCommands(id string) ([]application.ClientSavedCommandDTO, error) {
+	return a.plcService.GetClientSavedCommands(id)
+}
+
+// AddClientSavedCommand はコマンドを保存する
+func (a *App) AddClientSavedCommand(id string, in application.ClientSavedCommandInputDTO) (*application.ClientSavedCommandDTO, error) {
+	return a.plcService.AddClientSavedCommand(id, in)
+}
+
+// UpdateClientSavedCommand は保存したコマンドを置き換える
+func (a *App) UpdateClientSavedCommand(id string, commandID string, in application.ClientSavedCommandInputDTO) error {
+	return a.plcService.UpdateClientSavedCommand(id, commandID, in)
+}
+
+// RenameClientSavedCommand は保存したコマンドの名前を変える
+func (a *App) RenameClientSavedCommand(id string, commandID string, name string) error {
+	return a.plcService.RenameClientSavedCommand(id, commandID, name)
+}
+
+// RemoveClientSavedCommand は保存したコマンドを削除する
+func (a *App) RemoveClientSavedCommand(id string, commandID string) error {
+	return a.plcService.RemoveClientSavedCommand(id, commandID)
+}
+
+// SendClientSavedCommand は保存したコマンドを送る
+func (a *App) SendClientSavedCommand(id string, commandID string) (*application.ClientCommandLogDTO, error) {
+	return a.plcService.SendClientSavedCommand(id, commandID)
+}
+
 // GetMappingTargets は変数をマッピングできる先（サーバーと、接続先）を返す
 func (a *App) GetMappingTargets() []application.MappingTargetDTO {
 	return a.plcService.GetMappingTargets()
