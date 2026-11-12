@@ -1,10 +1,10 @@
 package modbus
 
 import (
-	"sync"
 	"context"
 	"errors"
 	"fmt"
+	"sync"
 	"time"
 
 	"karakuri/internal/domain/protocol"
