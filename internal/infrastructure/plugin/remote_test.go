@@ -747,3 +747,64 @@ func TestListener_SyncSurvivesStartAndRestart(t *testing.T) {
 		}
 	}
 }
+
+// ===== UnitID の応答設定の寿命（#49: 起動前から設定でき、起動し直しても残る） =====
+
+func TestServer_UnitIDSettingsBeforeStartAndAcrossRestart(t *testing.T) {
+	pluginSide, _, rs := stoppedServer(t)
+
+	// 一度も起動していなくても設定でき、読み返せる
+	rs.SetUnitIdEnabled(7, false)
+	rs.SetUnitIdEnabled(200, false)
+	rs.SetUnitIdEnabled(9, false)
+	rs.SetUnitIdEnabled(9, true)
+	if got := rs.GetDisabledUnitIDs(); !reflect.DeepEqual(got, []uint8{7, 200}) {
+		t.Fatalf("起動前の設定 = %v, want [7 200]", got)
+	}
+
+	// 起動すると、プラグイン側のサーバーに渡っている
+	if err := rs.Start(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	if got := pluginSide.pluginServer().GetDisabledUnitIDs(); !reflect.DeepEqual(got, []uint8{7, 200}) {
+		t.Errorf("起動後のプラグイン側のサーバー = %v, want [7 200]", got)
+	}
+
+	// 起動中の変更は、動いているサーバーにすぐ反映される
+	rs.SetUnitIdEnabled(5, false)
+	rs.SetUnitIdEnabled(200, true)
+	if got := pluginSide.pluginServer().GetDisabledUnitIDs(); !reflect.DeepEqual(got, []uint8{5, 7}) {
+		t.Errorf("起動中に変更したあとのプラグイン側のサーバー = %v, want [5 7]", got)
+	}
+
+	// 停止中も読め、起動し直しても残る（サーバーは作り直される）
+	first := pluginSide.pluginServer()
+	if err := rs.Stop(); err != nil {
+		t.Fatal(err)
+	}
+	if got := rs.GetDisabledUnitIDs(); !reflect.DeepEqual(got, []uint8{5, 7}) {
+		t.Errorf("停止中の設定 = %v, want [5 7]", got)
+	}
+	if err := rs.Start(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	if pluginSide.pluginServer() == first {
+		t.Fatal("テストの前提が違う: 起動し直してもサーバーが作り直されていない")
+	}
+	if got := pluginSide.pluginServer().GetDisabledUnitIDs(); !reflect.DeepEqual(got, []uint8{5, 7}) {
+		t.Errorf("起動し直したあとのプラグイン側のサーバー = %v, want [5 7]", got)
+	}
+	if got := rs.GetDisabledUnitIDs(); !reflect.DeepEqual(got, []uint8{5, 7}) {
+		t.Errorf("起動し直したあとの設定 = %v, want [5 7]", got)
+	}
+
+	// 一括設定は、それまでの設定を置き換える
+	rs.SetDisabledUnitIDs([]uint8{3, 1, 2})
+	if got := pluginSide.pluginServer().GetDisabledUnitIDs(); !reflect.DeepEqual(got, []uint8{1, 2, 3}) {
+		t.Errorf("一括設定のあとのプラグイン側のサーバー = %v, want [1 2 3]", got)
+	}
+	rs.SetDisabledUnitIDs(nil)
+	if got := rs.GetDisabledUnitIDs(); len(got) != 0 {
+		t.Errorf("空の一括設定のあと = %v, want 空", got)
+	}
+}

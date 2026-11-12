@@ -272,6 +272,8 @@ internal/
 - **UnitIDConfigurable** (`internal/domain/protocol/server.go`): UnitID ごとの応答有効・無効を設定できる ProtocolServer 用インターフェース（`GetDisabledUnitIDs` / `SetUnitIdEnabled` / `SetDisabledUnitIDs`）
   - `ProtocolCapabilities.SupportsUnitID: true` のプロトコルで利用される。ホストと pluginruntime はこの型で判定する（個別のローカル定義は持たない）
   - UnitID ごとのセッション追跡（`SessionManager`）は Modbus 固有のため `cmd/modbus-plugin/internal/modbus/session.go` にある
+  - 応答しない UnitID の一覧は、プラグイン側の `pluginruntime.Server` が持つ。サーバーは起動のたびに作り直すため、作ったサーバーに毎回渡す。サーバーを一度も起動していなくても設定でき、起動し直しても残る
+  - Modbus TCP は、オフにした UnitID に例外応答（Illegal Function）を返す。RTU / ASCII は応答しない
 - **ScriptEngine** (`internal/infrastructure/scripting/engine.go`): gojaベースのJavaScript実行エンジン
   - `plc`オブジェクトでDataStoreおよびVariableStoreにアクセス可能
   - スクリプトコードをIIFE `(function(){...})();` でラップして、const/let再宣言エラーを回避
