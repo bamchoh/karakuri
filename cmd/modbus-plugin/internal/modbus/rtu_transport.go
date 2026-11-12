@@ -3,24 +3,19 @@ package modbus
 import (
 	"fmt"
 	"karakuri/cmd/modbus-plugin/internal/modbus/rtu"
-	"karakuri/internal/domain/protocol"
 )
 
 type RTUTransport struct {
 	server *rtu.RTUServer
 
-	config         *ModbusConfig
-	handler        *DataStoreHandler
-	eventEmitter   protocol.CommunicationEventEmitter
-	sessionManager *SessionManager
+	config  *ModbusConfig
+	handler *DataStoreHandler
 }
 
-func newRTUTransport(config *ModbusConfig, handler *DataStoreHandler, eventEmitter protocol.CommunicationEventEmitter, sessionManager *SessionManager) *RTUTransport {
+func newRTUTransport(config *ModbusConfig, handler *DataStoreHandler) *RTUTransport {
 	return &RTUTransport{
-		config:         config,
-		handler:        handler,
-		eventEmitter:   eventEmitter,
-		sessionManager: sessionManager,
+		config:  config,
+		handler: handler,
 	}
 }
 
@@ -34,10 +29,7 @@ func (t *RTUTransport) Start() error {
 		Parity:   t.config.Parity,
 	}
 
-	var adapter rtu.RequestHandler
-	rtuAdapter := NewRTUDataStoreAdapter(t.handler)
-	rtuAdapter.SetEventEmitter(t.eventEmitter)
-	adapter = rtuAdapter
+	adapter := NewRTUDataStoreAdapter(t.handler)
 	rtuSrv := rtu.NewRTUServer(config, adapter)
 
 	if err := rtuSrv.Start(); err != nil {

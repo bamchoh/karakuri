@@ -311,10 +311,6 @@ func (s *PLCService) UpdateServerConfig(dto *ServerConfigDTO) error {
 		inst.variant = dto.Variant
 		inst.config = config
 		inst.server = server
-
-		if s.eventEmitter != nil {
-			s.setEmitterToServerInstance(inst)
-		}
 	}
 
 	// 設定を更新

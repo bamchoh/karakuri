@@ -7,8 +7,6 @@ import (
 	"net"
 	"sync"
 
-	"karakuri/internal/domain/protocol"
-
 	"github.com/simonvetter/modbus"
 )
 
@@ -25,10 +23,8 @@ import (
 type TCPTransport struct {
 	server *modbus.ModbusServer
 
-	config         *ModbusConfig
-	handler        *DataStoreHandler
-	eventEmitter   protocol.CommunicationEventEmitter
-	sessionManager *SessionManager
+	config  *ModbusConfig
+	handler *DataStoreHandler
 
 	// 中継
 	listener    net.Listener
@@ -39,12 +35,10 @@ type TCPTransport struct {
 	wg          sync.WaitGroup
 }
 
-func newTCPTransport(config *ModbusConfig, handler *DataStoreHandler, eventEmitter protocol.CommunicationEventEmitter, sessionManager *SessionManager) *TCPTransport {
+func newTCPTransport(config *ModbusConfig, handler *DataStoreHandler) *TCPTransport {
 	return &TCPTransport{
-		config:         config,
-		handler:        handler,
-		eventEmitter:   eventEmitter,
-		sessionManager: sessionManager,
+		config:  config,
+		handler: handler,
 	}
 }
 
@@ -75,8 +69,6 @@ func (t *TCPTransport) Start() error {
 // startBackend はライブラリのサーバーを 127.0.0.1 の空きポートで起動する
 func (t *TCPTransport) startBackend() error {
 	reqHandler := NewDataStoreRequestHandler(t.handler)
-	reqHandler.SetEventEmitter(t.eventEmitter)
-	reqHandler.SetSessionManager(t.sessionManager)
 
 	// ライブラリはポートを自分で選べないので、空きポートを調べてから渡す。
 	// 調べてから開くまでの間に他のプロセスに取られた場合は、別のポートでやり直す
@@ -197,11 +189,7 @@ func (t *TCPTransport) forwardRequests(client io.Reader, backend io.Writer) {
 
 		unitID := header[6]
 		if !t.handler.IsUnitIdEnabled(unitID) {
-			// 応答しない。受信したことだけを通信インジケーターに伝える
-			if t.eventEmitter != nil {
-				t.eventEmitter.EmitRx()
-			}
-			continue
+			continue // 応答しない
 		}
 		if _, err := backend.Write(frame); err != nil {
 			return

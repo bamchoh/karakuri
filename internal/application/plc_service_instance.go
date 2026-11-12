@@ -66,10 +66,6 @@ func (s *PLCService) attachServer(inst *serverInstance) error {
 	inst.server = server
 	inst.changeListener = changeListener
 	inst.cancelChange = cancelChange
-
-	if s.eventEmitter != nil {
-		s.setEmitterToServerInstance(inst)
-	}
 	return nil
 }
 

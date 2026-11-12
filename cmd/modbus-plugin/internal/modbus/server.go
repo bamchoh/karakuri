@@ -28,15 +28,15 @@ type Server struct {
 }
 
 // NewServerWithHandler はDataStoreHandlerを使用するサーバーを作成する
-func NewServerWithHandler(config *ModbusConfig, handler *DataStoreHandler, eventEmitter protocol.CommunicationEventEmitter, sessionManager *SessionManager) *Server {
+func NewServerWithHandler(config *ModbusConfig, handler *DataStoreHandler) *Server {
 	var transport Transport
 	switch config.GetVariant() {
 	case VariantRTU:
-		transport = newRTUTransport(config, handler, eventEmitter, sessionManager)
+		transport = newRTUTransport(config, handler)
 	case VariantASCII:
-		transport = newASCIITransport(config, handler, eventEmitter, sessionManager)
+		transport = newASCIITransport(config, handler)
 	default:
-		transport = newTCPTransport(config, handler, eventEmitter, sessionManager)
+		transport = newTCPTransport(config, handler)
 	}
 
 	return &Server{

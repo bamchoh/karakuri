@@ -67,23 +67,9 @@ func (d *hookStore) WriteBits(area string, address uint32, values []bool) error 
 	return nil
 }
 
-// testServer は通信イベントの送信先とノードアドレスを持つフェイクのサーバー
+// testServer はノードアドレスを返せるフェイクのサーバー
 type testServer struct {
 	*protocoltest.Server
-	mu      sync.Mutex
-	emitter protocol.CommunicationEventEmitter
-}
-
-func (s *testServer) SetEventEmitter(e protocol.CommunicationEventEmitter) {
-	s.mu.Lock()
-	s.emitter = e
-	s.mu.Unlock()
-}
-
-func (s *testServer) getEmitter() protocol.CommunicationEventEmitter {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return s.emitter
 }
 
 // NodeAddresses は "port<設定のポート>:<変数名>" を返す。"!" を含む名前は公開できない
