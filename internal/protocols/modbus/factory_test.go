@@ -24,6 +24,12 @@ func TestFactory_ConfigRoundTrip(t *testing.T) {
 					t.Errorf("ConfigToMap に %q がない", field.Name)
 				}
 			}
+			// 設定の項目の既定値は、実際の既定の設定と同じ
+			for _, field := range f.GetConfigFields("") {
+				if !reflect.DeepEqual(field.Default, m[field.Name]) {
+					t.Errorf("%s の既定値 = %v, 既定の設定は %v", field.Name, field.Default, m[field.Name])
+				}
+			}
 			if len(names) != len(m) {
 				t.Errorf("項目 %v と map %v の数が違う", names, m)
 			}

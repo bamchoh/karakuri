@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"slices"
+	"strconv"
 	"sync"
 
 	"karakuri/internal/domain/protocol"
@@ -76,9 +77,10 @@ func (f *TCPFactory) ConfigVariants() []protocol.ConfigVariant {
 
 // GetConfigFields は設定フィールドを返す
 func (f *TCPFactory) GetConfigFields(_ string) []protocol.ConfigField {
+	def := DefaultTCPConfig()
 	return []protocol.ConfigField{
-		{Name: "tcpAddress", Label: "アドレス", Description: "待ち受けるネットワークアドレス。0.0.0.0 で全インターフェースに対応します。", Type: "text", Required: true, Default: "0.0.0.0"},
-		{Name: "tcpPort", Label: "ポート", Description: "Modbus TCP の待ち受けポート番号。標準ポートは 502 です。", Type: "number", Required: true, Default: 502, Min: intPtr(1), Max: intPtr(65535)},
+		{Name: "tcpAddress", Label: "アドレス", Description: "待ち受けるネットワークアドレス。0.0.0.0 で全インターフェースに対応します。", Type: "text", Required: true, Default: def.TCPAddress},
+		{Name: "tcpPort", Label: "ポート", Description: "Modbus TCP の待ち受けポート番号。標準ポートは 502 です。", Type: "number", Required: true, Default: def.TCPPort, Min: intPtr(1), Max: intPtr(65535)},
 	}
 }
 
@@ -131,7 +133,7 @@ func (f *RTUFactory) ConfigVariants() []protocol.ConfigVariant {
 
 // GetConfigFields は設定フィールドを返す
 func (f *RTUFactory) GetConfigFields(_ string) []protocol.ConfigField {
-	return serialConfigFields(f.DisplayName(), "8")
+	return serialConfigFields(f.DisplayName(), DefaultRTUConfig())
 }
 
 // ConfigToMap は設定をmapに変換する
@@ -173,7 +175,7 @@ func (f *ASCIIFactory) ConfigVariants() []protocol.ConfigVariant {
 
 // GetConfigFields は設定フィールドを返す
 func (f *ASCIIFactory) GetConfigFields(_ string) []protocol.ConfigField {
-	return serialConfigFields(f.DisplayName(), "7")
+	return serialConfigFields(f.DisplayName(), DefaultASCIIConfig())
 }
 
 // ConfigToMap は設定をmapに変換する
@@ -190,26 +192,27 @@ func (f *ASCIIFactory) MapToConfig(_ string, settings map[string]interface{}) (p
 // シリアル通信（RTU / ASCII）で共通の設定
 // ============================================================
 
-// serialConfigFields はシリアル通信の設定フィールドを返す。displayName と usualDataBits は、データビットの説明文に入れる
-func serialConfigFields(displayName, usualDataBits string) []protocol.ConfigField {
+// serialConfigFields はシリアル通信の設定フィールドを返す。
+// 各項目の既定値と、データビットの説明文の「通常 n ビット」は、そのプロトコルの既定の設定（def）から取る
+func serialConfigFields(displayName string, def *ModbusConfig) []protocol.ConfigField {
 	return []protocol.ConfigField{
-		{Name: "serialPort", Label: "シリアルポート", Description: "通信に使用するシリアルポート（例: COM1、COM3）。", Type: "serialport", Required: true, Default: "COM1", Category: "基本設定"},
-		{Name: "baudRate", Label: "ボーレート", Description: "シリアル通信の速度（bps）。接続先デバイスと一致させてください。", Type: "select", Required: true, Default: 115200, Category: "基本設定", Options: []protocol.FieldOption{
+		{Name: "serialPort", Label: "シリアルポート", Description: "通信に使用するシリアルポート（例: COM1、COM3）。", Type: "serialport", Required: true, Default: def.SerialPort, Category: "基本設定"},
+		{Name: "baudRate", Label: "ボーレート", Description: "シリアル通信の速度（bps）。接続先デバイスと一致させてください。", Type: "select", Required: true, Default: def.BaudRate, Category: "基本設定", Options: []protocol.FieldOption{
 			{Value: "9600", Label: "9600"},
 			{Value: "19200", Label: "19200"},
 			{Value: "38400", Label: "38400"},
 			{Value: "57600", Label: "57600"},
 			{Value: "115200", Label: "115200"},
 		}},
-		{Name: "dataBits", Label: "データビット", Description: "1フレームあたりのデータビット数。" + displayName + " は通常 " + usualDataBits + " ビットです。", Type: "select", Required: true, Default: 8, Category: "フレーム設定", Options: []protocol.FieldOption{
+		{Name: "dataBits", Label: "データビット", Description: "1フレームあたりのデータビット数。" + displayName + " は通常 " + strconv.Itoa(def.DataBits) + " ビットです。", Type: "select", Required: true, Default: def.DataBits, Category: "フレーム設定", Options: []protocol.FieldOption{
 			{Value: "7", Label: "7"},
 			{Value: "8", Label: "8"},
 		}},
-		{Name: "stopBits", Label: "ストップビット", Description: "フレーム末尾のストップビット数。", Type: "select", Required: true, Default: 1, Category: "フレーム設定", Options: []protocol.FieldOption{
+		{Name: "stopBits", Label: "ストップビット", Description: "フレーム末尾のストップビット数。", Type: "select", Required: true, Default: def.StopBits, Category: "フレーム設定", Options: []protocol.FieldOption{
 			{Value: "1", Label: "1"},
 			{Value: "2", Label: "2"},
 		}},
-		{Name: "parity", Label: "パリティ", Description: "エラー検出用のパリティビット。None（N）、Even（E）、Odd（O）から選択します。", Type: "select", Required: true, Default: "N", Category: "フレーム設定", Options: []protocol.FieldOption{
+		{Name: "parity", Label: "パリティ", Description: "エラー検出用のパリティビット。None（N）、Even（E）、Odd（O）から選択します。", Type: "select", Required: true, Default: def.Parity, Category: "フレーム設定", Options: []protocol.FieldOption{
 			{Value: "N", Label: "None"},
 			{Value: "E", Label: "Even"},
 			{Value: "O", Label: "Odd"},
