@@ -139,13 +139,9 @@ export const StructTypeDialog = forwardRef<StructTypeDialogHandle, Props>(
     if (!isOpen) return null;
     return (
       <FocusTrap onConfirm={handleRegisterStructType}>
-        <div
-          className="dialog dialog-scrollable dialog-w500"
-        >
+        <div className="dialog dialog-scrollable dialog-w500">
           <h3>構造体型管理</h3>
-          <div
-            className="dialog-content dialog-content-scroll"
-          >
+          <div className="dialog-content dialog-content-scroll">
             {/* 既存の構造体型一覧 */}
             {structTypes.length > 0 && (
               <div className="dialog-section">
@@ -254,10 +250,7 @@ export const StructTypeDialog = forwardRef<StructTypeDialogHandle, Props>(
             <button onClick={close} className="btn-secondary">
               閉じる
             </button>
-            <button
-              onClick={handleRegisterStructType}
-              className="btn-primary"
-            >
+            <button onClick={handleRegisterStructType} className="btn-primary">
               {editingStructTypeName ? "更新" : "型を登録"}
             </button>
           </div>

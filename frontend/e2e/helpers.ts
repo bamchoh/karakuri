@@ -79,7 +79,14 @@ export async function readWords(page: Page, address: number, count = 1) {
 }
 
 export async function writeWord(page: Page, address: number, value: number) {
-  await api(page, "WriteWord", "modbus-tcp", "holdingRegisters", address, value);
+  await api(
+    page,
+    "WriteWord",
+    "modbus-tcp",
+    "holdingRegisters",
+    address,
+    value,
+  );
 }
 
 // ===== 変数画面の操作 =====

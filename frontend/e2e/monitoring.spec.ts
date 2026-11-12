@@ -84,7 +84,9 @@ test.describe("モニタリング", () => {
     const dialog = addDialog(page);
     await expect(dialog).toBeVisible();
     // 最初のワードのエリアが選ばれ、アドレスは 1 始まりで表示する
-    await expect(field(dialog, "メモリエリア:")).toHaveValue("holdingRegisters");
+    await expect(field(dialog, "メモリエリア:")).toHaveValue(
+      "holdingRegisters",
+    );
     await expect(field(dialog, "開始アドレス:")).toHaveValue("1");
     await expect(field(dialog, "個数:")).toHaveValue("1");
     // サーバーが 1 つのときは、プロトコルを選ばない
@@ -288,9 +290,7 @@ test.describe("モニタリング", () => {
     expect(await readWords(page, 0)).toEqual([56]);
   });
 
-  test("ビットの項目は ON / OFF で表示し、文字で書き込む", async ({
-    page,
-  }) => {
+  test("ビットの項目は ON / OFF で表示し、文字で書き込む", async ({ page }) => {
     await addItem(page, 2, { memoryArea: "coils" });
     await openRegisters(page, "モニタリング");
     const row = rows(page).first();
@@ -347,11 +347,9 @@ test.describe("モニタリング", () => {
       .boundingBox())!;
     await page.mouse.move(from.x + from.width / 2, from.y + from.height / 2);
     await page.mouse.down();
-    await page.mouse.move(
-      to.x + to.width / 2,
-      to.y + to.height / 2 + 4,
-      { steps: 12 },
-    );
+    await page.mouse.move(to.x + to.width / 2, to.y + to.height / 2 + 4, {
+      steps: 12,
+    });
     await page.mouse.up();
     await expect.poll(addresses).toEqual(["2", "3", "1"]);
     // 並び順は保存される
@@ -388,7 +386,9 @@ test.describe("モニタリング", () => {
     await expect(protocol).toBeVisible();
     await expect(protocol.locator("option")).toHaveCount(2);
     await protocol.selectOption("modbus-tcp");
-    await expect(field(dialog, "メモリエリア:")).toHaveValue("holdingRegisters");
+    await expect(field(dialog, "メモリエリア:")).toHaveValue(
+      "holdingRegisters",
+    );
     await field(dialog, "開始アドレス:").fill("8");
     await dialog.getByRole("button", { name: "追加" }).click();
     await expect(rows(page)).toHaveCount(2);

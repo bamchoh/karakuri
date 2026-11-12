@@ -105,7 +105,8 @@ export const MappingDialog = forwardRef<MappingDialogHandle, Props>(
     // マッピングを追加
     const handleAddMapping = () => {
       const firstProtocol = serverInstances[0]?.protocolType || "";
-      const firstArea = (memoryAreasByProtocol[firstProtocol] || [])[0]?.id || "";
+      const firstArea =
+        (memoryAreasByProtocol[firstProtocol] || [])[0]?.id || "";
       setEditMappings([
         ...editMappings,
         {
@@ -181,8 +182,7 @@ export const MappingDialog = forwardRef<MappingDialogHandle, Props>(
                       const updated = [...editMappings];
                       const newProtocol = e.target.value;
                       const firstArea =
-                        (memoryAreasByProtocol[newProtocol] || [])[0]?.id ||
-                        "";
+                        (memoryAreasByProtocol[newProtocol] || [])[0]?.id || "";
                       updated[index] = {
                         ...updated[index],
                         protocolType: newProtocol,
@@ -192,10 +192,7 @@ export const MappingDialog = forwardRef<MappingDialogHandle, Props>(
                     }}
                   >
                     {serverInstances.map((inst) => (
-                      <option
-                        key={inst.protocolType}
-                        value={inst.protocolType}
-                      >
+                      <option key={inst.protocolType} value={inst.protocolType}>
                         {inst.displayName}
                       </option>
                     ))}
@@ -213,13 +210,11 @@ export const MappingDialog = forwardRef<MappingDialogHandle, Props>(
                       setEditMappings(updated);
                     }}
                   >
-                    {(memoryAreasByProtocol[m.protocolType] || []).map(
-                      (a) => (
-                        <option key={a.id} value={a.id}>
-                          {a.displayName}
-                        </option>
-                      ),
-                    )}
+                    {(memoryAreasByProtocol[m.protocolType] || []).map((a) => (
+                      <option key={a.id} value={a.id}>
+                        {a.displayName}
+                      </option>
+                    ))}
                   </select>
 
                   <input
@@ -235,8 +230,7 @@ export const MappingDialog = forwardRef<MappingDialogHandle, Props>(
                         m.protocolType,
                         m.memoryArea,
                       );
-                      const v =
-                        parseInt(e.target.value) || (oneOrigin ? 1 : 0);
+                      const v = parseInt(e.target.value) || (oneOrigin ? 1 : 0);
                       const updated = [...editMappings];
                       updated[index] = {
                         ...updated[index],
@@ -244,9 +238,7 @@ export const MappingDialog = forwardRef<MappingDialogHandle, Props>(
                       };
                       setEditMappings(updated);
                     }}
-                    min={
-                      isOneOriginArea(m.protocolType, m.memoryArea) ? 1 : 0
-                    }
+                    min={isOneOriginArea(m.protocolType, m.memoryArea) ? 1 : 0}
                   />
 
                   <select
@@ -370,10 +362,7 @@ export const MappingDialog = forwardRef<MappingDialogHandle, Props>(
             })()}
           </div>
           <div className="dialog-buttons">
-            <button
-              onClick={() => setIsOpen(false)}
-              className="btn-secondary"
-            >
+            <button onClick={() => setIsOpen(false)} className="btn-secondary">
               キャンセル
             </button>
             <button onClick={handleSaveMappings} className="btn-primary">

@@ -13,7 +13,9 @@ test.afterEach(async ({ page }) => {
 });
 
 const disabled = (page: Page) =>
-  api<number[]>(page, "GetDisabledUnitIDs", "modbus-tcp").then((ids) => ids || []);
+  api<number[]>(page, "GetDisabledUnitIDs", "modbus-tcp").then(
+    (ids) => ids || [],
+  );
 
 async function addStoppedModbusServer(page: Page) {
   await api(page, "AddServer", "modbus-tcp", "");

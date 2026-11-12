@@ -142,9 +142,10 @@ test.describe("変数追加ダイアログ", () => {
   test("構造体型は、型が登録されているときだけ選べる", async ({ page }) => {
     await page.getByRole("button", { name: "変数を追加" }).click();
     let dialog = dialogByTitle(page, "変数を追加");
-    await expect(
-      field(dialog, "型カテゴリ:").locator("option"),
-    ).toHaveText(["スカラー型", "配列型"]);
+    await expect(field(dialog, "型カテゴリ:").locator("option")).toHaveText([
+      "スカラー型",
+      "配列型",
+    ]);
     await dialog.getByRole("button", { name: "キャンセル" }).click();
 
     await api(page, "RegisterStructType", MOTOR_TYPE);
@@ -183,9 +184,12 @@ test.describe("構造体型管理ダイアログ", () => {
 
     // 1 つ目: STRING[10]、2 つ目: DINT の配列
     const card = (i: number) =>
-      dialog.locator(".dialog-row", {
-        has: page.locator("label", { hasText: /^名前:$/ }),
-      }).nth(i).locator("xpath=..");
+      dialog
+        .locator(".dialog-row", {
+          has: page.locator("label", { hasText: /^名前:$/ }),
+        })
+        .nth(i)
+        .locator("xpath=..");
     await field(card(0), "名前:").fill("label");
     await field(card(0), "データ型:").selectOption("STRING");
     await field(card(0), "バイト長:").fill("10");
@@ -301,14 +305,18 @@ test.describe("構造体型管理ダイアログ", () => {
 });
 
 test.describe("変数の編集（名前・データ型）ダイアログ", () => {
-  test("右クリックメニューから開き、現在の定義が入っている", async ({ page }) => {
+  test("右クリックメニューから開き、現在の定義が入っている", async ({
+    page,
+  }) => {
     await createVariable(page, "Label", "STRING[8]", "abc");
     await createVariable(page, "Grid", "ARRAY[1..2, 0..1] OF REAL", [
       [0, 0],
       [0, 0],
     ]);
 
-    await (await openContextMenu(page, "Label"))
+    await (
+      await openContextMenu(page, "Label")
+    )
       .getByRole("button", { name: "編集" })
       .click();
     const dialog = dialogByTitle(page, "変数を編集");
@@ -319,7 +327,9 @@ test.describe("変数の編集（名前・データ型）ダイアログ", () =>
     await dialog.getByRole("button", { name: "キャンセル" }).click();
     await expect(dialog).toBeHidden();
 
-    await (await openContextMenu(page, "Grid"))
+    await (
+      await openContextMenu(page, "Grid")
+    )
       .getByRole("button", { name: "編集" })
       .click();
     await expect(field(dialog, "型カテゴリ:")).toHaveValue("array");
@@ -343,14 +353,18 @@ test.describe("変数の編集（名前・データ型）ダイアログ", () =>
     await createVariable(page, "Names", "ARRAY[1..2] OF STRING[6]", ["", ""]);
     const dialog = dialogByTitle(page, "変数を編集");
 
-    await (await openContextMenu(page, "M1"))
+    await (
+      await openContextMenu(page, "M1")
+    )
       .getByRole("button", { name: "編集" })
       .click();
     await expect(field(dialog, "型カテゴリ:")).toHaveValue("struct");
     await expect(field(dialog, "構造体型:")).toHaveValue("Motor");
     await page.keyboard.press("Escape");
 
-    await (await openContextMenu(page, "Names"))
+    await (
+      await openContextMenu(page, "Names")
+    )
       .getByRole("button", { name: "編集" })
       .click();
     await expect(field(dialog, "型カテゴリ:")).toHaveValue("array");
@@ -368,7 +382,9 @@ test.describe("変数の編集（名前・データ型）ダイアログ", () =>
 
   test("名前とデータ型を変更できる（値は初期値に戻る）", async ({ page }) => {
     await createVariable(page, "Old", "INT", 7);
-    await (await openContextMenu(page, "Old"))
+    await (
+      await openContextMenu(page, "Old")
+    )
       .getByRole("button", { name: "編集" })
       .click();
     const dialog = dialogByTitle(page, "変数を編集");
@@ -444,9 +460,9 @@ test.describe("値を編集ダイアログ", () => {
     await dialog.locator("input").fill("abcdef");
     await expect(dialog.locator("input")).toHaveValue("abcd");
     await dialog.getByRole("button", { name: "更新" }).click();
-    await expect(
-      variableRow(page, "Label").locator("td.var-value"),
-    ).toHaveText('"abcd"');
+    await expect(variableRow(page, "Label").locator("td.var-value")).toHaveText(
+      '"abcd"',
+    );
   });
 
   test("構造体のフィールドと配列の要素を、行ごとに編集できる", async ({
@@ -563,7 +579,12 @@ test.describe("値を編集ダイアログ", () => {
       "ARRAY[0..1] OF Motor",
     );
     // 構造体の配列は要素ごとに折りたたまれている。2 つ目を開いて speed を変える
-    await dialog.getByText("[1]").locator("xpath=..").locator("div").first().click();
+    await dialog
+      .getByText("[1]")
+      .locator("xpath=..")
+      .locator("div")
+      .first()
+      .click();
     await shot(page, "value-edit-struct-array");
     const inputs = dialog.locator("input");
     await expect(inputs).toHaveCount(1);
@@ -577,7 +598,12 @@ test.describe("値を編集ダイアログ", () => {
     await expect(dialog).toBeHidden();
 
     await valueCell.click();
-    await dialog.getByText("[1]").locator("xpath=..").locator("div").first().click();
+    await dialog
+      .getByText("[1]")
+      .locator("xpath=..")
+      .locator("div")
+      .first()
+      .click();
     await dialog.locator("input").fill("99");
     await dialog.getByRole("button", { name: "更新" }).click();
     await expect(dialog).toBeHidden();

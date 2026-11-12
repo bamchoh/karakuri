@@ -117,7 +117,10 @@ export const BulkMappingDialog = forwardRef<BulkMappingDialogHandle, Props>(
       setBulkProtocol(firstProtocol);
       setBulkRows(buildBulkRows(variables, firstProtocol));
       if (first?.supportsNodePublishing) {
-        loadNodeAddresses(firstProtocol, variables.map((v) => v.id));
+        loadNodeAddresses(
+          firstProtocol,
+          variables.map((v) => v.id),
+        );
       }
       setIsOpen(true);
     };
@@ -132,7 +135,10 @@ export const BulkMappingDialog = forwardRef<BulkMappingDialogHandle, Props>(
       setBulkProtocol(newProtocol);
       setBulkRows(buildBulkRows(variables, newProtocol));
       if (isNodePublishingProtocol(newProtocol)) {
-        loadNodeAddresses(newProtocol, variables.map((v) => v.id));
+        loadNodeAddresses(
+          newProtocol,
+          variables.map((v) => v.id),
+        );
       }
     };
 
@@ -274,14 +280,10 @@ export const BulkMappingDialog = forwardRef<BulkMappingDialogHandle, Props>(
     if (!isOpen) return null;
     return (
       <FocusTrap>
-        <div
-          className="dialog dialog-scrollable dialog-bulk"
-        >
+        <div className="dialog dialog-scrollable dialog-bulk">
           <h3>一括マッピング編集</h3>
           {/* プロトコル選択 */}
-          <div
-            className="dialog-content dialog-content-fixed"
-          >
+          <div className="dialog-content dialog-content-fixed">
             <div className="dialog-row">
               <label>プロトコル:</label>
               <select
@@ -297,45 +299,27 @@ export const BulkMappingDialog = forwardRef<BulkMappingDialogHandle, Props>(
             </div>
           </div>
           {/* テーブル本体 */}
-          <div
-            className="dialog-content dialog-content-scroll bulk-table-area"
-          >
+          <div className="dialog-content dialog-content-scroll bulk-table-area">
             {bulkRows.length === 0 ? (
-              <p className="empty-note">
-                変数がありません
-              </p>
+              <p className="empty-note">変数がありません</p>
             ) : isNodePublishingProtocol(bulkProtocol) ? (
               /* ノード公開型プロトコルのテーブル */
               <table className="variable-table">
                 <thead>
                   <tr>
-                    <th className="col-name">
-                      変数名
-                    </th>
-                    <th className="col-type">
-                      データ型
-                    </th>
-                    <th className="col-words">
-                      W数
-                    </th>
-                    <th className="col-publish">
-                      公開する
-                    </th>
+                    <th className="col-name">変数名</th>
+                    <th className="col-type">データ型</th>
+                    <th className="col-words">W数</th>
+                    <th className="col-publish">公開する</th>
                     <th className="col-access">アクセスモード</th>
-                    <th className="col-nodeid">
-                      NodeID
-                    </th>
+                    <th className="col-nodeid">NodeID</th>
                   </tr>
                 </thead>
                 <tbody>
                   {bulkRows.map((row) => (
                     <tr key={row.variableId}>
-                      <td className="cell-name">
-                        {row.variableName}
-                      </td>
-                      <td className="cell-type">
-                        {row.dataType}
-                      </td>
+                      <td className="cell-name">{row.variableName}</td>
+                      <td className="cell-type">{row.dataType}</td>
                       <td className="cell-center">{row.wordCount}</td>
                       <td className="cell-center">
                         <input
@@ -393,21 +377,13 @@ export const BulkMappingDialog = forwardRef<BulkMappingDialogHandle, Props>(
                     <table className="variable-table">
                       <thead>
                         <tr>
-                          <th className="col-name">
-                            変数名
-                          </th>
-                          <th className="col-type">
-                            データ型
-                          </th>
-                          <th className="col-words">
-                            W数
-                          </th>
+                          <th className="col-name">変数名</th>
+                          <th className="col-type">データ型</th>
+                          <th className="col-words">W数</th>
                           <th className="col-area">メモリエリア</th>
                           <th className="col-address">
                             アドレス
-                            <span className="th-note">
-                              (空=削除)
-                            </span>
+                            <span className="th-note">(空=削除)</span>
                           </th>
                           <th className="col-endian">エンディアン</th>
                         </tr>
@@ -428,15 +404,9 @@ export const BulkMappingDialog = forwardRef<BulkMappingDialogHandle, Props>(
                                 hasConflict ? "bulk-row-conflict" : undefined
                               }
                             >
-                              <td className="cell-name">
-                                {row.variableName}
-                              </td>
-                              <td className="cell-type">
-                                {row.dataType}
-                              </td>
-                              <td className="cell-center">
-                                {row.wordCount}
-                              </td>
+                              <td className="cell-name">{row.variableName}</td>
+                              <td className="cell-type">{row.dataType}</td>
+                              <td className="cell-center">{row.wordCount}</td>
                               <td>
                                 <select
                                   value={row.memoryArea}
@@ -503,10 +473,7 @@ export const BulkMappingDialog = forwardRef<BulkMappingDialogHandle, Props>(
           </div>
           {!isNodePublishingProtocol(bulkProtocol) &&
             (() => {
-              const conflictIds = findBulkRowConflicts(
-                bulkRows,
-                bulkProtocol,
-              );
+              const conflictIds = findBulkRowConflicts(bulkRows, bulkProtocol);
               return conflictIds.size > 0 ? (
                 <div className="bulk-conflict-banner">
                   ⚠ アドレスが重複している変数が {conflictIds.size} 件あります

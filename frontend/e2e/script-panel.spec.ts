@@ -118,7 +118,10 @@ test("1 回実行は、入力中のコードを保存せずに実行し、結果
   expect(s.isRunning).toBe(false);
 
   // クリアで消える
-  await page.locator(".console-header").getByRole("button", { name: "クリア" }).click();
+  await page
+    .locator(".console-header")
+    .getByRole("button", { name: "クリア" })
+    .click();
   await expect(page.locator(".console-empty")).toBeVisible();
   expect(await api<unknown[]>(page, "GetConsoleLogs")).toHaveLength(0);
 });
@@ -145,13 +148,17 @@ test("周期実行のエラーはコンソールに出る。同じエラーが�
 
   // 実行中は削除できない
   await row(page, "失敗").click();
-  await expect(editor(page).getByRole("button", { name: "削除" })).toBeDisabled();
+  await expect(
+    editor(page).getByRole("button", { name: "削除" }),
+  ).toBeDisabled();
 
   await toggle(page, "失敗", "停止");
   await expect(row(page, "失敗").locator(".server-status-dot")).toHaveClass(
     /stopped/,
   );
-  await expect(editor(page).getByRole("button", { name: "削除" })).toBeEnabled();
+  await expect(
+    editor(page).getByRole("button", { name: "削除" }),
+  ).toBeEnabled();
 });
 
 test("コンパイルできないスクリプトは開始できず、エラーが表示される", async ({

@@ -195,7 +195,10 @@ export const parseNumericInput = (input: string): number => {
 
 // 64ビット整数入力のパース（BigInt使用、精度損失なし）
 // 10進・16進（0x）・2進（0b）の入力に対応し、正規化された10進文字列を返す
-export const parseBigIntInput = (input: string, dataType: string): string | null => {
+export const parseBigIntInput = (
+  input: string,
+  dataType: string,
+): string | null => {
   const trimmed = input.trim();
   if (trimmed === "" || trimmed === "-") return null;
   try {
@@ -309,7 +312,8 @@ export const generateDefaultForType = (
       generateDefaultForType(arr.elemType, structTypes),
     );
   }
-  if (isStructType(dataType)) return generateStructDefault(dataType, structTypes);
+  if (isStructType(dataType))
+    return generateStructDefault(dataType, structTypes);
   return parseValue(getDefaultValue(dataType), dataType);
 };
 
