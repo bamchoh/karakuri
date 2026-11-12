@@ -255,10 +255,10 @@ func ConvertValueWithResolver(value interface{}, dataType DataType, resolver Typ
 				result[field.Name] = field.DataType.DefaultValue()
 				continue
 			}
+			// 変換できない値はエラーにする（黙って既定値にすると、書き込みが成功したように見える）
 			converted, err := ConvertValueWithResolver(fieldVal, field.DataType, resolver)
 			if err != nil {
-				result[field.Name] = field.DataType.DefaultValue()
-				continue
+				return nil, fmt.Errorf("field %s: %w", field.Name, err)
 			}
 			result[field.Name] = converted
 		}
