@@ -5,7 +5,6 @@ import { UnsavedChangesDialog } from "./components/UnsavedChangesDialog";
 import { VariableView } from "./components/VariableView";
 import { RegisterPanel, RegisterTab } from "./components/RegisterPanel";
 import { ScriptPanel } from "./components/ScriptPanel";
-import { CommunicationIndicator } from "./components/CommunicationIndicator";
 import { KarakuriLogo } from "./components/KarakuriLogo";
 import { GetHTTPAPIPort, SetHTTPAPIPort } from "../wailsjs/go/main/App";
 import { Sidebar } from "./components/Sidebar";
@@ -106,7 +105,6 @@ function App() {
           <KarakuriLogo size={28} className="header-logo" />
           Karakuri({APP_VERSION})
         </h1>
-        <CommunicationIndicator />
         <div className="httpapi-indicator">
           {editingPort ? (
             <div className="httpapi-edit-form">

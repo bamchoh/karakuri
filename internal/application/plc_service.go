@@ -64,9 +64,6 @@ type PLCService struct {
 	monitoringSavedSeq  uint64         // 書き込み済みの通し番号（monitoringSaveMu で保護）
 	monitoringSaveGroup sync.WaitGroup // 実行中の自動保存
 
-	// 通信イベント
-	eventEmitter protocol.CommunicationEventEmitter
-
 	// アプリケーション状態イベント
 	appEmitter        AppStateEmitter
 	varChangeListener *variableChangeListener
@@ -298,19 +295,6 @@ func (s *PLCService) Shutdown() {
 	}
 }
 
-// SetEventEmitter はイベントエミッターを設定する
-func (s *PLCService) SetEventEmitter(emitter protocol.CommunicationEventEmitter) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	s.eventEmitter = emitter
-
-	// 全サーバーにエミッターを設定
-	for _, inst := range s.servers {
-		s.setEmitterToServerInstance(inst)
-	}
-}
-
 // SetAppStateEmitter はアプリケーション状態イベントエミッターを設定する
 func (s *PLCService) SetAppStateEmitter(emitter AppStateEmitter) {
 	s.mu.Lock()
@@ -365,18 +349,4 @@ func (s *PLCService) emitScriptsChanged() {
 	}
 	scripts := s.GetScripts()
 	emitter.EmitScriptsChanged(scripts)
-}
-
-// GetEventEmitter はイベントエミッターを返す
-func (s *PLCService) GetEventEmitter() protocol.CommunicationEventEmitter {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	return s.eventEmitter
-}
-
-// setEmitterToServerInstance はサーバーインスタンスにイベントエミッターを設定する（ロック済み前提）
-func (s *PLCService) setEmitterToServerInstance(inst *serverInstance) {
-	if ea, ok := inst.server.(protocol.CommunicationEventAware); ok {
-		ea.SetEventEmitter(s.eventEmitter)
-	}
 }

@@ -61,7 +61,7 @@ go build ./...
 
 `frontend/e2e/` に、ブラウザで画面を操作して確認するテストがある。`task dev` が立てる開発用サーバー（`http://localhost:34115`）に接続するため、Go 側の API とプラグインを含めた動作を確認できる。手順と注意は `frontend/e2e/README.md` を参照。
 
-- 画面ごとのテスト: サーバー画面 `server-panel.spec.ts`、変数画面 `variable-dialogs.spec.ts` / `node-publishing.spec.ts`、レジスタ画面 `register-panel.spec.ts` / `monitoring.spec.ts`、通信ランプ `communication-indicator.spec.ts`
+- 画面ごとのテスト: サーバー画面 `server-panel.spec.ts`、変数画面 `variable-dialogs.spec.ts` / `node-publishing.spec.ts`、レジスタ画面 `register-panel.spec.ts` / `monitoring.spec.ts`
 - 画面を変更したら、該当するテストを実行する（なければ追加する）。`shot()` で撮ったスクリーンショット（`frontend/e2e/.screenshots/`）で見た目も確認する
 - データの準備は `api(page, "メソッド名", ...)` で Go 側の API を直接呼び、確認したい操作だけを画面で行う
 - **テストはアプリのサーバー・変数・モニタリング項目をすべて削除する。** 開発サーバーは `KARAKURI_CONFIG_DIR` を一時フォルダに向けて起動する
@@ -123,8 +123,7 @@ cmd/
 │           ├── server.go       # Server（トランスポートの起動・停止）
 │           ├── *_transport.go  # TCP / RTU / ASCII のトランスポート（TCP は、オフにした UnitID 宛てのリクエストを捨てる中継を持つ）
 │           ├── datastore.go    # ModbusDataStore（SetChangeHook でクライアント書き込みフック）
-│           ├── datastore_adapter.go # リクエスト → DataStore の読み書き（通信イベントの発行もここ）
-│           ├── session.go      # SessionManager（UnitID ごとの通信を接続数として数える）
+│           ├── datastore_adapter.go # リクエスト → DataStore の読み書き
 │           └── rtu/            # RTU/ASCII フレーム処理
 └── opcua-plugin/         # OPC UA プラグインバイナリ（bamchoh/uastack 使用）
     ├── main.go           # pluginruntime.RunFactory で gRPC サーバー起動
@@ -161,13 +160,12 @@ internal/
 │   ├── plc_service_project.go    # プロジェクト Export/Import
 │   ├── plc_service_monitoring.go # モニタリング項目と設定ファイル
 │   ├── plc_service_variables.go  # 変数・マッピング・ノード公開設定・構造体型
-│   ├── app_events.go             # Wails イベントの送信（WailsAppStateEmitter / WailsEventEmitter）
+│   ├── app_events.go             # Wails イベントの送信（WailsAppStateEmitter）と変数変更の間引き
 │   └── dto.go                    # DTO定義（ProtocolSchemaDTO, MonitoringItemDTO等）
 ├── valuecodec/       # ホストとプラグインの間で変数の値を運ぶ MessagePack の変換（両側で共通）
 ├── pluginruntime/    # プラグイン側の共通実装（各プラグインの main から使う。Wails に依存しない）
 │   ├── runtime.go            # RunFactory（gRPC サーバー起動・GRPC_PORT 出力）
 │   ├── server.go             # PluginService + DataStoreService の実装
-│   ├── comm_events.go        # commEventHub（通信イベントをまとめてホストへ送る）
 │   ├── variable_accessor.go  # RemoteVariableStoreAccessor（ホストの変数にアクセスする gRPC クライアント）
 │   └── interfaces.go         # NewManifest（plugin.json の内容）など
 └── infrastructure/   # インフラ層（ホスト側インフラ。プロトコル固有実装は含まない）
@@ -265,15 +263,8 @@ internal/
   - `NodePublishingAware`: `OnNodePublishingUpdated()` でノード公開設定変更通知を受け付ける
   - `NodeAddressResolver`: `NodeAddresses(variables)`（`NodeVariable{ID, Name}` のスライス）で公開変数のノードアドレス（OPC UA なら NodeID 文字列）と、公開できない場合の理由（`NodeAddress.Error`）を返す。書式と判定はプロトコルが決める
   - `ProtocolCapabilities.SupportsNodePublishing: true` のプロトコルで利用される
-- **通信イベント（RX / TX ランプ）** : ヘッダーの通信インジケーター（`CommunicationIndicator.tsx`）は Wails イベント `comm:rx` / `comm:tx` で点灯する
-  - 経路: プラグイン内のサーバー → `CommunicationEventEmitter`（`pluginruntime` の `commEventHub`）→ gRPC ストリーム `SubscribeCommunicationEvents` → `RemoteProtocolServer` → ホストの `WailsEventEmitter`（`internal/application/app_events.go`）
-  - `protocol.CommunicationEventAware`（`SetEventEmitter`）を実装するサーバーに、`pluginruntime.Server.CreateAndStart()` が起動前に送信先を渡す。ホスト側は `RemoteProtocolServer` が同じインターフェースを実装し、`Start()` でストリームの購読を始め、`Stop()` でやめる
-  - `commEventHub` は購読者ごとに「前回の送信以降に起きたこと」（rx / tx / 接続数の変化）だけを持ち、50ms 間隔でまとめて送る（高頻度のポーリングでもイベントを 1 件ずつ送らない）
-  - Modbus は `ModbusServer.SetEventEmitter()` を実装。起動中は `SessionManager` が UnitID ごとの通信を接続数として数える。OPC UA は未対応（uastack にリクエストごとのフックがない）
-  - 画面のテスト: `frontend/e2e/communication-indicator.spec.ts`（実際に Modbus TCP のリクエストを送る）
 - **UnitIDConfigurable** (`internal/domain/protocol/server.go`): UnitID ごとの応答有効・無効を設定できる ProtocolServer 用インターフェース（`GetDisabledUnitIDs` / `SetUnitIdEnabled` / `SetDisabledUnitIDs`）
   - `ProtocolCapabilities.SupportsUnitID: true` のプロトコルで利用される。ホストと pluginruntime はこの型で判定する（個別のローカル定義は持たない）
-  - UnitID ごとのセッション追跡（`SessionManager`）は Modbus 固有のため `cmd/modbus-plugin/internal/modbus/session.go` にある
   - 応答しない UnitID の一覧は、プラグイン側の `pluginruntime.Server` が持つ。サーバーは起動のたびに作り直すため、作ったサーバーに毎回渡す。サーバーを一度も起動していなくても設定でき、起動し直しても残る
   - オフにした UnitID には、TCP / RTU / ASCII のどれも応答しない（例外応答も返さない）
   - Modbus TCP は simonvetter/modbus のサーバーを使うが、このライブラリは受け取ったリクエストに必ず応答する。そのため `TCPTransport`（`tcp_transport.go`）がクライアントとの間に中継を入れ、オフにした UnitID 宛てのフレームを捨てる。ライブラリのサーバーは 127.0.0.1 の空きポートで動く

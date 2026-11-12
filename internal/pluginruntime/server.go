@@ -40,18 +40,12 @@ type Server struct {
 
 	// ホストからの書き込み中フラグ（循環通知防止）
 	hostWriting bool
-
-	// 通信イベント（受信・送信・接続数）をホストへ届けるハブ
-	commEvents *commEventHub
 }
 
 // NewServer はファクトリーからプラグイン側の gRPC サービス実装を作る。
 // RunFactory が内部で使う。テストではインプロセスの gRPC サーバーに Register して使える。
 func NewServer(factory protocol.ServerFactory) *Server {
-	return &Server{
-		factory:    factory,
-		commEvents: newCommEventHub(),
-	}
+	return &Server{factory: factory}
 }
 
 // dataStore はプロトコルのメモリ（レジスタ）を返す。最初に呼ばれたときに 1 つだけ作る。
@@ -240,11 +234,6 @@ func (s *Server) CreateAndStart(ctx context.Context, req *pb.CreateAndStartReque
 	// 応答しない UnitID を、作り直したサーバーに引き継ぐ
 	if u, ok := srv.(protocol.UnitIDConfigurable); ok {
 		u.SetDisabledUnitIDs(s.disabledUnitIDList())
-	}
-
-	// 通信イベントの送信先を渡す（ホストの通信インジケーター用）
-	if aware, ok := srv.(protocol.CommunicationEventAware); ok {
-		aware.SetEventEmitter(s.commEvents)
 	}
 
 	if err := srv.Start(ctx); err != nil {

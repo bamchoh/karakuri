@@ -3,24 +3,19 @@ package modbus
 import (
 	"fmt"
 	"karakuri/cmd/modbus-plugin/internal/modbus/rtu"
-	"karakuri/internal/domain/protocol"
 )
 
 type ASCIITransport struct {
 	server *rtu.ASCIIServer
 
-	config         *ModbusConfig
-	handler        *DataStoreHandler
-	eventEmitter   protocol.CommunicationEventEmitter
-	sessionManager *SessionManager
+	config  *ModbusConfig
+	handler *DataStoreHandler
 }
 
-func newASCIITransport(config *ModbusConfig, handler *DataStoreHandler, eventEmitter protocol.CommunicationEventEmitter, sessionManager *SessionManager) *ASCIITransport {
+func newASCIITransport(config *ModbusConfig, handler *DataStoreHandler) *ASCIITransport {
 	return &ASCIITransport{
-		config:         config,
-		handler:        handler,
-		eventEmitter:   eventEmitter,
-		sessionManager: sessionManager,
+		config:  config,
+		handler: handler,
 	}
 }
 
@@ -34,10 +29,7 @@ func (t *ASCIITransport) Start() error {
 		Parity:   t.config.Parity,
 	}
 
-	var adapter rtu.RequestHandler
-	rtuAdapter := NewRTUDataStoreAdapter(t.handler)
-	rtuAdapter.SetEventEmitter(t.eventEmitter)
-	adapter = rtuAdapter
+	adapter := NewRTUDataStoreAdapter(t.handler)
 	asciiSrv := rtu.NewASCIIServer(config, adapter)
 
 	if err := asciiSrv.Start(); err != nil {

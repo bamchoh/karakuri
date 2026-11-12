@@ -42,10 +42,6 @@ func NewApp() *App {
 func (a *App) startup(ctx context.Context) {
 	a.ctx = ctx
 
-	// 通信イベントエミッターを設定
-	emitter := application.NewWailsEventEmitter(ctx)
-	a.plcService.SetEventEmitter(emitter)
-
 	// アプリケーション状態イベントエミッターを設定
 	appEmitter := application.NewWailsAppStateEmitter(ctx)
 	a.plcService.SetAppStateEmitter(appEmitter)

@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"reflect"
-	"sync"
 	"testing"
 	"time"
 
@@ -240,73 +239,6 @@ func TestServer_NodeAddresses(t *testing.T) {
 	defer rs.Stop() //nolint:errcheck
 	if got := rs.NodeAddresses(vars); !reflect.DeepEqual(got, want) {
 		t.Errorf("起動中 = %+v, want %+v", got, want)
-	}
-}
-
-// commRecorder は受け取った通信イベントを数える
-type commRecorder struct {
-	mu          sync.Mutex
-	rx, tx      int
-	connections []int
-}
-
-func (r *commRecorder) EmitRx() { r.mu.Lock(); r.rx++; r.mu.Unlock() }
-func (r *commRecorder) EmitTx() { r.mu.Lock(); r.tx++; r.mu.Unlock() }
-func (r *commRecorder) EmitConnection(n int) {
-	r.mu.Lock()
-	r.connections = append(r.connections, n)
-	r.mu.Unlock()
-}
-func (r *commRecorder) snapshot() (rx, tx int, lastConn int) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	lastConn = -1
-	if len(r.connections) > 0 {
-		lastConn = r.connections[len(r.connections)-1]
-	}
-	return r.rx, r.tx, lastConn
-}
-
-func TestServer_CommunicationEventsReachHost(t *testing.T) {
-	pluginSide, f := startPlugin(t)
-	if err := f.EnsureStarted(); err != nil {
-		t.Fatal(err)
-	}
-	srv, _ := f.CreateServer(f.CreateConfigFromVariant("v1"), f.CreateDataStore())
-	rs := srv.(*RemoteProtocolServer)
-	rec := &commRecorder{}
-	rs.SetEventEmitter(rec)
-	if err := rs.Start(t.Context()); err != nil {
-		t.Fatal(err)
-	}
-
-	// プラグイン側のサーバーには、起動前に送信先が渡っている
-	emitter := pluginSide.pluginServer().getEmitter()
-	if emitter == nil {
-		t.Fatal("プラグイン側のサーバーに通信イベントの送信先が渡っていない")
-	}
-
-	// プラグインで起きたイベントがホストの送信先に届く（購読の開始を待つため、届くまで繰り返す）
-	eventually(t, "RX / TX / 接続数がホストに届く", func() bool {
-		emitter.EmitRx()
-		emitter.EmitTx()
-		emitter.EmitConnection(3)
-		rx, tx, conn := rec.snapshot()
-		return rx > 0 && tx > 0 && conn == 3
-	})
-
-	// 止めると接続数が 0 に戻り、それ以降は届かない
-	if err := rs.Stop(); err != nil {
-		t.Fatal(err)
-	}
-	if _, _, conn := rec.snapshot(); conn != 0 {
-		t.Errorf("停止後の接続数 = %d, want 0", conn)
-	}
-	rxBefore, _, _ := rec.snapshot()
-	emitter.EmitRx()
-	time.Sleep(150 * time.Millisecond)
-	if rx, _, _ := rec.snapshot(); rx != rxBefore {
-		t.Errorf("停止後もイベントが届いた: %d → %d", rxBefore, rx)
 	}
 }
 

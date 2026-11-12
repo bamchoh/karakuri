@@ -13,20 +13,28 @@ import (
 	"github.com/simonvetter/modbus"
 )
 
+func freeTCPPort(t *testing.T) int {
+	t.Helper()
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ln.Close()
+	return ln.Addr().(*net.TCPAddr).Port
+}
+
 // startTCPServer は 127.0.0.1 の空きポートで Modbus TCP サーバーを起動する
-func startTCPServer(t *testing.T) (*ModbusServer, *recordingEmitter, int) {
+func startTCPServer(t *testing.T) (*ModbusServer, int) {
 	t.Helper()
 	cfg := DefaultTCPConfig()
 	cfg.TCPAddress = "127.0.0.1"
 	cfg.TCPPort = freeTCPPort(t)
 	srv := NewModbusServer(cfg, NewModbusDataStore(100, 100, 100, 100))
-	emitter := &recordingEmitter{}
-	srv.SetEventEmitter(emitter)
 	if err := srv.Start(context.Background()); err != nil {
 		t.Fatalf("Start: %v", err)
 	}
 	t.Cleanup(func() { _ = srv.Stop() })
-	return srv, emitter, cfg.TCPPort
+	return srv, cfg.TCPPort
 }
 
 func dialTCP(t *testing.T, port int) net.Conn {
@@ -65,7 +73,7 @@ func readResponse(t *testing.T, conn net.Conn, timeout time.Duration) []byte {
 
 // issue #51: Modbus TCP は、オフにした UnitID に例外応答を返していた（画面の説明は「応答しません」）
 func TestTCP_DisabledUnitIDGetsNoResponse(t *testing.T) {
-	srv, emitter, port := startTCPServer(t)
+	srv, port := startTCPServer(t)
 	srv.SetUnitIdEnabled(2, false)
 	conn := dialTCP(t, port)
 
@@ -84,15 +92,6 @@ func TestTCP_DisabledUnitIDGetsNoResponse(t *testing.T) {
 	if got := readResponse(t, conn, 500*time.Millisecond); got != nil {
 		t.Fatalf("オフにした UnitID 2 に応答した: % X", got)
 	}
-	// 受信は記録するが、送信と接続数には数えない
-	rx, tx, conns := emitter.snapshot()
-	if rx != 2 || tx != 1 {
-		t.Errorf("rx=%d tx=%d, want 2 / 1", rx, tx)
-	}
-	if len(conns) != 1 || conns[0] != 1 {
-		t.Errorf("connections = %v, want [1]", conns)
-	}
-
 	// 接続は切れておらず、同じ接続でオンの UnitID には続けて応答する
 	if _, err := conn.Write(readHoldingRequest(3, 1)); err != nil {
 		t.Fatal(err)
@@ -113,7 +112,7 @@ func TestTCP_DisabledUnitIDGetsNoResponse(t *testing.T) {
 
 // 1 回の送信に複数のリクエストが入っていても、フレームごとに判定する
 func TestTCP_FiltersEachFrameInOneWrite(t *testing.T) {
-	srv, _, port := startTCPServer(t)
+	srv, port := startTCPServer(t)
 	srv.SetDisabledUnitIDs([]uint8{2, 4})
 	conn := dialTCP(t, port)
 
@@ -148,7 +147,7 @@ func TestTCP_FiltersEachFrameInOneWrite(t *testing.T) {
 
 // 中継を入れても、クライアントからの読み書きはこれまでどおり動く
 func TestTCP_ClientReadWrite(t *testing.T) {
-	srv, _, port := startTCPServer(t)
+	srv, port := startTCPServer(t)
 	client, err := modbus.NewClient(&modbus.ClientConfiguration{
 		URL:     fmt.Sprintf("tcp://127.0.0.1:%d", port),
 		Timeout: 2 * time.Second,
@@ -216,7 +215,7 @@ func TestTCP_ClientReadWrite(t *testing.T) {
 }
 
 func TestTCP_StartFailsWhenPortInUse(t *testing.T) {
-	_, _, port := startTCPServer(t)
+	_, port := startTCPServer(t)
 	cfg := DefaultTCPConfig()
 	cfg.TCPAddress = "127.0.0.1"
 	cfg.TCPPort = port
@@ -228,7 +227,7 @@ func TestTCP_StartFailsWhenPortInUse(t *testing.T) {
 }
 
 func TestTCP_StopClosesConnectionsAndRestartWorks(t *testing.T) {
-	srv, _, port := startTCPServer(t)
+	srv, port := startTCPServer(t)
 	conn := dialTCP(t, port)
 	if _, err := conn.Write(readHoldingRequest(1, 1)); err != nil {
 		t.Fatal(err)

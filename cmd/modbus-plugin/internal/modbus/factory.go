@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"sync"
-	"time"
 
 	"karakuri/internal/domain/protocol"
 )
@@ -444,20 +443,14 @@ func DefaultASCIIConfig() *ModbusConfig {
 }
 
 var _ protocol.UnitIDConfigurable = (*ModbusServer)(nil)
-var _ protocol.CommunicationEventAware = (*ModbusServer)(nil)
-
-// sessionTimeout は、通信のない UnitID を接続数から外すまでの時間
-const sessionTimeout = 5 * time.Second
 
 // ModbusServer はModbusプロトコルサーバー
 type ModbusServer struct {
-	config         *ModbusConfig
-	store          protocol.DataStore
-	handler        *DataStoreHandler
-	innerServer    *Server
-	status         protocol.ServerStatus
-	eventEmitter   protocol.CommunicationEventEmitter
-	sessionManager *SessionManager
+	config      *ModbusConfig
+	store       protocol.DataStore
+	handler     *DataStoreHandler
+	innerServer *Server
+	status      protocol.ServerStatus
 }
 
 // NewModbusServer は新しいModbusServerを作成する
@@ -476,17 +469,10 @@ func (s *ModbusServer) Start(ctx context.Context) error {
 		return fmt.Errorf("server is already running")
 	}
 
-	// 送信先があれば、UnitID ごとのセッション（接続数）を起動中だけ追跡する
-	if s.eventEmitter != nil {
-		s.sessionManager = NewSessionManager(sessionTimeout, s.eventEmitter)
-		s.sessionManager.Start()
-	}
-
 	// 内部サーバーを作成
-	s.innerServer = NewServerWithHandler(s.config, s.handler, s.eventEmitter, s.sessionManager)
+	s.innerServer = NewServerWithHandler(s.config, s.handler)
 
 	if err := s.innerServer.Start(); err != nil {
-		s.stopSessionManager()
 		s.status = protocol.StatusError
 		return err
 	}
@@ -503,22 +489,8 @@ func (s *ModbusServer) Stop() error {
 		}
 		s.innerServer = nil
 	}
-	s.stopSessionManager()
 	s.status = protocol.StatusStopped
 	return nil
-}
-
-// SetEventEmitter は通信イベントの送信先を設定する（CommunicationEventAware）。起動前に呼ぶ。
-func (s *ModbusServer) SetEventEmitter(emitter protocol.CommunicationEventEmitter) {
-	s.eventEmitter = emitter
-}
-
-// stopSessionManager はセッションの追跡を止める（接続数は 0 に戻る）
-func (s *ModbusServer) stopSessionManager() {
-	if s.sessionManager != nil {
-		s.sessionManager.Stop()
-		s.sessionManager = nil
-	}
 }
 
 // Status はサーバーの状態を返す
