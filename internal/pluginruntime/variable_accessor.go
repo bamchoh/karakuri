@@ -3,40 +3,15 @@ package pluginruntime
 import (
 	"context"
 	"fmt"
-	"reflect"
 	"time"
 
-	"github.com/ugorji/go/codec"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 
 	"karakuri/internal/domain/protocol"
+	"karakuri/internal/valuecodec"
 	pb "karakuri/pb/pluginpb"
 )
-
-// msgpackHandle はホスト（HostGrpcServer）と同じ設定。
-// マップは map[string]interface{} にデコードする（構造体値を JSON 化できるようにするため）。
-var msgpackHandle = func() *codec.MsgpackHandle {
-	h := new(codec.MsgpackHandle)
-	h.TypeInfos = codec.NewTypeInfos([]string{"msgpack"})
-	h.MapType = reflect.TypeOf(map[string]interface{}(nil))
-	h.RawToString = true
-	return h
-}()
-
-func marshalMsgpack(v interface{}) ([]byte, error) {
-	var b []byte
-	enc := codec.NewEncoderBytes(&b, msgpackHandle)
-	if err := enc.Encode(v); err != nil {
-		return nil, err
-	}
-	return b, nil
-}
-
-func unmarshalMsgpack(b []byte, v interface{}) error {
-	dec := codec.NewDecoderBytes(b, msgpackHandle)
-	return dec.Decode(v)
-}
 
 // rpcTimeout はホストへの単発 RPC のタイムアウト
 const rpcTimeout = 5 * time.Second
@@ -98,14 +73,14 @@ func (a *RemoteVariableStoreAccessor) ReadVariableValue(variableID string) (inte
 		return nil, fmt.Errorf("%s", resp.Error)
 	}
 	var value interface{}
-	if err := unmarshalMsgpack(resp.ValueMsgpack, &value); err != nil {
+	if err := valuecodec.Unmarshal(resp.ValueMsgpack, &value); err != nil {
 		return nil, err
 	}
 	return value, nil
 }
 
 func (a *RemoteVariableStoreAccessor) WriteVariableValue(variableID string, value interface{}) error {
-	b, err := marshalMsgpack(value)
+	b, err := valuecodec.Marshal(value)
 	if err != nil {
 		return err
 	}
@@ -116,7 +91,7 @@ func (a *RemoteVariableStoreAccessor) WriteVariableValue(variableID string, valu
 }
 
 func (a *RemoteVariableStoreAccessor) WriteVariableFieldValue(variableID, fieldPath string, value interface{}) error {
-	b, err := marshalMsgpack(value)
+	b, err := valuecodec.Marshal(value)
 	if err != nil {
 		return err
 	}

@@ -133,23 +133,28 @@ func startTestServer(t *testing.T, acc *fakeAccessor) (*Server, *client.Client, 
 
 func startTestServerWithConfig(t *testing.T, acc *fakeAccessor, cfg *Config) (*Server, *client.Client, uint16) {
 	t.Helper()
-	port := cfg.Port
 	srv := NewServer(cfg, acc)
 	if err := srv.Start(context.Background()); err != nil {
 		t.Fatalf("Start: %v", err)
 	}
 	t.Cleanup(func() { _ = srv.Stop() })
 
+	c := dialTestClient(t, srv)
+	ns := srv.nodes.ns
+	return srv, c, ns
+}
+
+// dialTestClient は起動済みのサーバーに OPC UA クライアントをつなぐ
+func dialTestClient(t *testing.T, srv *Server) *client.Client {
+	t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	c, err := client.Dial(ctx, fmt.Sprintf("opc.tcp://127.0.0.1:%d", port), client.Config{})
+	c, err := client.Dial(ctx, fmt.Sprintf("opc.tcp://127.0.0.1:%d", srv.config.Port), client.Config{})
 	if err != nil {
 		t.Fatalf("Dial: %v", err)
 	}
 	t.Cleanup(func() { _ = c.Close(context.Background()) })
-
-	ns := srv.nodes.ns
-	return srv, c, ns
+	return c
 }
 
 func TestServer_BrowseReadWrite(t *testing.T) {
