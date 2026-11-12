@@ -39,6 +39,10 @@ jobs:
         working-directory: frontend
         run: npm ci
 
+      - name: 画面のコードの整形の検査（Prettier）
+        working-directory: frontend
+        run: npm run format:check
+
       # 型検査（未使用の変数の検査を含む）と本番ビルド。
       # main.go が frontend/dist を埋め込むので、Go のビルドより先に実行する
       - name: 画面の型検査とビルド

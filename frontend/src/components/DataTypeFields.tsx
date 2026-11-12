@@ -31,11 +31,7 @@ export function DataTypeFields({
   const set = (patch: Partial<DataTypeFormValue>) =>
     onChange({ ...value, ...patch });
 
-  const setDimBound = (
-    i: number,
-    key: "lower" | "upper",
-    input: string,
-  ) => {
+  const setDimBound = (i: number, key: "lower" | "upper", input: string) => {
     const val = parseInt(input);
     if (isNaN(val)) return;
     const dimBounds = [...value.dimBounds] as DataTypeFormValue["dimBounds"];

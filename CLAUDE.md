@@ -45,6 +45,9 @@ wails generate module
 # フロントエンドのみビルド
 cd frontend && npm run build
 
+# 画面のコードを整形する（Prettier）。検査だけなら npm run format:check
+cd frontend && npm run format
+
 # Goコードのビルド確認
 go build ./...
 ```
@@ -55,11 +58,13 @@ go build ./...
 
 `.github/workflows/ci.yml` が、Pull Request と main への push のたびに実行する。
 
-- **ビルドとテスト（Windows）**: 画面の型検査とビルド（`npm run build`）、`go vet ./...`、`go test ./...`
+- **ビルドとテスト（Windows）**: 画面のコードの整形の検査（`npm run format:check`）、画面の型検査とビルド（`npm run build`）、`go vet ./...`、`go test ./...`
 - **整形と競合検出（Linux）**: `gofmt -l .`、`go test -race ./internal/...`
   - 開発 PC には C コンパイラがなく `go test -race` を実行できないので、データ競合は CI で見つける
   - Windows の実行環境は改行を CRLF に変えるため、`gofmt` の検査は Linux で行う
   - アプリ本体（`main.go` / `app.go`）は Wails が Linux 用のライブラリを必要とするので、Linux では `internal` だけを対象にする
+- **画面のコード（`frontend/`）は Prettier で整形する**。画面のコードを変更したら `npm run format` を実行する（整形されていないと CI が落ちる）
+  - 設定は `frontend/.prettierrc.json`（改行コードは、ファイルのものをそのまま使う）。自動生成される `wailsjs/` などは `frontend/.prettierignore` で対象から外している
 - 画面の確認用テスト（Playwright）は対象外（開発サーバーと WebView2 が要る）。画面を変更したら手元で `task e2e` を実行する
 
 ### 画面の確認用テスト（Playwright）

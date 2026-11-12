@@ -14,8 +14,22 @@ export function KarakuriLogo({ size = 32, className }: Props) {
       aria-hidden="true"
     >
       {/* 外二重丸 */}
-      <circle cx="100" cy="100" r="93" fill="none" stroke="currentColor" strokeWidth="6" />
-      <circle cx="100" cy="100" r="85" fill="none" stroke="currentColor" strokeWidth="1.5" />
+      <circle
+        cx="100"
+        cy="100"
+        r="93"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="6"
+      />
+      <circle
+        cx="100"
+        cy="100"
+        r="85"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.5"
+      />
 
       {/* 八枚歯車（中心穴あり・evenodd） */}
       <path

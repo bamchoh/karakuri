@@ -70,12 +70,12 @@ test.describe("レジスタの一覧表示", () => {
     await cells(page).nth(2).click();
     const dialog = writeDialog(page);
     await expect(dialog).toBeVisible();
-    await expect(dialogRow(dialog, "アドレス:").locator(".dialog-value")).toHaveText(
-      "3",
-    );
-    await expect(dialogRow(dialog, "現在の値:").locator(".dialog-value")).toHaveText(
-      "0",
-    );
+    await expect(
+      dialogRow(dialog, "アドレス:").locator(".dialog-value"),
+    ).toHaveText("3");
+    await expect(
+      dialogRow(dialog, "現在の値:").locator(".dialog-value"),
+    ).toHaveText("0");
     const input = dialog.locator("input.dialog-input");
     await expect(input).toHaveValue("0");
     await shot(page, "register-write-dialog");
@@ -156,9 +156,9 @@ test.describe("レジスタの一覧表示", () => {
     const format = dialogRow(dialog, "入力形式:").locator("select");
     await expect(format).toHaveValue("hex");
     await expect(input).toHaveValue("0x00FF");
-    await expect(dialogRow(dialog, "現在の値:").locator(".dialog-value")).toHaveText(
-      "0x00FF",
-    );
+    await expect(
+      dialogRow(dialog, "現在の値:").locator(".dialog-value"),
+    ).toHaveText("0x00FF");
 
     // 入力形式を変えると、入力中の値が変換される
     await format.selectOption({ label: "2進数" });
@@ -215,9 +215,9 @@ test.describe("レジスタの一覧表示", () => {
     await control(page, "エンディアン").selectOption({ label: "ビッグ(BE)" });
     await expect(cells(page).first()).toHaveText("0xBEEFDEAD");
     await cells(page).nth(1).click();
-    await expect(dialogRow(dialog, "アドレス:").locator(".dialog-value")).toHaveText(
-      "3",
-    );
+    await expect(
+      dialogRow(dialog, "アドレス:").locator(".dialog-value"),
+    ).toHaveText("3");
     await input.fill("0x00010002");
     // 入力形式を 10 進数に変えると、32bit の値として変換される
     await dialogRow(dialog, "入力形式:")
@@ -237,9 +237,9 @@ test.describe("レジスタの一覧表示", () => {
     await shot(page, "register-list-64bit");
 
     await cells(page).nth(1).click();
-    await expect(dialogRow(dialog, "アドレス:").locator(".dialog-value")).toHaveText(
-      "5",
-    );
+    await expect(
+      dialogRow(dialog, "アドレス:").locator(".dialog-value"),
+    ).toHaveText("5");
     await input.fill("0x0011002200330044");
     await dialog.getByRole("button", { name: "書き込み" }).click();
     await expect(dialog).toBeHidden();
@@ -258,15 +258,17 @@ test.describe("レジスタの一覧表示", () => {
 
     await cells(page).nth(1).click();
     const dialog = writeDialog(page);
-    await expect(dialogRow(dialog, "アドレス:").locator(".dialog-value")).toHaveText(
-      "2",
-    );
-    await expect(dialogRow(dialog, "現在の値:").locator(".dialog-value")).toHaveText(
-      "OFF",
-    );
+    await expect(
+      dialogRow(dialog, "アドレス:").locator(".dialog-value"),
+    ).toHaveText("2");
+    await expect(
+      dialogRow(dialog, "現在の値:").locator(".dialog-value"),
+    ).toHaveText("OFF");
     await expect(dialog.locator("input.dialog-input")).toHaveCount(0);
     await expect(dialogRow(dialog, "入力形式:")).toHaveCount(0);
-    await expect(dialog.getByRole("button", { name: "書き込み" })).toHaveCount(0);
+    await expect(dialog.getByRole("button", { name: "書き込み" })).toHaveCount(
+      0,
+    );
     await shot(page, "register-bit-dialog");
 
     await dialog.getByRole("button", { name: "ON", exact: true }).click();
@@ -316,9 +318,9 @@ test.describe("レジスタの一覧表示", () => {
     // 表示中の先頭からの位置に書き込む
     await cells(page).nth(1).click();
     const dialog = writeDialog(page);
-    await expect(dialogRow(dialog, "アドレス:").locator(".dialog-value")).toHaveText(
-      "252",
-    );
+    await expect(
+      dialogRow(dialog, "アドレス:").locator(".dialog-value"),
+    ).toHaveText("252");
     await dialog.locator("input.dialog-input").fill("66");
     await dialog.getByRole("button", { name: "書き込み" }).click();
     await expect(dialog).toBeHidden();
@@ -381,9 +383,9 @@ test.describe("レジスタの一覧表示", () => {
     await page.keyboard.press("Enter");
     const dialog = writeDialog(page);
     await expect(dialog).toBeVisible();
-    await expect(dialogRow(dialog, "アドレス:").locator(".dialog-value")).toHaveText(
-      "3",
-    );
+    await expect(
+      dialogRow(dialog, "アドレス:").locator(".dialog-value"),
+    ).toHaveText("3");
     // ダイアログが開いている間は、矢印キーで選択が動かない
     await page.keyboard.press("ArrowDown");
     expect(await selectedIndex()).toBe(2);

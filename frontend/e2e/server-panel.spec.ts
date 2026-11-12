@@ -92,7 +92,10 @@ test.describe("サーバーの追加と削除", () => {
 
     // プロトコルを選んで追加すると、一覧に出て選択される
     await addButton(page).click();
-    await dialog.locator("select").first().selectOption({ label: "Modbus TCP" });
+    await dialog
+      .locator("select")
+      .first()
+      .selectOption({ label: "Modbus TCP" });
     await dialog.getByRole("button", { name: "追加" }).click();
     await expect(dialog).toBeHidden();
     await expect(serverTab(page, "Modbus TCP")).toHaveClass(/selected/);
@@ -307,9 +310,12 @@ test.describe("サーバーの設定", () => {
     await unit5.click();
     await expect(unit5).toBeChecked();
     await expect
-      .poll(async () =>
-        ((await api<number[]>(page, "GetDisabledUnitIDs", "modbus-tcp")) || [])
-          .length,
+      .poll(
+        async () =>
+          (
+            (await api<number[]>(page, "GetDisabledUnitIDs", "modbus-tcp")) ||
+            []
+          ).length,
       )
       .toBe(0);
   });
@@ -325,7 +331,8 @@ test.describe("保存していない変更の確認", () => {
     await expect(saveButton(page)).toHaveText("保存 *");
   });
 
-  const confirm = (page: Page) => dialogByTitle(page, "設定が保存されていません");
+  const confirm = (page: Page) =>
+    dialogByTitle(page, "設定が保存されていません");
 
   test("別のサーバーに切り替えるとき: キャンセル・保存せずに切り替え", async ({
     page,
@@ -372,7 +379,9 @@ test.describe("保存していない変更の確認", () => {
     await expect(
       confirm(page).getByRole("button", { name: "保存せずに開始" }),
     ).toBeVisible();
-    await confirm(page).getByRole("button", { name: "保存してから開始" }).click();
+    await confirm(page)
+      .getByRole("button", { name: "保存してから開始" })
+      .click();
     await expect(pane(page).locator(".server-status-badge")).toHaveText(
       "Running",
     );
@@ -388,9 +397,9 @@ test.describe("保存していない変更の確認", () => {
     await expect(saveButton(page)).toHaveText("保存 *");
     await serverTab(page, "OPC UA").getByTitle("開始").click();
     await expect(confirm(page)).toBeHidden();
-    await expect(serverTab(page, "OPC UA").locator(".server-status-dot")).toHaveClass(
-      /running/,
-    );
+    await expect(
+      serverTab(page, "OPC UA").locator(".server-status-dot"),
+    ).toHaveClass(/running/);
     await expect(saveButton(page)).toHaveText("保存 *");
     await serverTab(page, "OPC UA").getByTitle("停止").click();
 
@@ -416,7 +425,9 @@ test.describe("保存していない変更の確認", () => {
 
     // 保存してから移動
     await page.getByTitle("Variables").click();
-    await confirm(page).getByRole("button", { name: /保存して/ }).click();
+    await confirm(page)
+      .getByRole("button", { name: /保存して/ })
+      .click();
     await expect(page.locator(".variable-toolbar")).toBeVisible();
     expect((await config(page, "modbus-tcp")).settings.tcpPort).toBe(TCP_PORT);
 
@@ -426,7 +437,9 @@ test.describe("保存していない変更の確認", () => {
     await setting(page, "ポート").fill("15099");
     await expect(saveButton(page)).toHaveText("保存 *");
     await page.getByTitle("Variables").click();
-    await confirm(page).getByRole("button", { name: /保存せず/ }).click();
+    await confirm(page)
+      .getByRole("button", { name: /保存せず/ })
+      .click();
     await expect(page.locator(".variable-toolbar")).toBeVisible();
     expect((await config(page, "modbus-tcp")).settings.tcpPort).toBe(TCP_PORT);
 
