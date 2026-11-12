@@ -1,4 +1,5 @@
 // 変数のデータ型・値に関する純粋関数（コンポーネントの state に依存しない）
+import { application } from "../../wailsjs/go/models";
 
 // スカラー値のフォーマット
 export const formatScalarValue = (value: any, dataType: string): string => {
@@ -252,3 +253,111 @@ export const formatNumeric = (
       return String(value);
   }
 };
+
+// データ型のワード数を取得
+export const getWordCount = (
+  dataType: string,
+  dataTypes: application.DataTypeInfoDTO[],
+  structTypes: application.StructTypeDTO[],
+): number => {
+  // STRING[n] 型
+  const strMatch = dataType.match(/^STRING\[(\d+)\]$/);
+  if (strMatch) {
+    const maxBytes = parseInt(strMatch[1]);
+    return Math.ceil(maxBytes / 2);
+  }
+  // スカラー型
+  const dt = dataTypes.find((t) => t.id === dataType);
+  if (dt) return dt.wordCount;
+  // 構造体型
+  const st = structTypes.find((s) => s.name === dataType);
+  if (st) return st.wordCount;
+  // 配列型（IEC 61131-3 形式 および 旧形式）
+  const arr = parseArrayTypeFE(dataType);
+  if (arr) {
+    return getWordCount(arr.elemType, dataTypes, structTypes) * arr.size;
+  }
+  return 1;
+};
+
+// 構造体のデフォルト値を再帰的に生成
+export const generateStructDefault = (
+  typeName: string,
+  structTypes: application.StructTypeDTO[],
+): any => {
+  const st = structTypes.find((s) => s.name === typeName);
+  if (!st) return {};
+  const obj: Record<string, any> = {};
+  for (const f of st.fields) {
+    const arr = parseArrayTypeFE(f.dataType);
+    if (arr) {
+      obj[f.name] = Array.from({ length: arr.size }, () =>
+        isStructType(arr.elemType)
+          ? generateStructDefault(arr.elemType, structTypes)
+          : parseValue(getDefaultValue(arr.elemType), arr.elemType),
+      );
+    } else if (isStructType(f.dataType)) {
+      obj[f.name] = generateStructDefault(f.dataType, structTypes);
+    } else {
+      obj[f.name] = parseValue(getDefaultValue(f.dataType), f.dataType);
+    }
+  }
+  return obj;
+};
+
+// カテゴリ・要素型・STRING長からベース要素型文字列を解決するヘルパー
+export const resolveBaseElemType = (
+  category: "scalar" | "struct",
+  elemType: string,
+  stringLength: number,
+): string => {
+  if (category === "struct") return elemType;
+  return elemType === "STRING" ? `STRING[${stringLength}]` : elemType;
+};
+
+// 任意データ型のデフォルト値を再帰生成するヘルパー
+export const generateDefaultForType = (
+  dataType: string,
+  structTypes: application.StructTypeDTO[],
+): any => {
+  const arr = parseArrayTypeFE(dataType);
+  if (arr) {
+    return Array.from({ length: arr.size }, () =>
+      generateDefaultForType(arr.elemType, structTypes),
+    );
+  }
+  if (isStructType(dataType)) return generateStructDefault(dataType, structTypes);
+  return parseValue(getDefaultValue(dataType), dataType);
+};
+
+// フラット化された行の型定義
+export interface FlatRow {
+  key: string;
+  displayName: string;
+  dataType: string;
+  value: any;
+  depth: number;
+  // 親変数への参照（編集・削除・マッピング用）
+  variable: application.VariableDTO;
+  // 値のパスを表すキー配列（例: ["fieldName"] や [0, "fieldName"]）
+  valuePath: (string | number)[];
+  // この行がヘッダー行（構造体/配列の親）かどうか
+  isHeader: boolean;
+  // 変数のベースアドレスからのワードオフセット
+  wordOffset: number;
+}
+
+// 一括マッピング編集用の行データ
+export interface BulkEditRow {
+  variableId: string;
+  variableName: string;
+  dataType: string;
+  wordCount: number;
+  // レジスタ型プロトコル（メモリエリアを持つ）
+  memoryArea: string;
+  addressStr: string; // 空文字 = マッピングなし（削除）
+  endianness: string;
+  // ノード公開型プロトコル（SupportsNodePublishing=true）
+  nodeEnabled: boolean;
+  accessMode: string;
+}
