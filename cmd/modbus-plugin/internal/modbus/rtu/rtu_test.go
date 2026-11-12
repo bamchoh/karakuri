@@ -140,9 +140,49 @@ func TestParseRequest_Errors(t *testing.T) {
 	if _, err := ParseRequest(rtuFrame(t, "11 10 00 01 00 02 04 00 0A")); !errors.Is(err, ErrFrameTooShort) {
 		t.Errorf("データ不足: err = %v, want ErrFrameTooShort", err)
 	}
-	// 対応していない機能コード
-	if _, err := ParseRequest(rtuFrame(t, "11 2B 00 00 00 00")); err == nil {
-		t.Error("対応していない機能コードがエラーにならなかった")
+}
+
+// 対応していない機能コードは解析のエラーにせず、例外応答 Illegal Function を返す
+// （以前は解析でエラーになり、何も応答していなかった）
+func TestProcess_UnsupportedFunctionCode(t *testing.T) {
+	h := newMemHandler()
+	for _, body := range []string{
+		"11 2B 00 00 00 00", // データ付き
+		"11 07",             // データなし（Read Exception Status）
+		"11 08 00 00 12 34", // Diagnostics
+	} {
+		req, err := ParseRequest(rtuFrame(t, body))
+		if err != nil {
+			t.Errorf("%s: ParseRequest がエラーになった: %v", body, err)
+			continue
+		}
+		fc := unhex(t, body)[1]
+		if req.UnitID != 0x11 || req.FunctionCode != fc {
+			t.Errorf("%s: リクエスト = %+v", body, req)
+		}
+		want := []byte{0x11, fc | 0x80, ExceptionIllegalFunction}
+		if got := process(t, h, body); !bytes.Equal(got, want) {
+			t.Errorf("%s: 応答 = % X, want % X", body, got, want)
+		}
+	}
+
+	// UnitID がオフなら、対応していない機能コードにも応答しない
+	h.disabled[0x11] = true
+	req, _ := ParseRequest(rtuFrame(t, "11 2B 00 00 00 00"))
+	if res := NewProcessor(h).Process(req); res != nil {
+		t.Errorf("オフの UnitID に応答した: % X", res)
+	}
+	if res := NewProcessor(h).ProcessASCII(req); res != nil {
+		t.Errorf("オフの UnitID に応答した（ASCII）: %q", res)
+	}
+}
+
+// BuildASCIIFrame は、渡されたスライスの後ろ（容量の余り）を書き換えない
+func TestBuildASCIIFrame_DoesNotModifyInput(t *testing.T) {
+	buf := []byte{0x11, 0x03, 0x00, 0x6B, 0x00, 0x03, 0xAA, 0xBB}
+	BuildASCIIFrame(buf[:6])
+	if buf[6] != 0xAA || buf[7] != 0xBB {
+		t.Errorf("入力の後ろが書き換わった: % X", buf)
 	}
 }
 
@@ -204,31 +244,6 @@ func TestParseASCIIFrame_Errors(t *testing.T) {
 	for name, frame := range cases {
 		if _, err := ParseASCIIFrame([]byte(frame)); err == nil {
 			t.Errorf("%s: %q がエラーにならなかった", name, frame)
-		}
-	}
-}
-
-func TestBuildASCIIResponses(t *testing.T) {
-	cases := []struct {
-		name string
-		got  []byte
-		body string
-	}{
-		{"ビット読み取り", BuildASCIIReadBitsResponse(0x11, 0x01, []bool{true, false, true, true}), "11 01 01 0D"},
-		{"レジスタ読み取り", BuildASCIIReadRegistersResponse(0x11, 0x03, []uint16{0xAE41}), "11 03 02 AE 41"},
-		{"単一書き込み", BuildASCIIWriteSingleResponse(0x11, 0x06, 1, 3), "11 06 00 01 00 03"},
-		{"複数書き込み", BuildASCIIWriteMultipleResponse(0x11, 0x10, 1, 2), "11 10 00 01 00 02"},
-		{"例外", BuildASCIIExceptionResponse(0x11, 0x03, ExceptionIllegalDataAddress), "11 83 02"},
-	}
-	for _, c := range cases {
-		// ASCII フレームを解析すると、同じ内容のバイト列に戻る
-		body, err := ParseASCIIFrame(c.got)
-		if err != nil {
-			t.Errorf("%s: 組み立てたフレーム %q を解析できない: %v", c.name, c.got, err)
-			continue
-		}
-		if want := unhex(t, c.body); !bytes.Equal(body, want) {
-			t.Errorf("%s: got % X, want % X", c.name, body, want)
 		}
 	}
 }
@@ -323,7 +338,7 @@ func process(t *testing.T, h *memHandler, body string) []byte {
 	if err != nil {
 		t.Fatalf("ParseASCIIRequest(%s): %v", body, err)
 	}
-	asciiBody, err := ParseASCIIFrame((&ASCIIServer{handler: h}).processRequest(asciiReq))
+	asciiBody, err := ParseASCIIFrame(NewProcessor(h).ProcessASCII(asciiReq))
 	if err != nil {
 		t.Fatalf("ASCII のレスポンスを解析できない: %v", err)
 	}

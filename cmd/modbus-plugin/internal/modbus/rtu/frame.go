@@ -2,7 +2,6 @@ package rtu
 
 import (
 	"encoding/binary"
-	"fmt"
 )
 
 // 機能コード定義
@@ -35,8 +34,8 @@ type Response struct {
 
 // ParseRequest はバイト列からリクエストを解析する
 func ParseRequest(frame []byte) (*Request, error) {
-	// 最小フレーム長: UnitID(1) + FunctionCode(1) + Data(2) + CRC(2) = 6
-	if len(frame) < 6 {
+	// 最小フレーム長: UnitID(1) + FunctionCode(1) + CRC(2) = 4
+	if len(frame) < 4 {
 		return nil, ErrFrameTooShort
 	}
 
@@ -46,7 +45,15 @@ func ParseRequest(frame []byte) (*Request, error) {
 	}
 
 	// CRCを除いたデータ部分
-	data := frame[:len(frame)-2]
+	return parseRequestBody(frame[:len(frame)-2])
+}
+
+// parseRequestBody は UnitID・機能コード・データ（CRC / LRC を除いたもの）からリクエストを作る。
+// RTU と ASCII で共通。
+func parseRequestBody(data []byte) (*Request, error) {
+	if len(data) < 2 {
+		return nil, ErrFrameTooShort
+	}
 
 	req := &Request{
 		UnitID:       data[0],
@@ -98,7 +105,8 @@ func ParseRequest(frame []byte) (*Request, error) {
 		req.Data = data[7 : 7+byteCount]
 
 	default:
-		return nil, fmt.Errorf("unsupported function code: 0x%02X", req.FunctionCode)
+		// 対応していない機能コードはエラーにしない。
+		// Processor が例外応答（Illegal Function）を返せるよう、UnitID と機能コードだけを持つリクエストにする
 	}
 
 	return req, nil
