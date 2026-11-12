@@ -87,7 +87,7 @@ func newVariableChangeListener(emitFn func(), interval time.Duration) *variableC
 }
 
 // OnVariableChanged は変数変更通知を受け取り、スロットルして発行する。
-func (l *variableChangeListener) OnVariableChanged(_ *variable.Variable, _ []variable.ProtocolMapping, _ string, _ interface{}) {
+func (l *variableChangeListener) OnVariableChanged(_ *variable.Variable, _ []variable.ProtocolMapping) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	if l.timer != nil {

@@ -4,12 +4,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"sync"
 
 	"karakuri/internal/domain/protocol"
 )
-
-const VERSION = "1.0.0"
 
 // Modbus のプロトコルタイプ
 const (
@@ -21,11 +20,8 @@ const (
 // ErrUnitIdDisabled はUnitIDが無効化されている場合のエラー
 var ErrUnitIdDisabled = errors.New("unit ID is disabled")
 
+// BaseFactory は、TCP / RTU / ASCII のファクトリーに共通の部分
 type BaseFactory struct{}
-
-func (f *BaseFactory) Version() string {
-	return VERSION
-}
 
 // CreateServer はサーバーを作成する
 func (f *BaseFactory) CreateServer(config protocol.ProtocolConfig, store protocol.DataStore) (protocol.ProtocolServer, error) {
@@ -51,6 +47,7 @@ func (f *BaseFactory) GetProtocolCapabilities() protocol.ProtocolCapabilities {
 	}
 }
 
+// TCPFactory は Modbus TCP のファクトリー
 type TCPFactory struct {
 	BaseFactory
 }
@@ -65,14 +62,9 @@ func (f *TCPFactory) DisplayName() string {
 	return "Modbus TCP"
 }
 
-// CreateConfigFromVariant は設定を作成する（fixedVariant を使用）
+// CreateConfigFromVariant は既定の設定を作成する（バリアントは 1 つだけなので、引数は使わない）
 func (f *TCPFactory) CreateConfigFromVariant(_ string) protocol.ProtocolConfig {
 	return DefaultTCPConfig()
-}
-
-// DefaultConfig はデフォルト設定を返す
-func (f *TCPFactory) DefaultConfig() protocol.ProtocolConfig {
-	return f.CreateConfigFromVariant("")
 }
 
 // ConfigVariants は利用可能な設定バリアントを返す（バリアントは固定なので1エントリのみ）
@@ -82,7 +74,7 @@ func (f *TCPFactory) ConfigVariants() []protocol.ConfigVariant {
 	}
 }
 
-// GetConfigFields は設定フィールドを返す（fixedVariant を使用）
+// GetConfigFields は設定フィールドを返す
 func (f *TCPFactory) GetConfigFields(_ string) []protocol.ConfigField {
 	return []protocol.ConfigField{
 		{Name: "tcpAddress", Label: "アドレス", Description: "待ち受けるネットワークアドレス。0.0.0.0 で全インターフェースに対応します。", Type: "text", Required: true, Default: "0.0.0.0"},
@@ -96,28 +88,21 @@ func (f *TCPFactory) ConfigToMap(config protocol.ProtocolConfig) map[string]inte
 	if !ok {
 		return nil
 	}
-	result := make(map[string]interface{})
-	result["tcpAddress"] = mc.TCPAddress
-	result["tcpPort"] = mc.TCPPort
-	return result
+	return map[string]interface{}{
+		"tcpAddress": mc.TCPAddress,
+		"tcpPort":    mc.TCPPort,
+	}
 }
 
-// MapToConfig はmapから設定を作成する（fixedVariant を使用）
+// MapToConfig はmapから設定を作成する（map にない項目は既定値のまま）
 func (f *TCPFactory) MapToConfig(_ string, settings map[string]interface{}) (protocol.ProtocolConfig, error) {
-	config := f.CreateConfigFromVariant("").(*ModbusConfig)
-
-	if v, ok := settings["tcpAddress"].(string); ok {
-		config.TCPAddress = v
-	}
-	if v, ok := settings["tcpPort"].(float64); ok {
-		config.TCPPort = int(v)
-	} else if v, ok := settings["tcpPort"].(int); ok {
-		config.TCPPort = v
-	}
-
+	config := DefaultTCPConfig()
+	setString(settings, "tcpAddress", &config.TCPAddress)
+	setInt(settings, "tcpPort", &config.TCPPort)
 	return config, nil
 }
 
+// RTUFactory は Modbus RTU のファクトリー
 type RTUFactory struct {
 	BaseFactory
 }
@@ -132,14 +117,9 @@ func (f *RTUFactory) DisplayName() string {
 	return "Modbus RTU"
 }
 
-// CreateConfigFromVariant は設定を作成する（fixedVariant を使用）
+// CreateConfigFromVariant は既定の設定を作成する（バリアントは 1 つだけなので、引数は使わない）
 func (f *RTUFactory) CreateConfigFromVariant(_ string) protocol.ProtocolConfig {
 	return DefaultRTUConfig()
-}
-
-// DefaultConfig はデフォルト設定を返す
-func (f *RTUFactory) DefaultConfig() protocol.ProtocolConfig {
-	return f.CreateConfigFromVariant("")
 }
 
 // ConfigVariants は利用可能な設定バリアントを返す（バリアントは固定なので1エントリのみ）
@@ -149,77 +129,22 @@ func (f *RTUFactory) ConfigVariants() []protocol.ConfigVariant {
 	}
 }
 
-// GetConfigFields は設定フィールドを返す（fixedVariant を使用）
+// GetConfigFields は設定フィールドを返す
 func (f *RTUFactory) GetConfigFields(_ string) []protocol.ConfigField {
-	return []protocol.ConfigField{
-		{Name: "serialPort", Label: "シリアルポート", Description: "通信に使用するシリアルポート（例: COM1、COM3）。", Type: "serialport", Required: true, Default: "COM1", Category: "基本設定"},
-		{Name: "baudRate", Label: "ボーレート", Description: "シリアル通信の速度（bps）。接続先デバイスと一致させてください。", Type: "select", Required: true, Default: 115200, Category: "基本設定", Options: []protocol.FieldOption{
-			{Value: "9600", Label: "9600"},
-			{Value: "19200", Label: "19200"},
-			{Value: "38400", Label: "38400"},
-			{Value: "57600", Label: "57600"},
-			{Value: "115200", Label: "115200"},
-		}},
-		{Name: "dataBits", Label: "データビット", Description: "1フレームあたりのデータビット数。Modbus RTU は通常 8 ビットです。", Type: "select", Required: true, Default: 8, Category: "フレーム設定", Options: []protocol.FieldOption{
-			{Value: "7", Label: "7"},
-			{Value: "8", Label: "8"},
-		}},
-		{Name: "stopBits", Label: "ストップビット", Description: "フレーム末尾のストップビット数。", Type: "select", Required: true, Default: 1, Category: "フレーム設定", Options: []protocol.FieldOption{
-			{Value: "1", Label: "1"},
-			{Value: "2", Label: "2"},
-		}},
-		{Name: "parity", Label: "パリティ", Description: "エラー検出用のパリティビット。None（N）、Even（E）、Odd（O）から選択します。", Type: "select", Required: true, Default: "N", Category: "フレーム設定", Options: []protocol.FieldOption{
-			{Value: "N", Label: "None"},
-			{Value: "E", Label: "Even"},
-			{Value: "O", Label: "Odd"},
-		}},
-	}
+	return serialConfigFields(f.DisplayName(), "8")
 }
 
 // ConfigToMap は設定をmapに変換する
 func (f *RTUFactory) ConfigToMap(config protocol.ProtocolConfig) map[string]interface{} {
-	mc, ok := config.(*ModbusConfig)
-	if !ok {
-		return nil
-	}
-	result := make(map[string]interface{})
-	result["serialPort"] = mc.SerialPort
-	result["baudRate"] = mc.BaudRate
-	result["dataBits"] = mc.DataBits
-	result["stopBits"] = mc.StopBits
-	result["parity"] = mc.Parity
-	return result
+	return serialConfigToMap(config)
 }
 
-// MapToConfig はmapから設定を作成する（fixedVariant を使用）
+// MapToConfig はmapから設定を作成する（map にない項目は既定値のまま）
 func (f *RTUFactory) MapToConfig(_ string, settings map[string]interface{}) (protocol.ProtocolConfig, error) {
-	config := f.CreateConfigFromVariant("").(*ModbusConfig)
-
-	if v, ok := settings["serialPort"].(string); ok {
-		config.SerialPort = v
-	}
-	if v, ok := settings["baudRate"].(float64); ok {
-		config.BaudRate = int(v)
-	} else if v, ok := settings["baudRate"].(int); ok {
-		config.BaudRate = v
-	}
-	if v, ok := settings["dataBits"].(float64); ok {
-		config.DataBits = int(v)
-	} else if v, ok := settings["dataBits"].(int); ok {
-		config.DataBits = v
-	}
-	if v, ok := settings["stopBits"].(float64); ok {
-		config.StopBits = int(v)
-	} else if v, ok := settings["stopBits"].(int); ok {
-		config.StopBits = v
-	}
-	if v, ok := settings["parity"].(string); ok {
-		config.Parity = v
-	}
-
-	return config, nil
+	return applySerialSettings(DefaultRTUConfig(), settings), nil
 }
 
+// ASCIIFactory は Modbus ASCII のファクトリー
 type ASCIIFactory struct {
 	BaseFactory
 }
@@ -234,14 +159,9 @@ func (f *ASCIIFactory) DisplayName() string {
 	return "Modbus ASCII"
 }
 
-// CreateConfigFromVariant は設定を作成する（fixedVariant を使用）
+// CreateConfigFromVariant は既定の設定を作成する（バリアントは 1 つだけなので、引数は使わない）
 func (f *ASCIIFactory) CreateConfigFromVariant(_ string) protocol.ProtocolConfig {
 	return DefaultASCIIConfig()
-}
-
-// DefaultConfig はデフォルト設定を返す
-func (f *ASCIIFactory) DefaultConfig() protocol.ProtocolConfig {
-	return f.CreateConfigFromVariant("")
 }
 
 // ConfigVariants は利用可能な設定バリアントを返す（バリアントは固定なので1エントリのみ）
@@ -251,8 +171,27 @@ func (f *ASCIIFactory) ConfigVariants() []protocol.ConfigVariant {
 	}
 }
 
-// GetConfigFields は設定フィールドを返す（fixedVariant を使用）
+// GetConfigFields は設定フィールドを返す
 func (f *ASCIIFactory) GetConfigFields(_ string) []protocol.ConfigField {
+	return serialConfigFields(f.DisplayName(), "7")
+}
+
+// ConfigToMap は設定をmapに変換する
+func (f *ASCIIFactory) ConfigToMap(config protocol.ProtocolConfig) map[string]interface{} {
+	return serialConfigToMap(config)
+}
+
+// MapToConfig はmapから設定を作成する（map にない項目は既定値のまま）
+func (f *ASCIIFactory) MapToConfig(_ string, settings map[string]interface{}) (protocol.ProtocolConfig, error) {
+	return applySerialSettings(DefaultASCIIConfig(), settings), nil
+}
+
+// ============================================================
+// シリアル通信（RTU / ASCII）で共通の設定
+// ============================================================
+
+// serialConfigFields はシリアル通信の設定フィールドを返す。displayName と usualDataBits は、データビットの説明文に入れる
+func serialConfigFields(displayName, usualDataBits string) []protocol.ConfigField {
 	return []protocol.ConfigField{
 		{Name: "serialPort", Label: "シリアルポート", Description: "通信に使用するシリアルポート（例: COM1、COM3）。", Type: "serialport", Required: true, Default: "COM1", Category: "基本設定"},
 		{Name: "baudRate", Label: "ボーレート", Description: "シリアル通信の速度（bps）。接続先デバイスと一致させてください。", Type: "select", Required: true, Default: 115200, Category: "基本設定", Options: []protocol.FieldOption{
@@ -262,7 +201,7 @@ func (f *ASCIIFactory) GetConfigFields(_ string) []protocol.ConfigField {
 			{Value: "57600", Label: "57600"},
 			{Value: "115200", Label: "115200"},
 		}},
-		{Name: "dataBits", Label: "データビット", Description: "1フレームあたりのデータビット数。Modbus RTU は通常 8 ビットです。", Type: "select", Required: true, Default: 8, Category: "フレーム設定", Options: []protocol.FieldOption{
+		{Name: "dataBits", Label: "データビット", Description: "1フレームあたりのデータビット数。" + displayName + " は通常 " + usualDataBits + " ビットです。", Type: "select", Required: true, Default: 8, Category: "フレーム設定", Options: []protocol.FieldOption{
 			{Value: "7", Label: "7"},
 			{Value: "8", Label: "8"},
 		}},
@@ -278,48 +217,46 @@ func (f *ASCIIFactory) GetConfigFields(_ string) []protocol.ConfigField {
 	}
 }
 
-// ConfigToMap は設定をmapに変換する
-func (f *ASCIIFactory) ConfigToMap(config protocol.ProtocolConfig) map[string]interface{} {
+// serialConfigToMap はシリアル通信の設定をmapに変換する
+func serialConfigToMap(config protocol.ProtocolConfig) map[string]interface{} {
 	mc, ok := config.(*ModbusConfig)
 	if !ok {
 		return nil
 	}
-	result := make(map[string]interface{})
-	result["serialPort"] = mc.SerialPort
-	result["baudRate"] = mc.BaudRate
-	result["dataBits"] = mc.DataBits
-	result["stopBits"] = mc.StopBits
-	result["parity"] = mc.Parity
-	return result
+	return map[string]interface{}{
+		"serialPort": mc.SerialPort,
+		"baudRate":   mc.BaudRate,
+		"dataBits":   mc.DataBits,
+		"stopBits":   mc.StopBits,
+		"parity":     mc.Parity,
+	}
 }
 
-// MapToConfig はmapから設定を作成する（fixedVariant を使用）
-func (f *ASCIIFactory) MapToConfig(_ string, settings map[string]interface{}) (protocol.ProtocolConfig, error) {
-	config := f.CreateConfigFromVariant("").(*ModbusConfig)
+// applySerialSettings は、map にあるシリアル通信の設定を config に入れて返す
+func applySerialSettings(config *ModbusConfig, settings map[string]interface{}) *ModbusConfig {
+	setString(settings, "serialPort", &config.SerialPort)
+	setInt(settings, "baudRate", &config.BaudRate)
+	setInt(settings, "dataBits", &config.DataBits)
+	setInt(settings, "stopBits", &config.StopBits)
+	setString(settings, "parity", &config.Parity)
+	return config
+}
 
-	if v, ok := settings["serialPort"].(string); ok {
-		config.SerialPort = v
+// setString は、settings[key] が文字列なら dst に入れる
+func setString(settings map[string]interface{}, key string, dst *string) {
+	if v, ok := settings[key].(string); ok {
+		*dst = v
 	}
-	if v, ok := settings["baudRate"].(float64); ok {
-		config.BaudRate = int(v)
-	} else if v, ok := settings["baudRate"].(int); ok {
-		config.BaudRate = v
-	}
-	if v, ok := settings["dataBits"].(float64); ok {
-		config.DataBits = int(v)
-	} else if v, ok := settings["dataBits"].(int); ok {
-		config.DataBits = v
-	}
-	if v, ok := settings["stopBits"].(float64); ok {
-		config.StopBits = int(v)
-	} else if v, ok := settings["stopBits"].(int); ok {
-		config.StopBits = v
-	}
-	if v, ok := settings["parity"].(string); ok {
-		config.Parity = v
-	}
+}
 
-	return config, nil
+// setInt は、settings[key] が数値なら dst に入れる（JSON から来た値は float64、Go から来た値は int）
+func setInt(settings map[string]interface{}, key string, dst *int) {
+	switch v := settings[key].(type) {
+	case float64:
+		*dst = int(v)
+	case int:
+		*dst = v
+	}
 }
 
 func intPtr(i int) *int {
@@ -590,6 +527,8 @@ func (h *DataStoreHandler) GetDisabledUnitIDs() []uint8 {
 	for id := range h.disabledUnitIDs {
 		ids = append(ids, id)
 	}
+	// 番号順に返す（map の順番のままだと、呼ぶたびに順番が変わる）
+	slices.Sort(ids)
 	return ids
 }
 

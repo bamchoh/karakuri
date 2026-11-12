@@ -188,7 +188,6 @@ internal/
   - `Node.OnWrite` でクライアントの書き込みを `WriteVariableValue` / `WriteVariableFieldValue` に転送
 - **DataStore** (`internal/domain/protocol/server.go`): プロトコル共通のメモリ操作インターフェース
   - `ReadBits()`, `WriteBit()`, `ReadWords()`, `WriteWord()`: 汎用メモリ操作
-  - `Snapshot()`, `Restore()`: Export/Import用
   - `GetAreas()`: `MemoryArea` スライスを返す。`MemoryArea.OneOrigin` が true のエリアはUIで1オリジンアドレスを表示する（内部は常に0ベース）。Modbusの全4エリアは `OneOrigin: true`
   - `MemoryArea.ShortName`: マッピング列などに表示する短い名前（Modbus は `0` / `1` / `3` / `4`）。空ならエリア ID を表示する
 - **VariableStoreAccessor** (`internal/domain/protocol/server.go`): プロトコルが VariableStore にアクセスするための汎用インターフェース

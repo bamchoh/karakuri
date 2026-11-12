@@ -66,8 +66,6 @@ type ConfigVariant struct {
 
 // ServerFactory はプロトコルサーバーを作成するファクトリーインターフェース(プロトコルの実装者が実装すること)
 type ServerFactory interface {
-	// Version はファクトリーのバージョンを表す
-	Version() string
 	// ProtocolType はファクトリーが作成するプロトコルの種類を返す
 	ProtocolType() ProtocolType
 	// DisplayName はプロトコルの表示名を返す
@@ -76,8 +74,6 @@ type ServerFactory interface {
 	CreateServer(config ProtocolConfig, store DataStore) (ProtocolServer, error)
 	// CreateDataStore はプロトコル用のデータストアを作成する
 	CreateDataStore() DataStore
-	// DefaultConfig はデフォルト設定を返す
-	DefaultConfig() ProtocolConfig
 	// ConfigVariants は利用可能な設定バリアントを返す
 	ConfigVariants() []ConfigVariant
 	// CreateConfigFromVariant は指定バリアントの設定を作成する
@@ -92,8 +88,7 @@ type ServerFactory interface {
 	MapToConfig(variantID string, settings map[string]interface{}) (ProtocolConfig, error)
 }
 
-// DataStore はプロトコルサーバーファクトリーで使用するインターフェース
-// 実際の定義は datastore パッケージにある
+// DataStore は、プロトコルが持つレジスタ（メモリエリア）を読み書きするインターフェース
 type DataStore interface {
 	GetAreas() []MemoryArea
 	ReadBit(area string, address uint32) (bool, error)
@@ -104,9 +99,6 @@ type DataStore interface {
 	WriteWord(area string, address uint32, value uint16) error
 	ReadWords(area string, address uint32, count uint16) ([]uint16, error)
 	WriteWords(area string, address uint32, values []uint16) error
-	Snapshot() map[string]interface{}
-	Restore(data map[string]interface{}) error
-	ClearAll()
 }
 
 // MemoryArea はメモリエリアの定義
