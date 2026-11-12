@@ -5,16 +5,17 @@ import (
 	"testing"
 
 	"karakuri/internal/domain/protocol"
+	"karakuri/internal/domain/protocol/protocoltest"
 )
 
 // nodeFactory は "!" を含む変数名を公開できないノード公開型プロトコルのフェイク
-type nodeFactory struct{ *fakeServerFactory }
+type nodeFactory struct{ *protocoltest.Factory }
 
 func (f *nodeFactory) CreateServer(config protocol.ProtocolConfig, _ protocol.DataStore) (protocol.ProtocolServer, error) {
-	return &nodeServer{fakeServer{cfg: config}}, nil
+	return &nodeServer{protocoltest.NewServer(config)}, nil
 }
 
-type nodeServer struct{ fakeServer }
+type nodeServer struct{ *protocoltest.Server }
 
 func (s *nodeServer) NodeAddresses(vars []protocol.NodeVariable) map[string]protocol.NodeAddress {
 	m := map[string]protocol.NodeAddress{}
@@ -30,7 +31,7 @@ func (s *nodeServer) NodeAddresses(vars []protocol.NodeVariable) map[string]prot
 
 func TestNodeAddresses_RejectUnpublishableNames(t *testing.T) {
 	svc := newTestService(t)
-	svc.RegisterPluginFactory(&nodeFactory{newFakeModbusFactory("node", "", "Node")})
+	svc.RegisterPluginFactory(&nodeFactory{protocoltest.NewFactory("node", "", "Node")})
 	if err := svc.AddServer("node", ""); err != nil {
 		t.Fatalf("AddServer: %v", err)
 	}

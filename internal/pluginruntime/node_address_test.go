@@ -64,7 +64,7 @@ func TestServer_GetNodeAddresses(t *testing.T) {
 	}
 
 	// サーバー未作成: リクエストの設定で計算する（設定が空なら既定値）
-	s := newServer(&addrFactory{nodePublishing: true})
+	s := NewServer(&addrFactory{nodePublishing: true})
 	if got := get(s, req); got != "req:A" {
 		t.Errorf("no server = %q, want req:A", got)
 	}
@@ -85,7 +85,7 @@ func TestServer_GetNodeAddresses(t *testing.T) {
 	}
 
 	// ノード公開型でないプロトコルは空
-	s = newServer(&addrFactory{nodePublishing: false})
+	s = NewServer(&addrFactory{nodePublishing: false})
 	if got := get(s, req); got != "" {
 		t.Errorf("non node-publishing = %q, want empty", got)
 	}

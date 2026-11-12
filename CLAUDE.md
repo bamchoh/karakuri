@@ -148,6 +148,7 @@ plugins/                  # ビルド済みプラグイン配置先（task plugi
 internal/
 ├── domain/           # ドメイン層
 │   ├── protocol/     # プロトコル共通インターフェース（ServerFactory, DataStore, ConfigField等）
+│   │   └── protocoltest/  # テスト用のフェイク（Factory / Server / DataStore）。ホスト側のテストで共通に使う
 │   ├── script/       # スクリプトエンティティ
 │   └── variable/     # 変数・構造体型・NodePublishing
 ├── application/      # アプリケーション層
@@ -212,7 +213,7 @@ internal/
   - それぞれ `ProtocolType()` が `"modbus-tcp"` / `"modbus-rtu"` / `"modbus-ascii"`（`modbus.ProtocolModbusTCP` など）を返す
   - プラグインの exe は 1 つで、起動引数 `-protocol-type` から `plugin.ResolveFactory()` がファクトリーを選ぶ
   - ホスト本体からは直接使用しない（プラグインバイナリ `cmd/modbus-plugin/` からインポート）
-  - テストでは `fakeServerFactory`（`internal/application/fake_factory_test.go`）を使用（プロトコル固有実装に依存しない）
+  - テストでは `protocoltest.Factory`（`internal/domain/protocol/protocoltest`）を使用（プロトコル固有実装に依存しない）
 - **opcua.Factory** (`cmd/opcua-plugin/internal/opcua/factory.go`): OPC UA サーバーのファクトリー
   - `ProtocolType()` が `"opcua"`（`opcua.ProtocolOPCUA`）を返す
   - `VariableStoreInjector` を実装。プラグイン内の `pluginruntime.Server.CreateAndStart()` が `host_grpc_addr` に接続した `RemoteVariableStoreAccessor` を注入する
@@ -498,6 +499,15 @@ JavaScript（goja）でPLC動作を記述。
   - 登録したモニタリング項目（プロトコルタイプ、メモリエリア、アドレス、ビット幅、エンディアン、表示形式）
 - **HTTP API 設定**: `%APPDATA%\Karakuri\httpapi_config.json`
   - `{"port": 8765}` 形式で保存。UI または `SetHTTPAPIPort()` で変更すると自動更新
+
+## テストの構成
+
+- **ホスト側のテストはフェイクのプロトコルで動かす**: `protocoltest.NewFactory()` を `PLCService.RegisterPluginFactory()` に登録する。プラグインの実装（`cmd/*-plugin/internal/`）はホストから参照できない
+- **REST API**（`internal/infrastructure/httpapi/server_test.go`）: `httptest` でハンドラーを直接呼ぶ。エンドポイントを追加・変更したらここに足す
+- **プラグイン通信**（`internal/infrastructure/plugin/*_test.go`）: プラグイン側の `pluginruntime.NewServer()` をテストのプロセス内の gRPC サーバーとして立て、ホスト側の `LazyRemoteServerFactory` / `Remote*` から実際の gRPC 越しに呼ぶ（`harness_test.go` の `startPlugin()` / `startedServer()`）。exe は起動せず、`debug_port` と同じ「起動済みのプロセスに接続する」経路を使う
+  - ホストの変数へのアクセス（`HostGrpcServer` ↔ `pluginruntime.RemoteVariableStoreAccessor`）も同じファイル群で往復を確認する
+- **Modbus RTU / ASCII のフレーム**（`cmd/modbus-plugin/internal/modbus/rtu/rtu_test.go`）: 仕様書の既知のフレームで CRC / LRC を確認し、同じリクエストを RTU と ASCII の両方で処理して結果が一致することを確認する
+- 設定フォルダに書き込むパッケージのテストは、`TestMain` で `KARAKURI_CONFIG_DIR` を一時フォルダに向ける
 
 ## 新プロトコル追加手順
 

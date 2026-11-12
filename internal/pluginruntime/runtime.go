@@ -13,7 +13,7 @@ import (
 )
 
 func RunFactory(factory protocol.ServerFactory, debug bool) error {
-	plugin := newServer(factory)
+	plugin := NewServer(factory)
 
 	addr := "127.0.0.1:"
 	if debug {
