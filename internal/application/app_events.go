@@ -5,6 +5,7 @@ import (
 	"sync"
 	"time"
 
+	"karakuri/internal/domain/protocol"
 	"karakuri/internal/domain/variable"
 
 	"github.com/wailsapp/wails/v2/pkg/runtime"
@@ -116,5 +117,39 @@ func (l *variableChangeListener) onTimer() {
 	l.mu.Unlock()
 	if needsFire {
 		l.emitFn()
+	}
+}
+
+var _ protocol.CommunicationEventEmitter = (*WailsEventEmitter)(nil)
+
+// WailsEventEmitter は通信イベント（RX / TX ランプ・接続数）を Wails ランタイムで画面へ送る。
+// protocol.CommunicationEventEmitter の実装
+type WailsEventEmitter struct {
+	ctx context.Context
+}
+
+// NewWailsEventEmitter は新しいWailsEventEmitterを作成する
+func NewWailsEventEmitter(ctx context.Context) *WailsEventEmitter {
+	return &WailsEventEmitter{ctx: ctx}
+}
+
+// EmitRx は受信イベントを発行する
+func (e *WailsEventEmitter) EmitRx() {
+	if e.ctx != nil {
+		runtime.EventsEmit(e.ctx, "comm:rx", nil)
+	}
+}
+
+// EmitTx は送信イベントを発行する
+func (e *WailsEventEmitter) EmitTx() {
+	if e.ctx != nil {
+		runtime.EventsEmit(e.ctx, "comm:tx", nil)
+	}
+}
+
+// EmitConnection は接続数変更イベントを発行する
+func (e *WailsEventEmitter) EmitConnection(count int) {
+	if e.ctx != nil {
+		runtime.EventsEmit(e.ctx, "comm:connection", map[string]int{"count": count})
 	}
 }

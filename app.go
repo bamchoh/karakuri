@@ -10,7 +10,6 @@ import (
 	"strings"
 
 	"karakuri/internal/application"
-	"karakuri/internal/domain/protocol"
 	"karakuri/internal/infrastructure/appconfig"
 	"karakuri/internal/infrastructure/httpapi"
 
@@ -44,7 +43,7 @@ func (a *App) startup(ctx context.Context) {
 	a.ctx = ctx
 
 	// 通信イベントエミッターを設定
-	emitter := protocol.NewWailsEventEmitter(ctx)
+	emitter := application.NewWailsEventEmitter(ctx)
 	a.plcService.SetEventEmitter(emitter)
 
 	// アプリケーション状態イベントエミッターを設定
