@@ -12,7 +12,7 @@ import { ExportProject, ImportProject } from "../wailsjs/go/main/App";
 
 import { FolderOpen, Save } from "lucide-react";
 
-const APP_VERSION = "v0.0.38";
+const APP_VERSION = "v0.0.39";
 
 type Tab = "server" | "variables" | "registers" | "scripts";
 
