@@ -1,14 +1,30 @@
-import { useState, forwardRef, useImperativeHandle, useEffect } from "react";
+import {
+  useState,
+  forwardRef,
+  useImperativeHandle,
+  useEffect,
+  useCallback,
+} from "react";
 import {
   UpdateClient,
   DisconnectClient,
   SendClientRequest,
   ClearClientCommandLogs,
+  GetClientCommandGroups,
+  AddClientSavedCommand,
+  UpdateClientSavedCommand,
+  SendClientSavedCommand,
 } from "../../wailsjs/go/main/App";
 import { application } from "../../wailsjs/go/models";
 import { ChevronDown, ChevronRight, Trash2, Unplug } from "lucide-react";
 import { DynamicField } from "./DynamicField";
-import { ClientCommandComposer } from "./ClientCommandComposer";
+import {
+  ClientCommandComposer,
+  ComposerLoad,
+  ComposerLoadedFrom,
+  ComposerSaveInput,
+} from "./ClientCommandComposer";
+import { ClientCommandGroups } from "./ClientCommandGroups";
 import { ClientCommandLog } from "./ClientCommandLog";
 import { ClientPollingView } from "./ClientPollingView";
 
@@ -78,6 +94,28 @@ export const ClientDetailPane = forwardRef<
   const [error, setError] = useState<string | null>(null);
   const [selectedSeq, setSelectedSeq] = useState<number | null>(null);
 
+  // コマンドグループ（保存したコマンド）
+  const [groups, setGroups] = useState<application.ClientCommandGroupDTO[]>([]);
+  const [selectedGroupId, setSelectedGroupId] = useState<string | null>(null);
+  const [composerLoad, setComposerLoad] = useState<ComposerLoad | null>(null);
+
+  const loadGroups = useCallback(async () => {
+    try {
+      const list = (await GetClientCommandGroups(client.id)) || [];
+      setGroups(list);
+      // 選んでいたグループが消えたら、先頭を選ぶ
+      setSelectedGroupId((prev) =>
+        prev && list.some((g) => g.id === prev) ? prev : (list[0]?.id ?? null),
+      );
+    } catch (e) {
+      setError(String(e));
+    }
+  }, [client.id]);
+
+  useEffect(() => {
+    loadGroups();
+  }, [loadGroups]);
+
   useEffect(() => {
     onDirtyChange(dirty);
   }, [dirty, onDirtyChange]);
@@ -132,6 +170,70 @@ export const ClientDetailPane = forwardRef<
       await Promise.all([onLogsChanged(), onClientsChanged()]);
     }
   };
+
+  // 保存したコマンドを送る（履歴には「グループ名 / コマンド名」が付く）
+  const sendSaved = async (
+    group: application.ClientCommandGroupDTO,
+    command: application.ClientSavedCommandDTO,
+  ) => {
+    if (sending) return;
+    if (dirty && !(await saveSettings())) return;
+    setSending(true);
+    try {
+      setError(null);
+      const entry = await SendClientSavedCommand(
+        client.id,
+        group.id,
+        command.id,
+      );
+      setSelectedSeq(entry.seq);
+    } catch (e) {
+      setError(String(e));
+    } finally {
+      setSending(false);
+      await Promise.all([onLogsChanged(), onClientsChanged()]);
+    }
+  };
+
+  // 組み立て欄の内容を、選んでいるグループに保存する（overwrite があれば、そのコマンドを上書きする）
+  const saveCommand = async (
+    input: ComposerSaveInput,
+    overwrite: ComposerLoadedFrom | null,
+  ): Promise<boolean> => {
+    const dto = application.ClientSavedCommandInputDTO.createFrom(input);
+    try {
+      setError(null);
+      if (overwrite) {
+        await UpdateClientSavedCommand(
+          client.id,
+          overwrite.groupId,
+          overwrite.commandId,
+          dto,
+        );
+      } else {
+        if (!selectedGroupId) return false;
+        await AddClientSavedCommand(client.id, selectedGroupId, dto);
+      }
+      await loadGroups();
+      return true;
+    } catch (e) {
+      setError(String(e));
+      return false;
+    }
+  };
+
+  const loadIntoComposer = (
+    group: application.ClientCommandGroupDTO,
+    command: application.ClientSavedCommandDTO,
+  ) => {
+    setComposerLoad((prev) => ({
+      seq: (prev?.seq ?? 0) + 1,
+      command,
+      from: { groupId: group.id, commandId: command.id, name: command.name },
+    }));
+  };
+
+  const selectedGroup = groups.find((g) => g.id === selectedGroupId) ?? null;
 
   const handleDisconnect = async () => {
     try {
@@ -269,10 +371,30 @@ export const ClientDetailPane = forwardRef<
 
         {subTab === "command" ? (
           <>
+            <div className="vscode-setting-category">コマンドグループ</div>
+            <ClientCommandGroups
+              clientId={client.id}
+              groups={groups}
+              selectedGroupId={selectedGroupId}
+              onSelectGroup={setSelectedGroupId}
+              onChanged={loadGroups}
+              sending={sending}
+              onSend={sendSaved}
+              onLoad={loadIntoComposer}
+            />
+
+            <div className="vscode-setting-category">コマンド</div>
             <ClientCommandComposer
               protocol={protocol}
               sending={sending}
               onSend={send}
+              saveGroup={
+                selectedGroup
+                  ? { id: selectedGroup.id, name: selectedGroup.name }
+                  : null
+              }
+              onSave={saveCommand}
+              load={composerLoad}
             />
 
             <div className="vscode-setting-category">結果と履歴</div>

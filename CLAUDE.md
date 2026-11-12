@@ -83,7 +83,7 @@ go build ./...
 
 `frontend/e2e/` に、ブラウザで画面を操作して確認するテストがある。`task dev` が立てる開発用サーバー（`http://localhost:34115`）に接続するため、Go 側の API とプロトコルの実装を含めた動作を確認できる。手順と注意は `frontend/e2e/README.md` を参照。
 
-- 画面ごとのテスト: 通信画面（サーバー）`server-panel.spec.ts`、変数画面 `variable-dialogs.spec.ts` / `node-publishing.spec.ts`、レジスタ画面 `register-panel.spec.ts` / `monitoring.spec.ts`、スクリプト画面 `script-panel.spec.ts`、通信画面（クライアント）`client-panel.spec.ts` / `client-polling.spec.ts` / `client-mapping.spec.ts`
+- 画面ごとのテスト: 通信画面（サーバー）`server-panel.spec.ts`、変数画面 `variable-dialogs.spec.ts` / `node-publishing.spec.ts`、レジスタ画面 `register-panel.spec.ts` / `monitoring.spec.ts`、スクリプト画面 `script-panel.spec.ts`、通信画面（クライアント）`client-panel.spec.ts` / `client-polling.spec.ts` / `client-mapping.spec.ts` / `client-command-groups.spec.ts`
 - 画面を変更したら、該当するテストを実行する（なければ追加する）。`shot()` で撮ったスクリーンショット（`frontend/e2e/.screenshots/`）で見た目も確認する
 - データの準備は `api(page, "メソッド名", ...)` で Go 側の API を直接呼び、確認したい操作だけを画面で行う
 - **テストはアプリのサーバー・変数・モニタリング項目・スクリプトをすべて削除する。** 開発サーバーは `KARAKURI_CONFIG_DIR` を一時フォルダに向けて起動する
@@ -280,6 +280,7 @@ frontend/src/
 │   ├── ClientDetailPane.tsx    # 通信画面の右側（クライアントを選んだとき）: 接続先の設定（折りたためる）・コマンド・結果と履歴・ポーリング
 │   ├── ClientCommandComposer.tsx # コマンドの組み立て（項目から組み立てる / 16 進で入れる）
 │   ├── ClientCommandLog.tsx    # コマンドの結果と履歴
+│   ├── ClientCommandGroups.tsx # コマンドグループ（保存したコマンドをグループに分けて並べ、選んで送る）
 │   ├── ClientPollingView.tsx   # ポーリング（周期・読み取り項目の追加・最後の結果と値）
 │   └── clientFormat.ts         # クライアント（通信画面の右側）で共通の表示の書式（状態の名前・時刻・かかった時間）
 └── App.tsx                 # タブベースのメインUI
@@ -439,6 +440,8 @@ JavaScript（goja）でPLC動作を記述。
   - `BuildClientRequest(protocolType, commandID, params)`: コマンドと項目の値からリクエストを組み立て、16 進の文字列で返す
   - `SendClientRequest(id, requestHex)`: 16 進で指定したリクエストを送る。タイムアウト・例外応答などは結果の `status`（`ok` / `exception` / `timeout` / `error`）で返す
   - `GetClientCommandLogs()`, `ClearClientCommandLogs()`: 送ったコマンドの履歴（新しい順、最大 200 件）
+  - コマンドグループ: `GetClientCommandGroups(id)`, `AddClientCommandGroup(id, name)`, `RenameClientCommandGroup(id, groupID, name)`, `RemoveClientCommandGroup(id, groupID)`
+  - 保存したコマンド: `AddClientSavedCommand(id, groupID, input)`, `UpdateClientSavedCommand(id, groupID, commandID, input)`, `RenameClientSavedCommand(id, groupID, commandID, name)`, `RemoveClientSavedCommand(id, groupID, commandID)`, `SendClientSavedCommand(id, groupID, commandID)`（`input` は `ClientSavedCommandInputDTO`: `mode` が `build` なら `commandId` / `params`、`hex` なら `request`）
   - `GetClientPolling(id)`: ポーリングの状態（周期・実行中か・周回数・読み取り項目と最後の結果）
   - `AddClientPollItem(id, commandID, params, format)`, `UpdateClientPollItem(id, itemID, commandID, params, format)`, `RemoveClientPollItem(id, itemID)`: 読み取り項目（`Pollable` のコマンドだけ。1 つの接続先に 50 個まで）
   - `SetClientPollInterval(id, ms)`（50〜3600000）, `StartClientPolling(id)`, `StopClientPolling(id)`
@@ -693,6 +696,11 @@ JavaScript（goja）でPLC動作を記述。
 - **作り**: `PLCService` の `clients`（`clientManager`、`plc_service_clients.go`）が接続先・ファクトリー・履歴を持つ。通信を待つ間に `PLCService.mu` を持たないよう、自分のロックを使う。接続を閉じる処理（送信中なら終わるまで待つ）は、そのロックの外で呼ぶ
 - **接続先**: いくつでも追加できる（サーバーと違い、プロトコルごとに 1 つではない）。設定を変えるとクライアントを作り直す。プロジェクトに保存する（`ProjectDataDTO.Clients`）
 - **送信の流れ**: 画面は、組み立てる方式でも `BuildClientRequest()` で 16 進にしてから `SendClientRequest()` で送る（送る経路は 1 つ）
+- **コマンドグループ**（`plc_service_client_commands.go`）: 接続先ごとに、名前を付けたグループを持ち、よく使うコマンドを名前を付けて保存する（整理棚。まとめて送る手順ではない）
+  - 保存するとき、組み立てたもの（`mode: "build"`、コマンドの ID と項目の値）か 16 進で入れたもの（`mode: "hex"`）から、送るバイト列を作っておく。送るときはそれを送る（`SendClientSavedCommand()`、履歴の `label` に「グループ名 / コマンド名」）
+  - 名前が空なら、グループは「グループ N」、コマンドは内容の要約にする
+  - 画面: コマンドのタブの上に、グループの選択（追加・名前の変更・削除）と、保存したコマンドの一覧（送信・組み立て欄に読み込む・名前の変更・削除）。組み立て欄の「「グループ名」に保存」で新しく保存し、読み込んだコマンドは「上書き保存」できる
+  - プロジェクトに保存する（`ClientSnapshotDTO.CommandGroups`。ID は読み込むときに作り直し、使えないコマンドは読み飛ばす）
 - **Modbus TCP**（`internal/protocols/modbus/client.go`）
   - リクエストは PDU（ファンクションコード + データ）。MBAP ヘッダー（トランザクション ID・UnitID）はクライアントが付ける。アドレスは PDU の値（0 始まり）
   - 組み立てられるコマンドは FC01〜06・15・16。16 進で入れれば、ほかのファンクションコードや異常なリクエストも送れる（応答はデータをそのまま表示する）

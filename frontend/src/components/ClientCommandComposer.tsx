@@ -1,15 +1,45 @@
 import { useState, useEffect } from "react";
 import { BuildClientRequest } from "../../wailsjs/go/main/App";
 import { application } from "../../wailsjs/go/models";
-import { Send } from "lucide-react";
+import { Save, Send } from "lucide-react";
 import { DynamicField } from "./DynamicField";
 
 type Mode = "build" | "hex";
+
+// 保存したコマンドの、どこから読み込んだか（上書き保存に使う）
+export interface ComposerLoadedFrom {
+  groupId: string;
+  commandId: string;
+  name: string;
+}
+
+// 組み立て欄に読み込む内容。seq が変わるたびに読み込む
+export interface ComposerLoad {
+  seq: number;
+  command: application.ClientSavedCommandDTO;
+  from: ComposerLoadedFrom;
+}
+
+// 保存する内容（ClientSavedCommandInputDTO と同じ形）
+export interface ComposerSaveInput {
+  name: string;
+  mode: Mode;
+  commandId: string;
+  params: Record<string, any>;
+  request: string;
+}
 
 interface ClientCommandComposerProps {
   protocol: application.ClientProtocolDTO;
   sending: boolean;
   onSend: (requestHex: string) => void;
+  // コマンドグループへの保存（グループを選んでいなければ saveGroup は null）
+  saveGroup: { id: string; name: string } | null;
+  onSave: (
+    input: ComposerSaveInput,
+    overwrite: ComposerLoadedFrom | null,
+  ) => Promise<boolean>;
+  load: ComposerLoad | null;
 }
 
 const noPorts: string[] = [];
@@ -28,6 +58,9 @@ export function ClientCommandComposer({
   protocol,
   sending,
   onSend,
+  saveGroup,
+  onSave,
+  load,
 }: ClientCommandComposerProps) {
   const commands = protocol.commands || [];
   const [mode, setMode] = useState<Mode>("build");
@@ -39,6 +72,30 @@ export function ClientCommandComposer({
   const [preview, setPreview] = useState("");
   const [buildError, setBuildError] = useState<string | null>(null);
   const [hexInput, setHexInput] = useState("");
+  const [saveName, setSaveName] = useState("");
+  const [loadedFrom, setLoadedFrom] = useState<ComposerLoadedFrom | null>(null);
+
+  // 保存したコマンドを読み込む
+  const loadSeq = load?.seq;
+  useEffect(() => {
+    if (!load) return;
+    const c = load.command;
+    if (c.mode === "build" && c.commandId) {
+      setMode("build");
+      setCommandId(c.commandId);
+      setParamsByCommand((prev) => ({
+        ...prev,
+        [c.commandId!]: { ...(c.params || {}) },
+      }));
+    } else {
+      setMode("hex");
+      setHexInput(c.request);
+    }
+    setSaveName(c.name);
+    setLoadedFrom(load.from);
+    // seq が変わったときだけ読み込む
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loadSeq]);
 
   const command = commands.find((c) => c.id === commandId);
   const params = command
@@ -79,13 +136,29 @@ export function ClientCommandComposer({
     setMode("hex");
   };
 
-  const canSend =
-    !sending &&
-    (mode === "build" ? preview !== "" && !buildError : hexInput.trim() !== "");
+  const ready =
+    mode === "build" ? preview !== "" && !buildError : hexInput.trim() !== "";
+  const canSend = !sending && ready;
 
   const handleSend = () => {
     if (!canSend) return;
     onSend(mode === "build" ? preview : hexInput);
+  };
+
+  const saveInput = (): ComposerSaveInput => ({
+    name: saveName,
+    mode,
+    commandId: mode === "build" ? (command?.id ?? "") : "",
+    params: mode === "build" ? params : {},
+    request: mode === "hex" ? hexInput : "",
+  });
+
+  const handleSaveNew = async () => {
+    if (await onSave(saveInput(), null)) setLoadedFrom(null);
+  };
+
+  const handleOverwrite = async () => {
+    if (loadedFrom) await onSave(saveInput(), loadedFrom);
   };
 
   return (
@@ -195,6 +268,38 @@ export function ClientCommandComposer({
           <Send className="icon-left" size={14} />
           {sending ? "送信中…" : "送信"}
         </button>
+        <div className="client-save-group">
+          <input
+            type="text"
+            value={saveName}
+            onChange={(e) => setSaveName(e.target.value)}
+            placeholder="名前（空なら内容の要約）"
+            aria-label="保存する名前"
+          />
+          <button
+            className="btn-secondary"
+            onClick={handleSaveNew}
+            disabled={!ready || !saveGroup}
+            title={
+              saveGroup
+                ? `グループ「${saveGroup.name}」に新しく保存する`
+                : "上のコマンドグループで、保存するグループを選んでください"
+            }
+          >
+            <Save className="icon-left" size={14} />
+            {saveGroup ? `「${saveGroup.name}」に保存` : "グループに保存"}
+          </button>
+          {loadedFrom && (
+            <button
+              className="btn-secondary"
+              onClick={handleOverwrite}
+              disabled={!ready}
+              title={`読み込んだ「${loadedFrom.name}」を、この内容で上書きする`}
+            >
+              「{loadedFrom.name}」を上書き保存
+            </button>
+          )}
+        </div>
       </div>
     </div>
   );

@@ -43,6 +43,37 @@ type ClientCommandLogDTO struct {
 	Error      string                 `json:"error,omitempty"`
 	Summary    string                 `json:"summary"`
 	Values     []ClientResultValueDTO `json:"values"`
+	// Label は、保存したコマンドを送ったときの「グループ名 / コマンド名」（直接送ったときは空）
+	Label string `json:"label,omitempty"`
+}
+
+// ClientCommandGroupDTO はコマンドグループ（保存したコマンドの整理棚）
+type ClientCommandGroupDTO struct {
+	ID       string                  `json:"id"`
+	Name     string                  `json:"name"`
+	Commands []ClientSavedCommandDTO `json:"commands"`
+}
+
+// ClientSavedCommandDTO は保存したコマンド。
+// mode が "build" なら commandId / params から組み立てたもの、"hex" なら 16 進で入れたもの。
+// どちらも request（16 進）を送る
+type ClientSavedCommandDTO struct {
+	ID        string                 `json:"id"`
+	Name      string                 `json:"name"`
+	Mode      string                 `json:"mode"` // "build" | "hex"
+	CommandID string                 `json:"commandId,omitempty"`
+	Params    map[string]interface{} `json:"params,omitempty"`
+	Request   string                 `json:"request"`
+	Summary   string                 `json:"summary"`
+}
+
+// ClientSavedCommandInputDTO は、コマンドを保存・変更するときの入力
+type ClientSavedCommandInputDTO struct {
+	Name      string                 `json:"name"`
+	Mode      string                 `json:"mode"` // "build" | "hex"
+	CommandID string                 `json:"commandId"`
+	Params    map[string]interface{} `json:"params"`
+	Request   string                 `json:"request"` // mode が "hex" のときに使う
 }
 
 // ClientResultValueDTO は応答の内容の 1 項目。読み取った値は bit / word にも元の値を入れる（画面で表示形式を変えるため）
@@ -122,6 +153,8 @@ type ClientSnapshotDTO struct {
 	ProtocolType string                    `json:"protocolType"`
 	Settings     map[string]interface{}    `json:"settings"`
 	Polling      *ClientPollingSnapshotDTO `json:"polling,omitempty"`
+	// コマンドグループ（保存したコマンド）。ID は読み込むときに作り直す
+	CommandGroups []ClientCommandGroupDTO `json:"commandGroups,omitempty"`
 }
 
 // ClientPollingSnapshotDTO はプロジェクトに保存するポーリングの設定（ポーリング中かどうかは保存しない）

@@ -32,6 +32,9 @@ export function ClientCommandLog({
             <span className={`client-status client-status-${selected.status}`}>
               {statusLabel(selected.status)}
             </span>
+            {selected.label && (
+              <span className="client-log-label">{selected.label}</span>
+            )}
             <span className="client-result-summary">{selected.summary}</span>
             <span className="client-result-elapsed">
               {formatElapsed(selected.elapsedMs)}
@@ -114,6 +117,9 @@ export function ClientCommandLog({
                 >
                   <td className="client-history-time">{formatTime(l.at)}</td>
                   <td>
+                    {l.label && (
+                      <div className="client-log-label">{l.label}</div>
+                    )}
                     <div>{l.summary}</div>
                     <code className="client-hex client-history-request">
                       {l.request}
