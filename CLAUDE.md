@@ -248,6 +248,12 @@ internal/
   - `NodePublishingAware`: `OnNodePublishingUpdated()` でノード公開設定変更通知を受け付ける
   - `NodeAddressResolver`: `NodeAddresses(variables)`（`NodeVariable{ID, Name}` のスライス）で公開変数のノードアドレス（OPC UA なら NodeID 文字列）と、公開できない場合の理由（`NodeAddress.Error`）を返す。書式と判定はプロトコルが決める
   - `ProtocolCapabilities.SupportsNodePublishing: true` のプロトコルで利用される
+- **通信イベント（RX / TX ランプ）** : ヘッダーの通信インジケーター（`CommunicationIndicator.tsx`）は Wails イベント `comm:rx` / `comm:tx` で点灯する
+  - 経路: プラグイン内のサーバー → `CommunicationEventEmitter`（`pluginruntime` の `commEventHub`）→ gRPC ストリーム `SubscribeCommunicationEvents` → `RemoteProtocolServer` → ホストの `WailsEventEmitter`
+  - `protocol.CommunicationEventAware`（`SetEventEmitter`）を実装するサーバーに、`pluginruntime.Server.CreateAndStart()` が起動前に送信先を渡す。ホスト側は `RemoteProtocolServer` が同じインターフェースを実装し、`Start()` でストリームの購読を始め、`Stop()` でやめる
+  - `commEventHub` は購読者ごとに「前回の送信以降に起きたこと」（rx / tx / 接続数の変化）だけを持ち、50ms 間隔でまとめて送る（高頻度のポーリングでもイベントを 1 件ずつ送らない）
+  - Modbus は `ModbusServer.SetEventEmitter()` を実装。起動中は `SessionManager` が UnitID ごとの通信を接続数として数える。OPC UA は未対応（uastack にリクエストごとのフックがない）
+  - 画面のテスト: `frontend/e2e/communication-indicator.spec.ts`（実際に Modbus TCP のリクエストを送る）
 - **UnitIDConfigurable** (`internal/domain/protocol/server.go`): UnitID ごとの応答有効・無効を設定できる ProtocolServer 用インターフェース（`GetDisabledUnitIDs` / `SetUnitIdEnabled` / `SetDisabledUnitIDs`）
   - `ProtocolCapabilities.SupportsUnitID: true` のプロトコルで利用される。ホストと pluginruntime はこの型で判定する（個別のローカル定義は持たない）
   - UnitID ごとのセッション追跡（`SessionManager`）は Modbus 固有のため `cmd/modbus-plugin/internal/modbus/session.go` にある

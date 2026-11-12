@@ -440,11 +440,7 @@ func (s *PLCService) GetEventEmitter() protocol.CommunicationEventEmitter {
 
 // setEmitterToServerInstance はサーバーインスタンスにイベントエミッターを設定する（ロック済み前提）
 func (s *PLCService) setEmitterToServerInstance(inst *serverInstance) {
-	type eventAware interface {
-		SetEventEmitter(emitter protocol.CommunicationEventEmitter)
-	}
-
-	if ea, ok := inst.server.(eventAware); ok {
+	if ea, ok := inst.server.(protocol.CommunicationEventAware); ok {
 		ea.SetEventEmitter(s.eventEmitter)
 	}
 }
