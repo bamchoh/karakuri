@@ -281,6 +281,7 @@ frontend/src/
 │   ├── BulkMappingDialog.tsx   # 一括マッピング編集ダイアログ
 │   ├── StructTypeDialog.tsx    # 構造体型管理ダイアログ
 │   ├── StructArrayElementEditor.tsx  # 構造体配列要素のエディタ（ValueEditDialog で使用）
+│   ├── DataTypeFields.tsx      # データ型を選ぶ入力欄（変数追加・変数の編集・構造体型のフィールドで共通）
 │   ├── variableTypes.ts    # 変数のデータ型・値の純粋関数と行の型定義（state に依存しない）
 │   ├── useNodeAddresses.ts # ノードアドレス（OPC UA の NodeID 等）の取得と保持（マッピングの 2 つのダイアログで使用）
 │   ├── useEscapeKey.ts     # Esc キーでダイアログを閉じるためのフック
@@ -319,6 +320,8 @@ frontend/src/
   - 常にマウントしているのは、閉じても入力内容を保持するため（変数追加ダイアログはキャンセルしても入力が残る）
   - 親は `ref.current?.isOpen()` で開閉を調べ、ダイアログが開いている間は行のキーボード操作を止める
   - Esc で閉じる処理は各ダイアログが `useEscapeKey` で持つ
+- **データ型を選ぶフォーム**: 入力欄は `DataTypeFields`、入力内容は `DataTypeFormValue`（`variableTypes.ts`）で共通。型の文字列との変換は `buildDataTypeFromForm()` / `parseDataTypeToForm()` を使い、ダイアログごとに組み立てない
+  - ダイアログごとの違いは props で渡す: 変数追加は「初期値」の行（`scalarExtra`）、構造体型のフィールドは短い文言（`compact`）と、編集中の型自身を除いた構造体型の一覧
 - **共有するデータ**: `dataTypes` / `structTypes` / `variables` / `serverInstances` / `memoryAreasByProtocol` は `VariableView` が読み込み、props で渡す。保存後の再読み込みは `onChanged`（`loadVariables` / `loadStructTypes`）で行う
 - **画面のテスト**: `frontend/e2e/variable-dialogs.spec.ts` が各ダイアログの動きを確認する。ダイアログを変更したら実行する
 IEC 61131-3準拠の変数管理機能。
