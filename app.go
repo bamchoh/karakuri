@@ -54,6 +54,9 @@ func (a *App) startup(ctx context.Context) {
 	for _, factory := range protocols.Factories() {
 		a.plcService.RegisterFactory(factory)
 	}
+	for _, factory := range protocols.ClientFactories() {
+		a.plcService.RegisterClientFactory(factory)
+	}
 
 	// REST HTTP API サーバーを起動
 	if err := a.httpAPI.Start(); err != nil {
@@ -294,6 +297,58 @@ func (a *App) ClearConsoleLogs() {
 // GetIntervalPresets は周期プリセットを取得する
 func (a *App) GetIntervalPresets() []application.IntervalPresetDTO {
 	return a.plcService.GetIntervalPresets()
+}
+
+// === クライアント（外部の機器へつなぐ側） ===
+
+// GetClientProtocols はクライアントとして使えるプロトコル（接続先の設定項目・コマンドの定義）を返す
+func (a *App) GetClientProtocols() []application.ClientProtocolDTO {
+	return a.plcService.GetClientProtocols()
+}
+
+// GetClients は接続先の一覧を返す
+func (a *App) GetClients() []application.ClientDTO {
+	return a.plcService.GetClients()
+}
+
+// AddClient は接続先を追加する（設定は既定値）
+func (a *App) AddClient(protocolType string, name string) (*application.ClientDTO, error) {
+	return a.plcService.AddClient(protocolType, name, nil)
+}
+
+// UpdateClient は接続先の名前と設定を変える
+func (a *App) UpdateClient(id string, name string, settings map[string]interface{}) error {
+	return a.plcService.UpdateClient(id, name, settings)
+}
+
+// RemoveClient は接続先を削除する
+func (a *App) RemoveClient(id string) error {
+	return a.plcService.RemoveClient(id)
+}
+
+// DisconnectClient は接続先との接続を閉じる
+func (a *App) DisconnectClient(id string) error {
+	return a.plcService.DisconnectClient(id)
+}
+
+// BuildClientRequest はコマンドと項目の値からリクエストを組み立て、16 進の文字列で返す
+func (a *App) BuildClientRequest(protocolType string, commandID string, params map[string]interface{}) (string, error) {
+	return a.plcService.BuildClientRequest(protocolType, commandID, params)
+}
+
+// SendClientRequest は 16 進で指定したリクエストを接続先に送り、結果を返す
+func (a *App) SendClientRequest(id string, requestHex string) (*application.ClientCommandLogDTO, error) {
+	return a.plcService.SendClientRequest(id, requestHex)
+}
+
+// GetClientCommandLogs は送ったコマンドの履歴を新しい順に返す
+func (a *App) GetClientCommandLogs() []application.ClientCommandLogDTO {
+	return a.plcService.GetClientCommandLogs()
+}
+
+// ClearClientCommandLogs はコマンドの履歴を消す
+func (a *App) ClearClientCommandLogs() {
+	a.plcService.ClearClientCommandLogs()
 }
 
 // === プロジェクト管理 ===

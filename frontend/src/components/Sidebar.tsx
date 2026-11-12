@@ -1,7 +1,7 @@
 // Sidebar.tsx
-import { Server, Database, Activity, FileCode2 } from "lucide-react";
+import { Server, Database, Activity, FileCode2, Cable } from "lucide-react";
 
-type Tab = "server" | "variables" | "registers" | "scripts";
+type Tab = "server" | "variables" | "registers" | "scripts" | "clients";
 
 type Props = {
   selected: Tab;
@@ -28,6 +28,11 @@ const items = [
     id: "scripts",
     icon: FileCode2,
     label: "Scripts",
+  },
+  {
+    id: "clients",
+    icon: Cable,
+    label: "Clients",
   },
 ] as const;
 

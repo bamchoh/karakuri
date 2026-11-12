@@ -51,6 +51,9 @@ func newService(t *testing.T) *application.PLCService {
 	for _, f := range protocols.Factories() {
 		svc.RegisterFactory(f)
 	}
+	for _, f := range protocols.ClientFactories() {
+		svc.RegisterClientFactory(f)
+	}
 	svc.ClearMonitoringItems()
 	t.Cleanup(svc.Shutdown)
 	return svc
@@ -328,6 +331,73 @@ func TestModbus_UnitIDSettings(t *testing.T) {
 	must(t, svc.UpdateServerConfig(cfg))
 	if got := svc.GetDisabledUnitIDs(modbusTCP); !reflect.DeepEqual(got, []int{2}) {
 		t.Errorf("設定変更後 = %v, want [2]", got)
+	}
+}
+
+// ===== クライアント（外部の機器へつなぐ側） =====
+
+// Modbus TCP のクライアントから、Karakuri 自身の Modbus TCP サーバーにつないで読み書きする
+func TestModbusClient_AgainstOwnServer(t *testing.T) {
+	svc := newService(t)
+	port := addModbus(t, svc)
+	must(t, svc.SetUnitIDEnabled(modbusTCP, 2, false))
+	must(t, svc.StartServer(modbusTCP))
+
+	c, err := svc.AddClient(modbusTCP, "自分", map[string]interface{}{"host": "127.0.0.1", "port": port, "unitId": 1, "timeoutMs": 300})
+	must(t, err)
+
+	send := func(cmd string, params map[string]interface{}) *application.ClientCommandLogDTO {
+		t.Helper()
+		req, err := svc.BuildClientRequest(modbusTCP, cmd, params)
+		must(t, err)
+		log, err := svc.SendClientRequest(c.ID, req)
+		must(t, err)
+		return log
+	}
+
+	// FC16 で書くと、サーバーのレジスタに入る
+	if log := send("16", map[string]interface{}{"address": float64(10), "values": "1234, 0xBEEF"}); log.Status != "ok" {
+		t.Fatalf("FC16: %+v", log)
+	}
+	words, err := svc.ReadWords(modbusTCP, hr, 10, 2)
+	must(t, err)
+	if !reflect.DeepEqual(words, []int{1234, 0xBEEF}) {
+		t.Fatalf("サーバーのレジスタ = %v", words)
+	}
+
+	// 画面から書いた値を FC03 で読める
+	must(t, svc.WriteWord(modbusTCP, hr, 12, 42))
+	log := send("3", map[string]interface{}{"address": float64(10), "count": float64(3)})
+	if log.Status != "ok" || len(log.Values) != 3 || log.Values[2].Value != "42 (0x002A)" {
+		t.Fatalf("FC03: %+v", log)
+	}
+	// 2 回目のリクエストなので、トランザクション ID は 2
+	if log.Sent != "00 02 00 00 00 06 01 03 00 0A 00 03" {
+		t.Fatalf("送ったフレーム = %s", log.Sent)
+	}
+
+	// 16 進で直接入れたリクエスト（サーバーが対応しないファンクションコード）は例外応答になる
+	if log, err := svc.SendClientRequest(c.ID, "2B 0E 01 00"); err != nil || log.Status != "exception" || log.Received == "" {
+		t.Fatalf("FC43: %+v, %v", log, err)
+	}
+
+	// オフにした UnitID 宛てはタイムアウトし、次の送信でつなぎ直す
+	must(t, svc.UpdateClient(c.ID, "自分", map[string]interface{}{"host": "127.0.0.1", "port": port, "unitId": 2, "timeoutMs": 200}))
+	if log := send("3", map[string]interface{}{"address": float64(0), "count": float64(1)}); log.Status != "timeout" {
+		t.Fatalf("オフにした UnitID: %+v", log)
+	}
+	if svc.GetClients()[0].Connected {
+		t.Fatal("タイムアウトしたら接続を閉じる")
+	}
+	must(t, svc.UpdateClient(c.ID, "自分", map[string]interface{}{"host": "127.0.0.1", "port": port, "unitId": 1, "timeoutMs": 300}))
+	if log := send("3", map[string]interface{}{"address": float64(10), "count": float64(1)}); log.Status != "ok" {
+		t.Fatalf("つなぎ直し: %+v", log)
+	}
+
+	// サーバーを止めると、接続できないエラーになる
+	must(t, svc.StopServer(modbusTCP))
+	if log := send("3", map[string]interface{}{"address": float64(10), "count": float64(1)}); log.Status == "ok" {
+		t.Fatalf("停止後: %+v", log)
 	}
 }
 

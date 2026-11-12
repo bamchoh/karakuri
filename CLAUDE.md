@@ -20,6 +20,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **モニタリング**: 任意のレジスタをリアルタイム監視・書き込み（ドラッグ&ドロップ並べ替え対応）
 - **プロトコルマッピング**: 変数を複数プロトコルのメモリアドレスにマッピング可能
 - **REST HTTP API**: アプリをネットワーク経由で外部から操作可能（デフォルトポート 8765）。サーバー管理・レジスタ読み書き・変数管理・プロジェクトエクスポート/インポートに対応
+- **クライアント機能**: Karakuri から外部の機器（Modbus TCP サーバー）につないで、コマンドを送る。ファンクションコードを選んで組み立てる方式と、16 進（PDU）で直接入れる方式がある。送受信のバイト列・応答の解釈・履歴を表示する
 
 ## Build and Development Commands
 
@@ -82,7 +83,7 @@ go build ./...
 
 `frontend/e2e/` に、ブラウザで画面を操作して確認するテストがある。`task dev` が立てる開発用サーバー（`http://localhost:34115`）に接続するため、Go 側の API とプロトコルの実装を含めた動作を確認できる。手順と注意は `frontend/e2e/README.md` を参照。
 
-- 画面ごとのテスト: サーバー画面 `server-panel.spec.ts`、変数画面 `variable-dialogs.spec.ts` / `node-publishing.spec.ts`、レジスタ画面 `register-panel.spec.ts` / `monitoring.spec.ts`、スクリプト画面 `script-panel.spec.ts`
+- 画面ごとのテスト: サーバー画面 `server-panel.spec.ts`、変数画面 `variable-dialogs.spec.ts` / `node-publishing.spec.ts`、レジスタ画面 `register-panel.spec.ts` / `monitoring.spec.ts`、スクリプト画面 `script-panel.spec.ts`、クライアント画面 `client-panel.spec.ts`
 - 画面を変更したら、該当するテストを実行する（なければ追加する）。`shot()` で撮ったスクリーンショット（`frontend/e2e/.screenshots/`）で見た目も確認する
 - データの準備は `api(page, "メソッド名", ...)` で Go 側の API を直接呼び、確認したい操作だけを画面で行う
 - **テストはアプリのサーバー・変数・モニタリング項目・スクリプトをすべて削除する。** 開発サーバーは `KARAKURI_CONFIG_DIR` を一時フォルダに向けて起動する
@@ -149,7 +150,7 @@ internal/
 │   ├── app_events.go             # Wails イベントの送信（WailsAppStateEmitter）と変数変更の間引き
 │   └── dto.go                    # DTO定義（ProtocolSchemaDTO, MonitoringItemDTO等）
 ├── protocols/        # プロトコルの実装（プロトコル固有のコードはすべてここ）
-│   ├── protocols.go      # Factories(): 組み込むプロトコルの一覧
+│   ├── protocols.go      # Factories(): 組み込むプロトコルの一覧、ClientFactories(): 組み込むクライアントの一覧
 │   ├── integration_test.go # アプリと同じ組み立てで、実際のクライアントからつないで確認するテスト
 │   ├── modbus/           # Modbus TCP / RTU / ASCII
 │   │   ├── factory.go      # TCPFactory / RTUFactory / ASCIIFactory、ModbusConfig、ModbusServer、プロトコルタイプの定数
@@ -157,6 +158,7 @@ internal/
 │   │   ├── *_transport.go  # TCP / RTU / ASCII のトランスポート（TCP は、オフにした UnitID 宛てのリクエストを捨てる中継を持つ）
 │   │   ├── datastore.go    # ModbusDataStore（4 つのメモリエリア）
 │   │   ├── datastore_adapter.go # リクエスト → DataStore の読み書き
+│   │   ├── client.go       # TCPClientFactory / TCPClient（Modbus TCP クライアント。リクエストの組み立て・送受信・応答の解釈）
 │   │   └── rtu/            # RTU / ASCII のフレーム処理（Processor は RTU と ASCII で共通）
 │   └── opcua/            # OPC UA（bamchoh/uastack 使用）
 │       ├── factory.go      # Factory（VariableStoreInjector 実装）
@@ -270,7 +272,11 @@ frontend/src/
 │   ├── variableTypes.ts    # 変数のデータ型・値の純粋関数と行の型定義（state に依存しない）
 │   ├── useNodeAddresses.ts # ノードアドレス（OPC UA の NodeID 等）の取得と保持（マッピングの 2 つのダイアログで使用）
 │   ├── useEscapeKey.ts     # Esc キーでダイアログを閉じるためのフック
-│   └── ScriptPanel.tsx     # スクリプト管理（一覧・編集・1 回実行・コンソール）
+│   ├── ScriptPanel.tsx     # スクリプト管理（一覧・編集・1 回実行・コンソール）
+│   ├── ClientPanel.tsx     # クライアント画面（接続先の一覧と読み込み）
+│   ├── ClientDetailPane.tsx    # 選んだ接続先の設定・コマンド・結果と履歴
+│   ├── ClientCommandComposer.tsx # コマンドの組み立て（項目から組み立てる / 16 進で入れる）
+│   └── ClientCommandLog.tsx    # コマンドの結果と履歴
 └── App.tsx                 # タブベースのメインUI
 ```
 
@@ -416,6 +422,12 @@ JavaScript（goja）でPLC動作を記述。
   - `GetConsoleLogs()`, `ClearConsoleLogs()`: コンソールログの取得・クリア
 - **プロジェクト**:
   - `ExportProject()`, `ImportProject()`: プロジェクトのファイルへの保存・読み込み
+- **クライアント**（外部の機器へつなぐ側）:
+  - `GetClientProtocols()`: クライアントとして使えるプロトコル（接続先の設定項目・コマンドの定義）
+  - `GetClients()`, `AddClient(protocolType, name)`, `UpdateClient(id, name, settings)`, `RemoveClient(id)`, `DisconnectClient(id)`: 接続先の管理
+  - `BuildClientRequest(protocolType, commandID, params)`: コマンドと項目の値からリクエストを組み立て、16 進の文字列で返す
+  - `SendClientRequest(id, requestHex)`: 16 進で指定したリクエストを送る。タイムアウト・例外応答などは結果の `status`（`ok` / `exception` / `timeout` / `error`）で返す
+  - `GetClientCommandLogs()`, `ClearClientCommandLogs()`: 送ったコマンドの履歴（新しい順、最大 200 件）
 - **HTTP API 設定**:
   - `GetHTTPAPIPort()`: 現在のHTTP APIポート番号を返す
   - `SetHTTPAPIPort(port)`: ポートを変更してHTTP APIサーバーを再起動（1024〜65535、設定ファイルに永続化）
@@ -511,6 +523,9 @@ JavaScript（goja）でPLC動作を記述。
 2. `internal/protocols/protocols.go` の `Factories()` に追加する
 3. `internal/protocols/integration_test.go` に、実際のクライアントからつなぐ確認を足す
 4. **ホスト・フロントエンドの変更不要** - スキーマと能力フラグから自動生成
+5. クライアント（外部の機器へつなぐ側）にも対応するなら、`protocol.ClientFactory` / `protocol.Client`（`internal/domain/protocol/client.go`）を実装し、`protocols.ClientFactories()` に追加する
+   - 接続先の設定項目（`ConnectionFields()`）とコマンドの定義（`Commands()`）は `ConfigField` で返す。画面はサーバー設定と同じ `DynamicField` で入力欄を作る
+   - `Send()` は通信の失敗を error ではなく `CommandResult.Status` で返す。タイムアウトしたら接続を閉じる（遅れて届く応答と取り違えないため）。次の `Send()` でつなぎ直す
 
 実装するときの決まり:
 
@@ -653,6 +668,18 @@ JavaScript（goja）でPLC動作を記述。
 - `Start()` で `net.Listen` してから `server.Serve(ln)` をゴルーチンで実行（ポート使用中を Start のエラーで返すため）
 - `Stop()` は `server.Close()` を呼んで `Serve` の終了を待つ（v0.1.1 以降は Serve の開始前に Close しても Serve が終了する）
 - `server.Server` は Close 後に再利用できないため、Start のたびに作り直す
+
+### クライアント（外部の機器へつなぐ側）
+
+- **作り**: `PLCService` の `clients`（`clientManager`、`plc_service_clients.go`）が接続先・ファクトリー・履歴を持つ。通信を待つ間に `PLCService.mu` を持たないよう、自分のロックを使う。接続を閉じる処理（送信中なら終わるまで待つ）は、そのロックの外で呼ぶ
+- **接続先**: いくつでも追加できる（サーバーと違い、プロトコルごとに 1 つではない）。設定を変えるとクライアントを作り直す。プロジェクトに保存する（`ProjectDataDTO.Clients`）
+- **送信の流れ**: 画面は、組み立てる方式でも `BuildClientRequest()` で 16 進にしてから `SendClientRequest()` で送る（送る経路は 1 つ）
+- **Modbus TCP**（`internal/protocols/modbus/client.go`）
+  - リクエストは PDU（ファンクションコード + データ）。MBAP ヘッダー（トランザクション ID・UnitID）はクライアントが付ける。アドレスは PDU の値（0 始まり）
+  - 組み立てられるコマンドは FC01〜06・15・16。16 進で入れれば、ほかのファンクションコードや異常なリクエストも送れる（応答はデータをそのまま表示する）
+  - 接続は最初の送信でつなぐ。タイムアウト・通信エラーでは閉じ、例外応答では閉じない。トランザクション ID が違う応答（前のリクエストへの遅れた応答）は読み捨てる
+- **テスト**: `internal/protocols/modbus/client_test.go`（フェイクの TCP サーバー）、`internal/application/plc_service_clients_test.go`（`protocoltest.ClientFactory`）、`internal/protocols/integration_test.go` の `TestModbusClient_AgainstOwnServer`（Karakuri 自身の Modbus TCP サーバーにつなぐ）
+- **今後の予定**: ポーリング（周期的な読み取りと表示）、変数と外部機器のアドレスのマッピング（読み取りのタイムアウト時は値を残して状態を「通信エラー」、書き込みのタイムアウト時は「書き込み未反映」にして再送）
 
 ### REST HTTP API 実装
 

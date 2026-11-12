@@ -20,3 +20,10 @@ func Factories() []protocol.ServerFactory {
 		&opcua.Factory{},
 	}
 }
+
+// ClientFactories は組み込みのクライアント（外部の機器へつなぐ側）のファクトリーを返す。呼ぶたびに新しいものを作る
+func ClientFactories() []protocol.ClientFactory {
+	return []protocol.ClientFactory{
+		&modbus.TCPClientFactory{},
+	}
+}

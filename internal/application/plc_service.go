@@ -54,6 +54,9 @@ type PLCService struct {
 	monitoringSavedSeq  uint64         // 書き込み済みの通し番号（monitoringSaveMu で保護）
 	monitoringSaveGroup sync.WaitGroup // 実行中の自動保存
 
+	// クライアント（外部の機器へつなぐ側）。自分のロックを持つ（plc_service_clients.go）
+	clients *clientManager
+
 	// アプリケーション状態イベント
 	appEmitter        AppStateEmitter
 	varChangeListener *variableChangeListener
@@ -71,6 +74,7 @@ func NewPLCService() *PLCService {
 		scriptEngine:    scripting.NewScriptEngine(varStore),
 		scripts:         make(map[string]*script.Script),
 		monitoringItems: make(map[string]*MonitoringItemDTO),
+		clients:         newClientManager(),
 	}
 
 	// モニタリング設定を読み込み
@@ -208,6 +212,9 @@ func (s *PLCService) getServerInstance(protocolType string) (*serverInstance, er
 func (s *PLCService) Shutdown() {
 	// 実行中のモニタリング設定の保存を終わらせる
 	s.monitoringSaveGroup.Wait()
+
+	// 外部の機器との接続を閉じる
+	s.clients.closeAll()
 
 	s.mu.Lock()
 	defer s.mu.Unlock()

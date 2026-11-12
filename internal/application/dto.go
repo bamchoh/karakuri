@@ -242,4 +242,5 @@ type ProjectDataDTO struct {
 	MonitoringItems []*MonitoringItemDTO `json:"monitoringItems,omitempty"`
 	Variables       []*VariableDTO       `json:"variables,omitempty"`
 	StructTypes     []StructTypeDTO      `json:"structTypes,omitempty"`
+	Clients         []ClientSnapshotDTO  `json:"clients,omitempty"` // 外部の機器への接続先
 }

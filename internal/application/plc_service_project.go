@@ -123,6 +123,7 @@ func (s *PLCService) ExportProject() *ProjectDataDTO {
 		MonitoringItems: monitoringItems,
 		StructTypes:     structTypeDTOs,
 		Variables:       variableDTOs,
+		Clients:         s.clients.export(),
 	}
 }
 
@@ -251,6 +252,9 @@ func (s *PLCService) ImportProject(data *ProjectDataDTO) error {
 			s.monitoringItems[item.ID] = item
 		}
 	}
+
+	// 外部の機器への接続先を置き換える（読み込む前の接続は閉じる）
+	s.clients.replaceAll(data.Clients)
 
 	go s.emitServerChanged()
 	go s.emitVariablesChanged()

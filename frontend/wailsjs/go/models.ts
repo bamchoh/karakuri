@@ -30,6 +30,230 @@ export namespace application {
 	        this.value = source["value"];
 	    }
 	}
+	export class OptionDTO {
+	    value: string;
+	    label: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new OptionDTO(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.value = source["value"];
+	        this.label = source["label"];
+	    }
+	}
+	export class FieldDTO {
+	    name: string;
+	    label: string;
+	    description?: string;
+	    type: string;
+	    required: boolean;
+	    default: any;
+	    options?: OptionDTO[];
+	    min?: number;
+	    max?: number;
+	    showWhen?: ConditionDTO;
+	    category?: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new FieldDTO(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.name = source["name"];
+	        this.label = source["label"];
+	        this.description = source["description"];
+	        this.type = source["type"];
+	        this.required = source["required"];
+	        this.default = source["default"];
+	        this.options = this.convertValues(source["options"], OptionDTO);
+	        this.min = source["min"];
+	        this.max = source["max"];
+	        this.showWhen = this.convertValues(source["showWhen"], ConditionDTO);
+	        this.category = source["category"];
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	export class ClientCommandDTO {
+	    id: string;
+	    displayName: string;
+	    fields: FieldDTO[];
+	
+	    static createFrom(source: any = {}) {
+	        return new ClientCommandDTO(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.displayName = source["displayName"];
+	        this.fields = this.convertValues(source["fields"], FieldDTO);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	export class ClientResultValueDTO {
+	    label: string;
+	    value: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new ClientResultValueDTO(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.label = source["label"];
+	        this.value = source["value"];
+	    }
+	}
+	export class ClientCommandLogDTO {
+	    seq: number;
+	    clientId: string;
+	    clientName: string;
+	    at: string;
+	    request: string;
+	    sent: string;
+	    received: string;
+	    elapsedMs: number;
+	    status: string;
+	    error?: string;
+	    summary: string;
+	    values: ClientResultValueDTO[];
+	
+	    static createFrom(source: any = {}) {
+	        return new ClientCommandLogDTO(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.seq = source["seq"];
+	        this.clientId = source["clientId"];
+	        this.clientName = source["clientName"];
+	        this.at = source["at"];
+	        this.request = source["request"];
+	        this.sent = source["sent"];
+	        this.received = source["received"];
+	        this.elapsedMs = source["elapsedMs"];
+	        this.status = source["status"];
+	        this.error = source["error"];
+	        this.summary = source["summary"];
+	        this.values = this.convertValues(source["values"], ClientResultValueDTO);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	export class ClientDTO {
+	    id: string;
+	    name: string;
+	    protocolType: string;
+	    displayName: string;
+	    settings: Record<string, any>;
+	    connected: boolean;
+	
+	    static createFrom(source: any = {}) {
+	        return new ClientDTO(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.name = source["name"];
+	        this.protocolType = source["protocolType"];
+	        this.displayName = source["displayName"];
+	        this.settings = source["settings"];
+	        this.connected = source["connected"];
+	    }
+	}
+	export class ClientProtocolDTO {
+	    protocolType: string;
+	    displayName: string;
+	    connectionFields: FieldDTO[];
+	    commands: ClientCommandDTO[];
+	
+	    static createFrom(source: any = {}) {
+	        return new ClientProtocolDTO(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.protocolType = source["protocolType"];
+	        this.displayName = source["displayName"];
+	        this.connectionFields = this.convertValues(source["connectionFields"], FieldDTO);
+	        this.commands = this.convertValues(source["commands"], ClientCommandDTO);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	
+	
 	export class ConfigVariantDTO {
 	    id: string;
 	    displayName: string;
@@ -164,70 +388,7 @@ export namespace application {
 		    return a;
 		}
 	}
-	export class OptionDTO {
-	    value: string;
-	    label: string;
 	
-	    static createFrom(source: any = {}) {
-	        return new OptionDTO(source);
-	    }
-	
-	    constructor(source: any = {}) {
-	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.value = source["value"];
-	        this.label = source["label"];
-	    }
-	}
-	export class FieldDTO {
-	    name: string;
-	    label: string;
-	    description?: string;
-	    type: string;
-	    required: boolean;
-	    default: any;
-	    options?: OptionDTO[];
-	    min?: number;
-	    max?: number;
-	    showWhen?: ConditionDTO;
-	    category?: string;
-	
-	    static createFrom(source: any = {}) {
-	        return new FieldDTO(source);
-	    }
-	
-	    constructor(source: any = {}) {
-	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.name = source["name"];
-	        this.label = source["label"];
-	        this.description = source["description"];
-	        this.type = source["type"];
-	        this.required = source["required"];
-	        this.default = source["default"];
-	        this.options = this.convertValues(source["options"], OptionDTO);
-	        this.min = source["min"];
-	        this.max = source["max"];
-	        this.showWhen = this.convertValues(source["showWhen"], ConditionDTO);
-	        this.category = source["category"];
-	    }
-	
-		convertValues(a: any, classs: any, asMap: boolean = false): any {
-		    if (!a) {
-		        return a;
-		    }
-		    if (a.slice && a.map) {
-		        return (a as any[]).map(elem => this.convertValues(elem, classs));
-		    } else if ("object" === typeof a) {
-		        if (asMap) {
-		            for (const key of Object.keys(a)) {
-		                a[key] = new classs(a[key]);
-		            }
-		            return a;
-		        }
-		        return new classs(a);
-		    }
-		    return a;
-		}
-	}
 	export class IntervalPresetDTO {
 	    label: string;
 	    ms: number;
