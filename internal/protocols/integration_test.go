@@ -540,9 +540,7 @@ func TestModbusClient_FromScript(t *testing.T) {
 	must(t, svc.StartServer(modbusTCP))
 	c, err := svc.AddClient(modbusTCP, "自分", map[string]interface{}{"host": "127.0.0.1", "port": port, "unitId": 1, "timeoutMs": 300})
 	must(t, err)
-	g, err := svc.AddClientCommandGroup(c.ID, "読み取り")
-	must(t, err)
-	_, err = svc.AddClientSavedCommand(c.ID, g.ID, application.ClientSavedCommandInputDTO{
+	_, err = svc.AddClientSavedCommand(c.ID, application.ClientSavedCommandInputDTO{
 		Name: "先頭 2 個", Mode: "build", CommandID: "3", Params: map[string]interface{}{"address": float64(0), "count": float64(2)},
 	})
 	must(t, err)
@@ -550,7 +548,7 @@ func TestModbusClient_FromScript(t *testing.T) {
 	must(t, svc.WriteWord(modbusTCP, hr, 1, 22))
 
 	res, err := svc.RunScriptOnce(`
-		const r = plc.sendCommand("自分", "読み取り", "先頭 2 個");
+		const r = plc.sendCommand("自分", "先頭 2 個");
 		const w = plc.sendRequest("自分", "06 00 05 00 2A"); // FC06: アドレス 5 に 42
 		return r.status + ":" + (r.values[0].word + r.values[1].word) + "/" + w.status;
 	`)

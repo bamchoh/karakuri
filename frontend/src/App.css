@@ -2476,14 +2476,7 @@ button:disabled {
   text-overflow: ellipsis;
 }
 
-/* ----- クライアント: コマンドグループ ----- */
-.vscode-setting-item.client-group-bar {
-  display: flex;
-  align-items: center;
-  gap: 0.4rem;
-}
-
-.client-group-bar select,
+/* ----- クライアント: 保存したコマンド ----- */
 .client-name-editor {
   min-width: 240px;
   padding: 0.35rem 0.5rem;
@@ -2499,7 +2492,6 @@ button:disabled {
   border-color: #22c55e;
 }
 
-.client-group-bar .btn-small,
 .client-saved-actions .btn-small {
   display: inline-flex;
   align-items: center;

@@ -10,7 +10,7 @@ import {
   DisconnectClient,
   SendClientRequest,
   ClearClientCommandLogs,
-  GetClientCommandGroups,
+  GetClientSavedCommands,
   AddClientSavedCommand,
   UpdateClientSavedCommand,
   SendClientSavedCommand,
@@ -24,7 +24,7 @@ import {
   ComposerLoadedFrom,
   ComposerSaveInput,
 } from "./ClientCommandComposer";
-import { ClientCommandGroups } from "./ClientCommandGroups";
+import { ClientSavedCommands } from "./ClientSavedCommands";
 import { ClientCommandLog } from "./ClientCommandLog";
 import { ClientPollingView } from "./ClientPollingView";
 
@@ -94,27 +94,23 @@ export const ClientDetailPane = forwardRef<
   const [error, setError] = useState<string | null>(null);
   const [selectedSeq, setSelectedSeq] = useState<number | null>(null);
 
-  // コマンドグループ（保存したコマンド）
-  const [groups, setGroups] = useState<application.ClientCommandGroupDTO[]>([]);
-  const [selectedGroupId, setSelectedGroupId] = useState<string | null>(null);
+  // 保存したコマンド
+  const [savedCommands, setSavedCommands] = useState<
+    application.ClientSavedCommandDTO[]
+  >([]);
   const [composerLoad, setComposerLoad] = useState<ComposerLoad | null>(null);
 
-  const loadGroups = useCallback(async () => {
+  const loadSavedCommands = useCallback(async () => {
     try {
-      const list = (await GetClientCommandGroups(client.id)) || [];
-      setGroups(list);
-      // 選んでいたグループが消えたら、先頭を選ぶ
-      setSelectedGroupId((prev) =>
-        prev && list.some((g) => g.id === prev) ? prev : (list[0]?.id ?? null),
-      );
+      setSavedCommands((await GetClientSavedCommands(client.id)) || []);
     } catch (e) {
       setError(String(e));
     }
   }, [client.id]);
 
   useEffect(() => {
-    loadGroups();
-  }, [loadGroups]);
+    loadSavedCommands();
+  }, [loadSavedCommands]);
 
   useEffect(() => {
     onDirtyChange(dirty);
@@ -171,21 +167,14 @@ export const ClientDetailPane = forwardRef<
     }
   };
 
-  // 保存したコマンドを送る（履歴には「グループ名 / コマンド名」が付く）
-  const sendSaved = async (
-    group: application.ClientCommandGroupDTO,
-    command: application.ClientSavedCommandDTO,
-  ) => {
+  // 保存したコマンドを送る（履歴にはコマンドの名前が付く）
+  const sendSaved = async (command: application.ClientSavedCommandDTO) => {
     if (sending) return;
     if (dirty && !(await saveSettings())) return;
     setSending(true);
     try {
       setError(null);
-      const entry = await SendClientSavedCommand(
-        client.id,
-        group.id,
-        command.id,
-      );
+      const entry = await SendClientSavedCommand(client.id, command.id);
       setSelectedSeq(entry.seq);
     } catch (e) {
       setError(String(e));
@@ -195,7 +184,7 @@ export const ClientDetailPane = forwardRef<
     }
   };
 
-  // 組み立て欄の内容を、選んでいるグループに保存する（overwrite があれば、そのコマンドを上書きする）
+  // 組み立て欄の内容を保存する（overwrite があれば、そのコマンドを上書きする）
   const saveCommand = async (
     input: ComposerSaveInput,
     overwrite: ComposerLoadedFrom | null,
@@ -204,17 +193,11 @@ export const ClientDetailPane = forwardRef<
     try {
       setError(null);
       if (overwrite) {
-        await UpdateClientSavedCommand(
-          client.id,
-          overwrite.groupId,
-          overwrite.commandId,
-          dto,
-        );
+        await UpdateClientSavedCommand(client.id, overwrite.commandId, dto);
       } else {
-        if (!selectedGroupId) return false;
-        await AddClientSavedCommand(client.id, selectedGroupId, dto);
+        await AddClientSavedCommand(client.id, dto);
       }
-      await loadGroups();
+      await loadSavedCommands();
       return true;
     } catch (e) {
       setError(String(e));
@@ -222,18 +205,13 @@ export const ClientDetailPane = forwardRef<
     }
   };
 
-  const loadIntoComposer = (
-    group: application.ClientCommandGroupDTO,
-    command: application.ClientSavedCommandDTO,
-  ) => {
+  const loadIntoComposer = (command: application.ClientSavedCommandDTO) => {
     setComposerLoad((prev) => ({
       seq: (prev?.seq ?? 0) + 1,
       command,
-      from: { groupId: group.id, commandId: command.id, name: command.name },
+      from: { commandId: command.id, name: command.name },
     }));
   };
-
-  const selectedGroup = groups.find((g) => g.id === selectedGroupId) ?? null;
 
   const handleDisconnect = async () => {
     try {
@@ -371,13 +349,13 @@ export const ClientDetailPane = forwardRef<
 
         {subTab === "command" ? (
           <>
-            <div className="vscode-setting-category">コマンドグループ</div>
-            <ClientCommandGroups
+            <div className="vscode-setting-category">
+              保存したコマンド（{savedCommands.length}）
+            </div>
+            <ClientSavedCommands
               clientId={client.id}
-              groups={groups}
-              selectedGroupId={selectedGroupId}
-              onSelectGroup={setSelectedGroupId}
-              onChanged={loadGroups}
+              commands={savedCommands}
+              onChanged={loadSavedCommands}
               sending={sending}
               onSend={sendSaved}
               onLoad={loadIntoComposer}
@@ -388,11 +366,6 @@ export const ClientDetailPane = forwardRef<
               protocol={protocol}
               sending={sending}
               onSend={send}
-              saveGroup={
-                selectedGroup
-                  ? { id: selectedGroup.id, name: selectedGroup.name }
-                  : null
-              }
               onSave={saveCommand}
               load={composerLoad}
             />

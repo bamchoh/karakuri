@@ -45,8 +45,8 @@ type clientInstance struct {
 	failThreshold int           // 読み取りが続けて何回失敗したら「通信エラー」にするか
 	wake          chan struct{} // 書き込み未反映が増えたら、ポーリングのゴルーチンを起こす
 
-	// コマンドグループ（plc_service_client_commands.go）
-	commandGroups []*commandGroup
+	// 保存したコマンド（plc_service_client_commands.go）
+	savedCommands []*savedCommand
 }
 
 type clientManager struct {
@@ -342,7 +342,7 @@ func (s *PLCService) SendClientRequest(id, requestHex string) (*ClientCommandLog
 	return s.sendAndLog(id, req, "")
 }
 
-// sendAndLog はリクエストを接続先に送り、結果を履歴に残す。label は履歴に出す名前（保存したコマンドなら「グループ名 / コマンド名」）
+// sendAndLog はリクエストを接続先に送り、結果を履歴に残す。label は履歴に出す名前（保存したコマンドならコマンドの名前）
 func (s *PLCService) sendAndLog(id string, req []byte, label string) (*ClientCommandLogDTO, error) {
 	m := s.clients
 	m.mu.Lock()
@@ -426,7 +426,7 @@ func (m *clientManager) export() []ClientSnapshotDTO {
 			Settings:     d.Settings,
 			Polling:      m.clients[d.ID].pollingSnapshotLocked(),
 
-			CommandGroups: m.clients[d.ID].commandGroupsSnapshotLocked(),
+			SavedCommands: m.clients[d.ID].savedCommandsSnapshotLocked(),
 		}
 	}
 	return result
@@ -460,7 +460,7 @@ func (m *clientManager) replaceAll(snapshots []ClientSnapshotDTO) {
 			continue
 		}
 		m.clients[dto.ID].restorePollingLocked(snap.Polling)
-		m.clients[dto.ID].restoreCommandGroupsLocked(snap.CommandGroups)
+		m.clients[dto.ID].restoreSavedCommandsLocked(snap.SavedCommands)
 	}
 }
 

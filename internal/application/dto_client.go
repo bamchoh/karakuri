@@ -43,15 +43,8 @@ type ClientCommandLogDTO struct {
 	Error      string                 `json:"error,omitempty"`
 	Summary    string                 `json:"summary"`
 	Values     []ClientResultValueDTO `json:"values"`
-	// Label は、保存したコマンドを送ったときの「グループ名 / コマンド名」（直接送ったときは空）
+	// Label は、保存したコマンドを送ったときのコマンドの名前（直接送ったときは空）
 	Label string `json:"label,omitempty"`
-}
-
-// ClientCommandGroupDTO はコマンドグループ（保存したコマンドの整理棚）
-type ClientCommandGroupDTO struct {
-	ID       string                  `json:"id"`
-	Name     string                  `json:"name"`
-	Commands []ClientSavedCommandDTO `json:"commands"`
 }
 
 // ClientSavedCommandDTO は保存したコマンド。
@@ -153,8 +146,8 @@ type ClientSnapshotDTO struct {
 	ProtocolType string                    `json:"protocolType"`
 	Settings     map[string]interface{}    `json:"settings"`
 	Polling      *ClientPollingSnapshotDTO `json:"polling,omitempty"`
-	// コマンドグループ（保存したコマンド）。ID は読み込むときに作り直す
-	CommandGroups []ClientCommandGroupDTO `json:"commandGroups,omitempty"`
+	// 保存したコマンド。ID は読み込むときに作り直す
+	SavedCommands []ClientSavedCommandDTO `json:"savedCommands,omitempty"`
 }
 
 // ClientPollingSnapshotDTO はプロジェクトに保存するポーリングの設定（ポーリング中かどうかは保存しない）

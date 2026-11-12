@@ -56,7 +56,7 @@ type ScriptEngine struct {
 // 戻り値は JavaScript のオブジェクトにする内容（status・error・values など）。見つからない・送れないときも、
 // 例外ではなく status が "error" の内容を返す。scriptName は履歴に出すスクリプトの名前
 type ClientSender interface {
-	SendCommand(scriptName, client, group, command string) map[string]any
+	SendCommand(scriptName, client, command string) map[string]any
 	SendRequest(scriptName, client, requestHex string) map[string]any
 }
 
@@ -148,16 +148,16 @@ func (e *ScriptEngine) createVM(scriptID, scriptName string) *goja.Runtime {
 	// PLCオブジェクト - 変数アクセス用
 	plc := vm.NewObject()
 
-	// sendCommand(client, group, command) - 保存したコマンド（コマンドグループ）を、名前で指定して送る。
+	// sendCommand(client, command) - 保存したコマンドを、接続先とコマンドの名前で指定して送る。
 	// sendRequest(client, hex) - 16 進で指定したリクエストを送る。
 	// どちらも応答（またはタイムアウト）まで待ち、{ status, error, values, sent, received, elapsedMs, ... } を返す
 	noSender := map[string]any{"status": "error", "error": "外部の機器へ送る機能が使えません"}
-	plc.Set("sendCommand", func(client, group, command string) any {
+	plc.Set("sendCommand", func(client, command string) any {
 		s := e.getClientSender()
 		if s == nil {
 			return noSender
 		}
-		return s.SendCommand(scriptName, client, group, command)
+		return s.SendCommand(scriptName, client, command)
 	})
 	plc.Set("sendRequest", func(client, requestHex string) any {
 		s := e.getClientSender()

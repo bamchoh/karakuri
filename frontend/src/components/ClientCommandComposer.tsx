@@ -8,7 +8,6 @@ type Mode = "build" | "hex";
 
 // 保存したコマンドの、どこから読み込んだか（上書き保存に使う）
 export interface ComposerLoadedFrom {
-  groupId: string;
   commandId: string;
   name: string;
 }
@@ -33,8 +32,7 @@ interface ClientCommandComposerProps {
   protocol: application.ClientProtocolDTO;
   sending: boolean;
   onSend: (requestHex: string) => void;
-  // コマンドグループへの保存（グループを選んでいなければ saveGroup は null）
-  saveGroup: { id: string; name: string } | null;
+  // 保存（overwrite があれば、そのコマンドを上書きする）
   onSave: (
     input: ComposerSaveInput,
     overwrite: ComposerLoadedFrom | null,
@@ -58,7 +56,6 @@ export function ClientCommandComposer({
   protocol,
   sending,
   onSend,
-  saveGroup,
   onSave,
   load,
 }: ClientCommandComposerProps) {
@@ -279,15 +276,11 @@ export function ClientCommandComposer({
           <button
             className="btn-secondary"
             onClick={handleSaveNew}
-            disabled={!ready || !saveGroup}
-            title={
-              saveGroup
-                ? `グループ「${saveGroup.name}」に新しく保存する`
-                : "上のコマンドグループで、保存するグループを選んでください"
-            }
+            disabled={!ready}
+            title="名前を付けて、上の「保存したコマンド」に新しく保存する"
           >
             <Save className="icon-left" size={14} />
-            {saveGroup ? `「${saveGroup.name}」に保存` : "グループに保存"}
+            コマンドを保存
           </button>
           {loadedFrom && (
             <button

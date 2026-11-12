@@ -286,16 +286,16 @@ plc.writeDateSec("date1", plc.readDateSec("date1") + 86400);
 
 **外部の機器（クライアントの接続先）へ送る API**:
 
-| メソッド                                  | 説明                                                                         |
-| ----------------------------------------- | ---------------------------------------------------------------------------- |
-| `plc.sendCommand(client, group, command)` | コマンドグループに保存したコマンドを、接続先・グループ・コマンドの名前で送る |
-| `plc.sendRequest(client, hex)`            | 16 進で指定したリクエスト（Modbus なら PDU）を、名前で指定した接続先に送る   |
-| `plc.getVariableStatus(name)`             | 接続先にマッピングした変数の同期の状態（`state` / `writePending` / `error`） |
+| メソッド                           | 説明                                                                         |
+| ---------------------------------- | ---------------------------------------------------------------------------- |
+| `plc.sendCommand(client, command)` | 保存したコマンドを、接続先とコマンドの名前で送る                             |
+| `plc.sendRequest(client, hex)`     | 16 進で指定したリクエスト（Modbus なら PDU）を、名前で指定した接続先に送る   |
+| `plc.getVariableStatus(name)`      | 接続先にマッピングした変数の同期の状態（`state` / `writePending` / `error`） |
 
-どちらの送信も、応答（またはタイムアウト）を待ってから、`{ status, error, values, sent, received, elapsedMs }` を返します。`status` は `ok` / `exception` / `timeout` / `error`。接続先・グループ・コマンドが見つからないときも、例外ではなく `status: "error"` を返します。送った内容は、画面の「結果と履歴」にも残ります。
+どちらの送信も、応答（またはタイムアウト）を待ってから、`{ status, error, values, sent, received, elapsedMs }` を返します。`status` は `ok` / `exception` / `timeout` / `error`。接続先・コマンドが見つからないときも、例外ではなく `status: "error"` を返します。送った内容は、画面の「結果と履歴」にも残ります。
 
 ```javascript
-const r = plc.sendCommand("PLC-A", "モーター", "速度を読む");
+const r = plc.sendCommand("PLC-A", "速度を読む");
 if (r.status === "ok") {
   plc.writeVariable("Speed", r.values[0].word); // 読み取った値（ワードは word、ビットは bit）
 } else {

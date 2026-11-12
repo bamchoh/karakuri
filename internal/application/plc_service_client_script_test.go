@@ -11,8 +11,7 @@ import (
 func TestScript_SendCommandAndRequest(t *testing.T) {
 	svc, f := newClientTestService(t)
 	c, _ := svc.AddClient("fake-client", "PLC-A", nil)
-	g, _ := svc.AddClientCommandGroup(c.ID, "モーター")
-	_, _ = svc.AddClientSavedCommand(c.ID, g.ID, ClientSavedCommandInputDTO{Name: "速度を読む", Mode: "hex", Request: "41"})
+	_, _ = svc.AddClientSavedCommand(c.ID, ClientSavedCommandInputDTO{Name: "速度を読む", Mode: "hex", Request: "41"})
 
 	w := uint16(1234)
 	on := true
@@ -27,7 +26,7 @@ func TestScript_SendCommandAndRequest(t *testing.T) {
 	})
 
 	res, err := svc.RunScriptOnce(`
-		const r = plc.sendCommand("PLC-A", "モーター", "速度を読む");
+		const r = plc.sendCommand("PLC-A", "速度を読む");
 		const r2 = plc.sendRequest("PLC-A", "42 43");
 		return [r.status, r.values[0].word, r.values[1].bit, r.values[0].label, r.sent, r.received, typeof r.elapsedMs, r2.status, r2.sent].join("|");
 	`)
@@ -40,7 +39,7 @@ func TestScript_SendCommandAndRequest(t *testing.T) {
 
 	// 履歴に、スクリプトから送ったと分かる名前で残る
 	logs := svc.GetClientCommandLogs()
-	if len(logs) != 2 || logs[1].Label != "スクリプト「1 回実行」: モーター / 速度を読む" || logs[0].Label != "スクリプト「1 回実行」: 16 進で送信" {
+	if len(logs) != 2 || logs[1].Label != "スクリプト「1 回実行」: 速度を読む" || logs[0].Label != "スクリプト「1 回実行」: 16 進で送信" {
 		t.Fatalf("logs = %+v / %+v", logs[0].Label, logs[1].Label)
 	}
 }
@@ -49,15 +48,13 @@ func TestScript_SendCommandAndRequest(t *testing.T) {
 func TestScript_SendErrorsDoNotThrow(t *testing.T) {
 	svc, f := newClientTestService(t)
 	c, _ := svc.AddClient("fake-client", "PLC-A", nil)
-	g, _ := svc.AddClientCommandGroup(c.ID, "モーター")
-	_, _ = svc.AddClientSavedCommand(c.ID, g.ID, ClientSavedCommandInputDTO{Name: "読む", Mode: "hex", Request: "41"})
+	_, _ = svc.AddClientSavedCommand(c.ID, ClientSavedCommandInputDTO{Name: "読む", Mode: "hex", Request: "41"})
 
 	cases := map[string]string{
-		`plc.sendCommand("nope", "モーター", "読む")`:    "接続先「nope」がありません",
-		`plc.sendCommand("PLC-A", "nope", "読む")`:   "コマンドグループ「nope」がありません",
-		`plc.sendCommand("PLC-A", "モーター", "nope")`: "グループ「モーター」にコマンド「nope」がありません",
-		`plc.sendRequest("PLC-A", "ZZ")`:           "16 進",
-		`plc.sendRequest("PLC-A", "")`:             "リクエストを入力してください",
+		`plc.sendCommand("nope", "読む")`:    "接続先「nope」がありません",
+		`plc.sendCommand("PLC-A", "nope")`: "保存したコマンド「nope」がありません",
+		`plc.sendRequest("PLC-A", "ZZ")`:   "16 進",
+		`plc.sendRequest("PLC-A", "")`:     "リクエストを入力してください",
 	}
 	for code, want := range cases {
 		res, err := svc.RunScriptOnce(`const r = ` + code + `; return r.status + "|" + r.error + "|" + r.values.length;`)
@@ -74,7 +71,7 @@ func TestScript_SendErrorsDoNotThrow(t *testing.T) {
 	f.SetRespond(func(req []byte) protocol.CommandResult {
 		return protocol.CommandResult{Sent: req, Status: protocol.CommandTimeout, Error: "応答がありません"}
 	})
-	res, err := svc.RunScriptOnce(`const r = plc.sendCommand("PLC-A", "モーター", "読む"); return r.status + "|" + r.error;`)
+	res, err := svc.RunScriptOnce(`const r = plc.sendCommand("PLC-A", "読む"); return r.status + "|" + r.error;`)
 	if err != nil || fmt.Sprint(res) != "timeout|応答がありません" {
 		t.Fatalf("timeout: %v %v", res, err)
 	}

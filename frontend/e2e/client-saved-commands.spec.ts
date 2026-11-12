@@ -8,11 +8,10 @@ import {
   readWords,
   escapeRegExp,
   openClient,
-  nextDialogMessage,
   MODBUS_PORT,
 } from "./helpers";
 
-// クライアントのコマンドグループ: よく使うコマンドを名前を付けてグループに保存し、グループを選んで送る。
+// クライアントの保存したコマンド: 組み立てたコマンドを名前を付けて保存しておき、あとから送る。
 // 接続先は、テストで起動した Karakuri 自身の Modbus TCP サーバー（127.0.0.1:MODBUS_PORT）。
 
 test.beforeEach(async ({ page }) => {
@@ -44,7 +43,7 @@ function setting(scope: Locator, label: string) {
     .first();
 }
 
-const groupsArea = (page: Page) => page.locator(".client-command-groups");
+const savedArea = (page: Page) => page.locator(".client-saved-commands-area");
 const composer = (page: Page) => page.locator(".client-composer");
 const savedRows = (page: Page) => page.getByTestId("client-saved-command");
 const savedRow = (page: Page, name: string) =>
@@ -54,38 +53,22 @@ const savedRow = (page: Page, name: string) =>
     }),
   });
 const result = (page: Page) => page.getByTestId("client-result");
+const saveButton = (page: Page) =>
+  composer(page).getByRole("button", { name: "コマンドを保存", exact: true });
 
-test("グループを作り、組み立てたコマンドを保存して、グループから送れる", async ({
+test("組み立てたコマンドを名前を付けて保存し、一覧から送れる", async ({
   page,
 }) => {
-  await expect(groupsArea(page)).toContainText("コマンドグループはありません");
-  // グループがないうちは保存できない
-  await expect(
-    composer(page).getByRole("button", { name: "グループに保存" }),
-  ).toBeDisabled();
+  await expect(savedArea(page)).toContainText("保存したコマンドはありません");
 
-  // グループを追加すると、すぐに名前を変えられる
-  await groupsArea(page).getByLabel("グループを追加").click();
-  const groupName = groupsArea(page).getByLabel("グループの名前", {
-    exact: true,
-  });
-  await expect(groupName).toHaveValue("グループ 1");
-  await groupName.fill("モーター");
-  await groupName.press("Enter");
-  await expect(groupsArea(page).getByLabel("コマンドグループ")).toContainText(
-    "モーター（0）",
-  );
-
-  // 組み立てたコマンドを名前を付けて保存する
+  // 組み立てたコマンドを名前を付けて保存する（グループを作る手順はいらない）
   await setting(composer(page), "コマンド").selectOption({
     label: "FC06 保持レジスタ 1 点の書き込み",
   });
   await setting(composer(page), "アドレス").fill("3");
   await setting(composer(page), "値").fill("0x1234");
   await composer(page).getByLabel("保存する名前").fill("速度を書く");
-  await composer(page)
-    .getByRole("button", { name: "「モーター」に保存" })
-    .click();
+  await saveButton(page).click();
   await expect(savedRow(page, "速度を書く")).toContainText("06 00 03 12 34");
 
   // 名前が空なら、内容の要約が名前になる
@@ -94,46 +77,36 @@ test("グループを作り、組み立てたコマンドを保存して、グ�
   });
   await setting(composer(page), "アドレス").fill("3");
   await composer(page).getByLabel("保存する名前").fill("");
-  await composer(page)
-    .getByRole("button", { name: "「モーター」に保存" })
-    .click();
+  await saveButton(page).click();
   await expect(savedRows(page)).toHaveCount(2);
   await expect(savedRows(page).nth(1)).toContainText(
     "FC03 保持レジスタの読み取り アドレス 3 から 1 個",
   );
-  await expect(groupsArea(page).getByLabel("コマンドグループ")).toContainText(
-    "モーター（2）",
-  );
+  await expect(page.getByText("保存したコマンド（2）")).toBeVisible();
 
-  // グループから送ると、履歴に「グループ名 / コマンド名」が付く
+  // 一覧から送ると、結果と履歴にコマンドの名前が付く
   await savedRow(page, "速度を書く").getByLabel("送信").click();
   await expect(result(page).locator(".client-status")).toHaveText("正常");
-  await expect(result(page)).toContainText("モーター / 速度を書く");
+  await expect(result(page)).toContainText("速度を書く");
   expect(await readWords(page, 3)).toEqual([0x1234]);
   await expect(page.locator(".client-history tbody tr").first()).toContainText(
-    "モーター / 速度を書く",
+    "速度を書く",
   );
-  await shot(page, "client-command-groups");
+  await shot(page, "client-saved-commands");
 });
 
 test("保存したコマンドを読み込んで変え、上書き保存できる。名前の変更と削除もできる", async ({
   page,
 }) => {
   const c = (await api<any[]>(page, "GetClients"))[0];
-  const g = await api<{ id: string }>(
-    page,
-    "AddClientCommandGroup",
-    c.id,
-    "読み取り",
-  );
-  await api(page, "AddClientSavedCommand", c.id, g.id, {
+  await api(page, "AddClientSavedCommand", c.id, {
     name: "先頭を読む",
     mode: "build",
     commandId: "3",
     params: { address: 0, count: 1 },
     request: "",
   });
-  await api(page, "AddClientSavedCommand", c.id, g.id, {
+  await api(page, "AddClientSavedCommand", c.id, {
     name: "生の PDU",
     mode: "hex",
     commandId: "",
@@ -166,7 +139,7 @@ test("保存したコマンドを読み込んで変え、上書き保存でき�
 
   // 名前を変える（Esc で取り消し、Enter で決定）
   await savedRow(page, "生の PDU").getByLabel("名前を変える").click();
-  const nameInput = groupsArea(page).getByLabel("コマンドの名前", {
+  const nameInput = savedArea(page).getByLabel("コマンドの名前", {
     exact: true,
   });
   await nameInput.fill("取り消す");
@@ -177,15 +150,9 @@ test("保存したコマンドを読み込んで変え、上書き保存でき�
   await nameInput.press("Enter");
   await expect(savedRow(page, "アドレス 5")).toHaveCount(1);
 
-  // コマンドを削除する
+  // 削除する
   await savedRow(page, "アドレス 5").getByLabel("削除").click();
   await expect(savedRows(page)).toHaveCount(1);
-
-  // コマンドの入ったグループを削除するときは確認する
-  const msg = nextDialogMessage(page);
-  await groupsArea(page).getByLabel("グループを削除").click();
-  expect(await msg).toContain(
-    "グループ「読み取り」と、保存した 1 個のコマンド",
-  );
-  await expect(groupsArea(page)).toContainText("コマンドグループはありません");
+  await savedRow(page, "先頭を読む").getByLabel("削除").click();
+  await expect(savedArea(page)).toContainText("保存したコマンドはありません");
 });

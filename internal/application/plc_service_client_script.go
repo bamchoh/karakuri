@@ -7,7 +7,7 @@ import (
 
 // === スクリプトから外部の機器へ送る（plc.sendCommand / plc.sendRequest） ===
 //
-// 接続先・グループ・コマンドは名前で指定する（同じ名前が複数あれば、追加した順で最初のもの）。
+// 接続先と保存したコマンドは名前で指定する（同じ名前が複数あれば、追加した順で最初のもの）。
 // 見つからない・16 進が読めないときも、例外にせず status が "error" の結果を返す（スクリプトを止めないため）。
 // 送った内容は履歴にも残し、label に「スクリプト「名前」: …」を付ける。
 
@@ -32,22 +32,16 @@ func (m *clientManager) clientIDByName(name string) (string, bool) {
 	return "", false
 }
 
-// savedCommandByName は、名前でグループとコマンドを探す
-func (s *PLCService) savedCommandByName(clientID, group, command string) (groupID, commandID string, err error) {
+// savedCommandIDByName は、名前で保存したコマンドを探す（保存した順で最初のもの）
+func (s *PLCService) savedCommandIDByName(clientID, command string) (commandID string, err error) {
 	err = s.withClient(clientID, func(inst *clientInstance) error {
-		for _, g := range inst.commandGroups {
-			if g.name != group {
-				continue
+		for _, c := range inst.savedCommands {
+			if c.name == command {
+				commandID = c.id
+				return nil
 			}
-			for _, c := range g.commands {
-				if c.name == command {
-					groupID, commandID = g.id, c.id
-					return nil
-				}
-			}
-			return fmt.Errorf("グループ「%s」にコマンド「%s」がありません", group, command)
 		}
-		return fmt.Errorf("コマンドグループ「%s」がありません", group)
+		return fmt.Errorf("保存したコマンド「%s」がありません", command)
 	})
 	return
 }
@@ -84,32 +78,20 @@ func logToScript(l *ClientCommandLogDTO) map[string]any {
 	}
 }
 
-func (c scriptClientSender) SendCommand(scriptName, client, group, command string) map[string]any {
+func (c scriptClientSender) SendCommand(scriptName, client, command string) map[string]any {
 	clientID, ok := c.svc.clients.clientIDByName(client)
 	if !ok {
 		return scriptError(fmt.Sprintf("接続先「%s」がありません", client))
 	}
-	groupID, commandID, err := c.svc.savedCommandByName(clientID, group, command)
+	commandID, err := c.svc.savedCommandIDByName(clientID, command)
 	if err != nil {
 		return scriptError(err.Error())
 	}
-	var req []byte
-	err = c.svc.withClient(clientID, func(inst *clientInstance) error {
-		g, err := inst.groupLocked(groupID)
-		if err != nil {
-			return err
-		}
-		i, err := g.commandIndex(commandID)
-		if err != nil {
-			return err
-		}
-		req = append([]byte(nil), g.commands[i].request...)
-		return nil
-	})
+	req, name, err := c.svc.savedRequest(clientID, commandID)
 	if err != nil {
 		return scriptError(err.Error())
 	}
-	l, err := c.svc.sendAndLog(clientID, req, scriptLabel(scriptName, group+" / "+command))
+	l, err := c.svc.sendAndLog(clientID, req, scriptLabel(scriptName, name))
 	if err != nil {
 		return scriptError(err.Error())
 	}
