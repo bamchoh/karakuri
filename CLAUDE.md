@@ -20,7 +20,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **モニタリング**: 任意のレジスタをリアルタイム監視・書き込み（ドラッグ&ドロップ並べ替え対応）
 - **プロトコルマッピング**: 変数を複数プロトコルのメモリアドレスにマッピング可能
 - **REST HTTP API**: アプリをネットワーク経由で外部から操作可能（デフォルトポート 8765）。サーバー管理・レジスタ読み書き・変数管理・プロジェクトエクスポート/インポートに対応
-- **クライアント機能**: Karakuri から外部の機器（Modbus TCP サーバー）につないで、コマンドを送る。ファンクションコードを選んで組み立てる方式と、16 進（PDU）で直接入れる方式がある。送受信のバイト列・応答の解釈・履歴を表示する
+- **クライアント機能**: Karakuri から外部の機器（Modbus TCP サーバー）につないで、コマンドを送る。ファンクションコードを選んで組み立てる方式と、16 進（PDU）で直接入れる方式がある。送受信のバイト列・応答の解釈・履歴を表示する。読み取り項目を周期的に読むポーリングもできる
 
 ## Build and Development Commands
 
@@ -83,7 +83,7 @@ go build ./...
 
 `frontend/e2e/` に、ブラウザで画面を操作して確認するテストがある。`task dev` が立てる開発用サーバー（`http://localhost:34115`）に接続するため、Go 側の API とプロトコルの実装を含めた動作を確認できる。手順と注意は `frontend/e2e/README.md` を参照。
 
-- 画面ごとのテスト: サーバー画面 `server-panel.spec.ts`、変数画面 `variable-dialogs.spec.ts` / `node-publishing.spec.ts`、レジスタ画面 `register-panel.spec.ts` / `monitoring.spec.ts`、スクリプト画面 `script-panel.spec.ts`、クライアント画面 `client-panel.spec.ts`
+- 画面ごとのテスト: サーバー画面 `server-panel.spec.ts`、変数画面 `variable-dialogs.spec.ts` / `node-publishing.spec.ts`、レジスタ画面 `register-panel.spec.ts` / `monitoring.spec.ts`、スクリプト画面 `script-panel.spec.ts`、クライアント画面 `client-panel.spec.ts` / `client-polling.spec.ts`
 - 画面を変更したら、該当するテストを実行する（なければ追加する）。`shot()` で撮ったスクリーンショット（`frontend/e2e/.screenshots/`）で見た目も確認する
 - データの準備は `api(page, "メソッド名", ...)` で Go 側の API を直接呼び、確認したい操作だけを画面で行う
 - **テストはアプリのサーバー・変数・モニタリング項目・スクリプトをすべて削除する。** 開発サーバーは `KARAKURI_CONFIG_DIR` を一時フォルダに向けて起動する
@@ -276,7 +276,9 @@ frontend/src/
 │   ├── ClientPanel.tsx     # クライアント画面（接続先の一覧と読み込み）
 │   ├── ClientDetailPane.tsx    # 選んだ接続先の設定・コマンド・結果と履歴
 │   ├── ClientCommandComposer.tsx # コマンドの組み立て（項目から組み立てる / 16 進で入れる）
-│   └── ClientCommandLog.tsx    # コマンドの結果と履歴
+│   ├── ClientCommandLog.tsx    # コマンドの結果と履歴
+│   ├── ClientPollingView.tsx   # ポーリング（周期・読み取り項目の追加・最後の結果と値）
+│   └── clientFormat.ts         # クライアント画面で共通の表示の書式（状態の名前・時刻・かかった時間）
 └── App.tsx                 # タブベースのメインUI
 ```
 
@@ -428,6 +430,9 @@ JavaScript（goja）でPLC動作を記述。
   - `BuildClientRequest(protocolType, commandID, params)`: コマンドと項目の値からリクエストを組み立て、16 進の文字列で返す
   - `SendClientRequest(id, requestHex)`: 16 進で指定したリクエストを送る。タイムアウト・例外応答などは結果の `status`（`ok` / `exception` / `timeout` / `error`）で返す
   - `GetClientCommandLogs()`, `ClearClientCommandLogs()`: 送ったコマンドの履歴（新しい順、最大 200 件）
+  - `GetClientPolling(id)`: ポーリングの状態（周期・実行中か・周回数・読み取り項目と最後の結果）
+  - `AddClientPollItem(id, commandID, params, format)`, `UpdateClientPollItem(id, itemID, commandID, params, format)`, `RemoveClientPollItem(id, itemID)`: 読み取り項目（`Pollable` のコマンドだけ。1 つの接続先に 50 個まで）
+  - `SetClientPollInterval(id, ms)`（50〜3600000）, `StartClientPolling(id)`, `StopClientPolling(id)`
 - **HTTP API 設定**:
   - `GetHTTPAPIPort()`: 現在のHTTP APIポート番号を返す
   - `SetHTTPAPIPort(port)`: ポートを変更してHTTP APIサーバーを再起動（1024〜65535、設定ファイルに永続化）
@@ -525,6 +530,7 @@ JavaScript（goja）でPLC動作を記述。
 4. **ホスト・フロントエンドの変更不要** - スキーマと能力フラグから自動生成
 5. クライアント（外部の機器へつなぐ側）にも対応するなら、`protocol.ClientFactory` / `protocol.Client`（`internal/domain/protocol/client.go`）を実装し、`protocols.ClientFactories()` に追加する
    - 接続先の設定項目（`ConnectionFields()`）とコマンドの定義（`Commands()`）は `ConfigField` で返す。画面はサーバー設定と同じ `DynamicField` で入力欄を作る
+   - 読み取りのコマンドには `Pollable: true` を付ける（ポーリングに使える）。読み取った値は `ResultValue.Bit` / `Word` にも入れる
    - `Send()` は通信の失敗を error ではなく `CommandResult.Status` で返す。タイムアウトしたら接続を閉じる（遅れて届く応答と取り違えないため）。次の `Send()` でつなぎ直す
 
 実装するときの決まり:
@@ -678,8 +684,17 @@ JavaScript（goja）でPLC動作を記述。
   - リクエストは PDU（ファンクションコード + データ）。MBAP ヘッダー（トランザクション ID・UnitID）はクライアントが付ける。アドレスは PDU の値（0 始まり）
   - 組み立てられるコマンドは FC01〜06・15・16。16 進で入れれば、ほかのファンクションコードや異常なリクエストも送れる（応答はデータをそのまま表示する）
   - 接続は最初の送信でつなぐ。タイムアウト・通信エラーでは閉じ、例外応答では閉じない。トランザクション ID が違う応答（前のリクエストへの遅れた応答）は読み捨てる
-- **テスト**: `internal/protocols/modbus/client_test.go`（フェイクの TCP サーバー）、`internal/application/plc_service_clients_test.go`（`protocoltest.ClientFactory`）、`internal/protocols/integration_test.go` の `TestModbusClient_AgainstOwnServer`（Karakuri 自身の Modbus TCP サーバーにつなぐ）
-- **今後の予定**: ポーリング（周期的な読み取りと表示）、変数と外部機器のアドレスのマッピング（読み取りのタイムアウト時は値を残して状態を「通信エラー」、書き込みのタイムアウト時は「書き込み未反映」にして再送）
+- **ポーリング**（`plc_service_client_polling.go`）: 接続先ごとに読み取り項目の一覧と周期を持ち、ポーリング中は 1 つのゴルーチンが周期ごとに項目を上から順に送る
+  - 項目は指定どおりに送る（まとめて読まない。存在しないアドレスが 1 つあると、まとめた全体が例外応答になるため）
+  - 読めなかった項目は、最後に読めた値を残す（`values` / `valuesAt`）。画面は status が ok 以外なら値を薄く表示する
+  - ある項目がタイムアウト・エラーになったら、その周期の残りの項目は送らない（status = `skipped`）。例外応答なら次の項目も送る
+  - 1 周が周期より長くかかったら、待たずに次の周を始める（画面に「1 周が周期より長くかかっています」と出す）
+  - ポーリングの送受信は、コマンドの履歴に入れない
+  - 止めるときは、ロックの中で取り消しだけして、ゴルーチンの終わりはロックの外で待つ（ゴルーチンは結果を入れるときに `clientManager.mu` を取るため）。接続先の削除・プロジェクトの読み込み・終了でも止める
+  - 読み取り項目・周期・表示形式（`format`。画面が決める値で、ホストは意味を持たない）はプロジェクトに保存する。ポーリング中かどうかは保存しない（読み込んだら停止中）
+  - 値の表示形式を変えられるよう、`ResultValue` は表示用の文字列に加えて元の値（`Bit` / `Word`）を持つ
+- **テスト**: `internal/protocols/modbus/client_test.go`（フェイクの TCP サーバー）、`internal/application/plc_service_clients_test.go` / `plc_service_client_polling_test.go`（`protocoltest.ClientFactory`）、`internal/protocols/integration_test.go` の `TestModbusClient_AgainstOwnServer` / `TestModbusClient_Polling`（Karakuri 自身の Modbus TCP サーバーにつなぐ）、画面は `client-panel.spec.ts` / `client-polling.spec.ts`
+- **今後の予定**: 変数と外部機器のアドレスのマッピング（読み取りのタイムアウト時は値を残して状態を「通信エラー」、書き込みのタイムアウト時は「書き込み未反映」にして再送）
 
 ### REST HTTP API 実装
 

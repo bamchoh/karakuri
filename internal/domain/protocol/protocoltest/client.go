@@ -56,14 +56,24 @@ func (f *ClientFactory) NormalizeSettings(settings map[string]interface{}) (map[
 }
 
 func (f *ClientFactory) Commands() []protocol.CommandDefinition {
-	return []protocol.CommandDefinition{{
-		ID: "echo", DisplayName: "エコー",
-		Fields: []protocol.ConfigField{{Name: "data", Label: "データ", Type: "text", Default: "AB"}},
-	}}
+	return []protocol.CommandDefinition{
+		{
+			ID: "echo", DisplayName: "エコー", Pollable: true,
+			Fields: []protocol.ConfigField{{Name: "data", Label: "データ", Type: "text", Default: "AB"}},
+		},
+		{
+			ID: "write", DisplayName: "書き込み（ポーリングには使えない）",
+			Fields: []protocol.ConfigField{{Name: "data", Label: "データ", Type: "text", Default: "W"}},
+		},
+	}
+}
+
+func (f *ClientFactory) DescribeRequest(request []byte) string {
+	return "echo " + string(request)
 }
 
 func (f *ClientFactory) BuildRequest(commandID string, params map[string]interface{}) ([]byte, error) {
-	if commandID != "echo" {
+	if commandID != "echo" && commandID != "write" {
 		return nil, fmt.Errorf("不明なコマンドです: %s", commandID)
 	}
 	s, _ := params["data"].(string)

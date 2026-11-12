@@ -22,6 +22,8 @@ type ClientFactory interface {
 	Commands() []CommandDefinition
 	// BuildRequest は、コマンドと項目の値から送るリクエスト（Modbus なら PDU）を作る
 	BuildRequest(commandID string, params map[string]interface{}) ([]byte, error)
+	// DescribeRequest はリクエストの内容を 1 行の要約にする（CommandResult.Summary と同じもの）
+	DescribeRequest(request []byte) string
 	// NewClient は接続先の設定（NormalizeSettings 済み）からクライアントを作る。つなぐのは最初の送信のとき
 	NewClient(settings map[string]interface{}) (Client, error)
 }
@@ -31,6 +33,8 @@ type CommandDefinition struct {
 	ID          string
 	DisplayName string
 	Fields      []ConfigField
+	// Pollable は、周期的な読み取り（ポーリング）に使えるコマンドかどうか（読み取りのコマンドだけ true にする）
+	Pollable bool
 }
 
 // Client は外部の機器へつなぐクライアント。Send は複数のゴルーチンから呼ばれてもよい（実装が 1 つずつ送る）
@@ -64,8 +68,11 @@ type CommandResult struct {
 	Values   []ResultValue // 応答の内容（読み取った値など）
 }
 
-// ResultValue は応答の内容の 1 項目
+// ResultValue は応答の内容の 1 項目。
+// 読み取った値は、画面で表示形式（10 進・16 進など）を切り替えられるよう、Bit / Word にも元の値を入れる
 type ResultValue struct {
 	Label string
-	Value string
+	Value string  // 表示用の文字列
+	Bit   *bool   // ビットの値（ビットでなければ nil）
+	Word  *uint16 // ワードの値（ワードでなければ nil）
 }

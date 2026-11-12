@@ -6,6 +6,10 @@ export function AddClient(arg1, arg2) {
   return window['go']['main']['App']['AddClient'](arg1, arg2);
 }
 
+export function AddClientPollItem(arg1, arg2, arg3, arg4) {
+  return window['go']['main']['App']['AddClientPollItem'](arg1, arg2, arg3, arg4);
+}
+
 export function AddMonitoringItem(arg1) {
   return window['go']['main']['App']['AddMonitoringItem'](arg1);
 }
@@ -68,6 +72,10 @@ export function GetAvailableProtocols() {
 
 export function GetClientCommandLogs() {
   return window['go']['main']['App']['GetClientCommandLogs']();
+}
+
+export function GetClientPolling(arg1) {
+  return window['go']['main']['App']['GetClientPolling'](arg1);
 }
 
 export function GetClientProtocols() {
@@ -178,6 +186,10 @@ export function RemoveClient(arg1) {
   return window['go']['main']['App']['RemoveClient'](arg1);
 }
 
+export function RemoveClientPollItem(arg1, arg2) {
+  return window['go']['main']['App']['RemoveClientPollItem'](arg1, arg2);
+}
+
 export function RemoveServer(arg1) {
   return window['go']['main']['App']['RemoveServer'](arg1);
 }
@@ -194,6 +206,10 @@ export function SendClientRequest(arg1, arg2) {
   return window['go']['main']['App']['SendClientRequest'](arg1, arg2);
 }
 
+export function SetClientPollInterval(arg1, arg2) {
+  return window['go']['main']['App']['SetClientPollInterval'](arg1, arg2);
+}
+
 export function SetDisabledUnitIDs(arg1, arg2) {
   return window['go']['main']['App']['SetDisabledUnitIDs'](arg1, arg2);
 }
@@ -206,12 +222,20 @@ export function SetUnitIDEnabled(arg1, arg2, arg3) {
   return window['go']['main']['App']['SetUnitIDEnabled'](arg1, arg2, arg3);
 }
 
+export function StartClientPolling(arg1) {
+  return window['go']['main']['App']['StartClientPolling'](arg1);
+}
+
 export function StartScript(arg1) {
   return window['go']['main']['App']['StartScript'](arg1);
 }
 
 export function StartServer(arg1) {
   return window['go']['main']['App']['StartServer'](arg1);
+}
+
+export function StopClientPolling(arg1) {
+  return window['go']['main']['App']['StopClientPolling'](arg1);
 }
 
 export function StopScript(arg1) {
@@ -224,6 +248,10 @@ export function StopServer(arg1) {
 
 export function UpdateClient(arg1, arg2, arg3) {
   return window['go']['main']['App']['UpdateClient'](arg1, arg2, arg3);
+}
+
+export function UpdateClientPollItem(arg1, arg2, arg3, arg4, arg5) {
+  return window['go']['main']['App']['UpdateClientPollItem'](arg1, arg2, arg3, arg4, arg5);
 }
 
 export function UpdateMonitoringItem(arg1) {

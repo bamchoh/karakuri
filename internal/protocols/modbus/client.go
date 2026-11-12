@@ -154,10 +154,10 @@ func (f *TCPClientFactory) Commands() []protocol.CommandDefinition {
 		}
 	}
 	return []protocol.CommandDefinition{
-		def(fcReadCoils, addressField(), countField(2000)),
-		def(fcReadDiscreteInputs, addressField(), countField(2000)),
-		def(fcReadHoldingRegisters, addressField(), countField(125)),
-		def(fcReadInputRegisters, addressField(), countField(125)),
+		pollable(def(fcReadCoils, addressField(), countField(2000))),
+		pollable(def(fcReadDiscreteInputs, addressField(), countField(2000))),
+		pollable(def(fcReadHoldingRegisters, addressField(), countField(125))),
+		pollable(def(fcReadInputRegisters, addressField(), countField(125))),
 		def(fcWriteSingleCoil, addressField(), protocol.ConfigField{
 			Name: "value", Label: "値", Type: "select", Required: true, Default: "on",
 			Options: []protocol.FieldOption{{Value: "on", Label: "ON（0xFF00）"}, {Value: "off", Label: "OFF（0x0000）"}},
@@ -172,6 +172,17 @@ func (f *TCPClientFactory) Commands() []protocol.CommandDefinition {
 			Name: "values", Label: "値", Description: "値をカンマか空白で区切って並べる（例: 100, 0x10, -1）。1〜123 個。", Type: "text", Required: true, Default: "0",
 		}),
 	}
+}
+
+// DescribeRequest はリクエスト（PDU）の内容を 1 行の要約にする
+func (f *TCPClientFactory) DescribeRequest(pdu []byte) string {
+	return describeRequest(pdu)
+}
+
+// pollable はコマンドを、ポーリングに使える（読み取りの）コマンドにする
+func pollable(c protocol.CommandDefinition) protocol.CommandDefinition {
+	c.Pollable = true
+	return c
 }
 
 // BuildRequest は、コマンドと項目の値から PDU を作る
@@ -671,7 +682,7 @@ func decodeResponse(req, resp []byte) (protocol.CommandStatus, []protocol.Result
 		values := make([]protocol.ResultValue, qty)
 		for i := 0; i < qty; i++ {
 			on := data[i/8]&(1<<(i%8)) != 0
-			values[i] = protocol.ResultValue{Label: fmt.Sprintf("アドレス %d", int(start)+i), Value: bitText(on)}
+			values[i] = protocol.ResultValue{Label: fmt.Sprintf("アドレス %d", int(start)+i), Value: bitText(on), Bit: &on}
 		}
 		return protocol.CommandOK, values, ""
 
@@ -686,7 +697,7 @@ func decodeResponse(req, resp []byte) (protocol.CommandStatus, []protocol.Result
 		values := make([]protocol.ResultValue, qty)
 		for i := 0; i < qty; i++ {
 			w := binary.BigEndian.Uint16(data[i*2:])
-			values[i] = protocol.ResultValue{Label: fmt.Sprintf("アドレス %d", int(start)+i), Value: wordText(w)}
+			values[i] = protocol.ResultValue{Label: fmt.Sprintf("アドレス %d", int(start)+i), Value: wordText(w), Word: &w}
 		}
 		return protocol.CommandOK, values, ""
 

@@ -8,7 +8,10 @@ import {
 } from "../../wailsjs/go/main/App";
 import { application } from "../../wailsjs/go/models";
 import { SquarePlus } from "lucide-react";
-import { ClientDetailPane } from "./ClientDetailPane";
+import { ClientDetailPane, ClientSubTab } from "./ClientDetailPane";
+
+// 一覧（接続中・ポーリング中の表示）を読み直す間隔
+const CLIENTS_REFRESH_MS = 1000;
 
 // クライアント画面: 外部の機器（Modbus TCP サーバーなど）につないで、コマンドを送る。
 // 左に接続先の一覧、右に選んだ接続先の設定・コマンドの組み立て・結果・履歴を並べる。
@@ -22,6 +25,7 @@ export function ClientPanel() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [addProtocol, setAddProtocol] = useState<string>("");
   const [error, setError] = useState<string | null>(null);
+  const [subTab, setSubTab] = useState<ClientSubTab>("command");
 
   const loadClients = useCallback(async () => {
     const list = (await GetClients()) || [];
@@ -47,6 +51,14 @@ export function ClientPanel() {
       }
     })();
   }, [loadClients, loadLogs]);
+
+  // ポーリング中は接続の状態が変わるので、一覧を読み直す
+  useEffect(() => {
+    const timer = setInterval(() => {
+      loadClients().catch(() => {});
+    }, CLIENTS_REFRESH_MS);
+    return () => clearInterval(timer);
+  }, [loadClients]);
 
   const handleAdd = async () => {
     if (!addProtocol) return;
@@ -124,6 +136,11 @@ export function ClientPanel() {
                 />
                 <span className="server-tab-name">{c.name}</span>
                 <span className="server-instance-variant">{c.displayName}</span>
+                {c.polling && (
+                  <span className="client-polling-badge" title="ポーリング中">
+                    ポーリング中
+                  </span>
+                )}
               </div>
             </div>
           ))}
@@ -143,6 +160,8 @@ export function ClientPanel() {
                 client={selected}
                 protocol={selectedProtocol}
                 logs={logs.filter((l) => l.clientId === selected.id)}
+                subTab={subTab}
+                onSubTabChange={setSubTab}
                 onClientsChanged={loadClients}
                 onLogsChanged={loadLogs}
                 onRemove={handleRemove}

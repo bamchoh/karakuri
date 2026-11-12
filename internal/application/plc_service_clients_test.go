@@ -54,7 +54,7 @@ func TestClients_AddUpdateRemove(t *testing.T) {
 	svc, f := newClientTestService(t)
 
 	protos := svc.GetClientProtocols()
-	if len(protos) != 1 || protos[0].ProtocolType != "fake-client" || len(protos[0].Commands) != 1 || len(protos[0].ConnectionFields) != 2 {
+	if len(protos) != 1 || protos[0].ProtocolType != "fake-client" || len(protos[0].Commands) != 2 || !protos[0].Commands[0].Pollable || protos[0].Commands[1].Pollable || len(protos[0].ConnectionFields) != 2 {
 		t.Fatalf("protocols = %+v", protos)
 	}
 

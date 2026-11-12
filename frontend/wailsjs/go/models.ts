@@ -98,6 +98,7 @@ export namespace application {
 	    id: string;
 	    displayName: string;
 	    fields: FieldDTO[];
+	    pollable: boolean;
 	
 	    static createFrom(source: any = {}) {
 	        return new ClientCommandDTO(source);
@@ -108,6 +109,7 @@ export namespace application {
 	        this.id = source["id"];
 	        this.displayName = source["displayName"];
 	        this.fields = this.convertValues(source["fields"], FieldDTO);
+	        this.pollable = source["pollable"];
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
@@ -131,6 +133,8 @@ export namespace application {
 	export class ClientResultValueDTO {
 	    label: string;
 	    value: string;
+	    bit?: boolean;
+	    word?: number;
 	
 	    static createFrom(source: any = {}) {
 	        return new ClientResultValueDTO(source);
@@ -140,6 +144,8 @@ export namespace application {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.label = source["label"];
 	        this.value = source["value"];
+	        this.bit = source["bit"];
+	        this.word = source["word"];
 	    }
 	}
 	export class ClientCommandLogDTO {
@@ -201,6 +207,7 @@ export namespace application {
 	    displayName: string;
 	    settings: Record<string, any>;
 	    connected: boolean;
+	    polling: boolean;
 	
 	    static createFrom(source: any = {}) {
 	        return new ClientDTO(source);
@@ -214,7 +221,102 @@ export namespace application {
 	        this.displayName = source["displayName"];
 	        this.settings = source["settings"];
 	        this.connected = source["connected"];
+	        this.polling = source["polling"];
 	    }
+	}
+	export class ClientPollItemDTO {
+	    id: string;
+	    commandId: string;
+	    params: Record<string, any>;
+	    format: string;
+	    request: string;
+	    summary: string;
+	    status: string;
+	    error?: string;
+	    at?: string;
+	    elapsedMs: number;
+	    values: ClientResultValueDTO[];
+	    valuesAt?: string;
+	    okCount: number;
+	    errorCount: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new ClientPollItemDTO(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.commandId = source["commandId"];
+	        this.params = source["params"];
+	        this.format = source["format"];
+	        this.request = source["request"];
+	        this.summary = source["summary"];
+	        this.status = source["status"];
+	        this.error = source["error"];
+	        this.at = source["at"];
+	        this.elapsedMs = source["elapsedMs"];
+	        this.values = this.convertValues(source["values"], ClientResultValueDTO);
+	        this.valuesAt = source["valuesAt"];
+	        this.okCount = source["okCount"];
+	        this.errorCount = source["errorCount"];
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	export class ClientPollingDTO {
+	    intervalMs: number;
+	    running: boolean;
+	    cycles: number;
+	    lastCycleMs: number;
+	    items: ClientPollItemDTO[];
+	
+	    static createFrom(source: any = {}) {
+	        return new ClientPollingDTO(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.intervalMs = source["intervalMs"];
+	        this.running = source["running"];
+	        this.cycles = source["cycles"];
+	        this.lastCycleMs = source["lastCycleMs"];
+	        this.items = this.convertValues(source["items"], ClientPollItemDTO);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
 	}
 	export class ClientProtocolDTO {
 	    protocolType: string;

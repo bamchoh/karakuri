@@ -29,6 +29,14 @@ type clientInstance struct {
 	settings     map[string]interface{} // NormalizeSettings 済み
 	client       protocol.Client        // 設定を変えたら作り直す
 	order        int
+
+	// ポーリング（plc_service_client_polling.go）
+	pollIntervalMs int
+	pollItems      []*pollItem
+	pollSeq        int
+	poller         *poller // nil なら停止中
+	pollCycles     int64
+	lastCycle      time.Duration
 }
 
 type clientManager struct {
@@ -99,7 +107,7 @@ func (s *PLCService) GetClientProtocols() []ClientProtocolDTO {
 		cmds := f.Commands()
 		cmdDTOs := make([]ClientCommandDTO, len(cmds))
 		for j, c := range cmds {
-			cmdDTOs[j] = ClientCommandDTO{ID: c.ID, DisplayName: c.DisplayName, Fields: toFieldDTOs(c.Fields)}
+			cmdDTOs[j] = ClientCommandDTO{ID: c.ID, DisplayName: c.DisplayName, Fields: toFieldDTOs(c.Fields), Pollable: c.Pollable}
 		}
 		result[i] = ClientProtocolDTO{
 			ProtocolType:     string(f.ProtocolType()),
@@ -123,6 +131,7 @@ func (inst *clientInstance) toDTO() ClientDTO {
 		DisplayName:  inst.factory.DisplayName(),
 		Settings:     settings,
 		Connected:    inst.client != nil && inst.client.Connected(),
+		Polling:      inst.poller != nil,
 	}
 }
 
@@ -181,6 +190,8 @@ func (m *clientManager) addLocked(protocolType, name string, settings map[string
 		settings:     normalized,
 		client:       client,
 		order:        m.seq,
+
+		pollIntervalMs: defaultPollIntervalMs,
 	}
 	m.clients[inst.id] = inst
 	dto := inst.toDTO()
@@ -241,13 +252,16 @@ func (s *PLCService) RemoveClient(id string) error {
 	m := s.clients
 	m.mu.Lock()
 	inst, ok := m.clients[id]
+	var p *poller
 	if ok {
 		delete(m.clients, id)
+		p = inst.stopPollerLocked()
 	}
 	m.mu.Unlock()
 	if !ok {
 		return fmt.Errorf("接続先が見つかりません: %s", id)
 	}
+	p.wait()
 	if inst.client != nil {
 		_ = inst.client.Close()
 	}
@@ -317,10 +331,7 @@ func (s *PLCService) SendClientRequest(id, requestHex string) (*ClientCommandLog
 	at := time.Now()
 	result := client.Send(context.Background(), req)
 
-	values := make([]ClientResultValueDTO, len(result.Values))
-	for i, v := range result.Values {
-		values[i] = ClientResultValueDTO{Label: v.Label, Value: v.Value}
-	}
+	values := toResultValueDTOs(result.Values)
 	entry := ClientCommandLogDTO{
 		ClientID:   id,
 		ClientName: name,
@@ -377,31 +388,52 @@ func (m *clientManager) export() []ClientSnapshotDTO {
 	}
 	result := make([]ClientSnapshotDTO, len(dtos))
 	for i, d := range dtos {
-		result[i] = ClientSnapshotDTO{Name: d.Name, ProtocolType: d.ProtocolType, Settings: d.Settings}
+		result[i] = ClientSnapshotDTO{
+			Name:         d.Name,
+			ProtocolType: d.ProtocolType,
+			Settings:     d.Settings,
+			Polling:      m.clients[d.ID].pollingSnapshotLocked(),
+		}
 	}
 	return result
 }
 
 // replaceAll は接続先をすべて閉じて、snapshots の内容に置き換える（プロジェクトの読み込み）。
-// 使えないプロトコル・設定の接続先は読み飛ばす
+// 使えないプロトコル・設定の接続先・読み取り項目は読み飛ばす。ポーリングは停止した状態で始める
 func (m *clientManager) replaceAll(snapshots []ClientSnapshotDTO) {
 	m.mu.Lock()
 	old := m.clients
+	pollers := make([]*poller, 0, len(old))
+	for _, inst := range old {
+		pollers = append(pollers, inst.stopPollerLocked())
+	}
 	m.clients = make(map[string]*clientInstance)
 	for _, snap := range snapshots {
-		_, _ = m.addLocked(snap.ProtocolType, snap.Name, snap.Settings)
+		dto, err := m.addLocked(snap.ProtocolType, snap.Name, snap.Settings)
+		if err != nil {
+			continue
+		}
+		m.clients[dto.ID].restorePollingLocked(snap.Polling)
 	}
 	m.mu.Unlock()
+	for _, p := range pollers {
+		p.wait()
+	}
 	closeClients(old) // old はもう m から外したので、ロックの外で読んでよい
 }
 
 func (m *clientManager) closeAll() {
 	m.mu.Lock()
 	clients := make([]protocol.Client, 0, len(m.clients))
+	pollers := make([]*poller, 0, len(m.clients))
 	for _, inst := range m.clients {
 		clients = append(clients, inst.client)
+		pollers = append(pollers, inst.stopPollerLocked())
 	}
 	m.mu.Unlock()
+	for _, p := range pollers {
+		p.wait()
+	}
 	for _, c := range clients {
 		if c != nil {
 			_ = c.Close()

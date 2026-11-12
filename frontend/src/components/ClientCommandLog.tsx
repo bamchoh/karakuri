@@ -1,5 +1,10 @@
 import { application } from "../../wailsjs/go/models";
 import { Eraser, Send } from "lucide-react";
+import {
+  clientStatusLabel as statusLabel,
+  formatClientElapsed as formatElapsed,
+  formatClientTime as formatTime,
+} from "./clientFormat";
 
 interface ClientCommandLogProps {
   logs: application.ClientCommandLogDTO[]; // 新しい順
@@ -8,28 +13,6 @@ interface ClientCommandLogProps {
   onSelect: (seq: number) => void;
   onResend: (requestHex: string) => void;
   onClear: () => void;
-}
-
-const statusLabels: Record<string, string> = {
-  ok: "正常",
-  exception: "例外応答",
-  timeout: "タイムアウト",
-  error: "エラー",
-};
-
-function statusLabel(status: string): string {
-  return statusLabels[status] ?? status;
-}
-
-function formatTime(at: string): string {
-  const d = new Date(at);
-  if (isNaN(d.getTime())) return at;
-  const pad = (n: number, w = 2) => String(n).padStart(w, "0");
-  return `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}.${pad(d.getMilliseconds(), 3)}`;
-}
-
-function formatElapsed(ms: number): string {
-  return ms < 10 ? `${ms.toFixed(2)} ms` : `${Math.round(ms)} ms`;
 }
 
 // コマンドの結果（選んだ 1 件の詳細）と履歴の一覧

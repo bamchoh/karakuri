@@ -2258,3 +2258,129 @@ button:disabled {
   font-size: 0.75rem;
   color: var(--text-muted);
 }
+
+/* ----- クライアント画面: ポーリング ----- */
+.sub-tab-nav.client-sub-tabs {
+  margin: 0.75rem 1rem 0.25rem;
+}
+
+.client-polling-badge {
+  font-size: 0.7rem;
+  padding: 0 4px;
+  border-radius: 3px;
+  background: rgba(16, 185, 129, 0.15);
+  color: #34d399;
+  white-space: nowrap;
+}
+
+.vscode-setting-item.client-polling-controls {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.client-polling-controls .btn-primary,
+.client-polling-controls .btn-danger,
+.client-send-row .btn-secondary {
+  display: inline-flex;
+  align-items: center;
+}
+
+.client-polling-interval {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.875rem;
+}
+
+.client-polling-interval input {
+  width: 100px;
+  padding: 0.4rem 0.5rem;
+  border: 1px solid #1a3d22;
+  background: #071510;
+  color: #eaeaea;
+  border-radius: 2px;
+  font-size: 0.875rem;
+}
+
+.client-polling-overrun {
+  color: #fbbf24;
+  font-size: 0.8rem;
+}
+
+.client-polling-empty {
+  padding: 0.75rem 1rem;
+  text-align: left;
+}
+
+.client-poll-items {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  padding: 0.75rem 1rem;
+  text-align: left;
+}
+
+.client-poll-item {
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 0.6rem 0.75rem;
+  background: var(--bg-elevated);
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.client-poll-item .client-result-header {
+  flex-wrap: wrap;
+}
+
+.client-poll-counts {
+  color: var(--text-muted);
+  font-size: 0.8rem;
+}
+
+.client-poll-format {
+  font-size: 0.75rem;
+  padding: 2px 4px;
+  background: var(--bg-input);
+  color: var(--text-main);
+  border: 1px solid var(--border);
+  border-radius: 2px;
+}
+
+.client-status.client-status-skipped,
+.client-status.client-status-none {
+  background: rgba(139, 148, 158, 0.15);
+  color: var(--text-muted);
+}
+
+.client-poll-values {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 2px 1rem;
+  font-size: 0.85rem;
+}
+
+/* 読めなかったとき: 最後に読めた値を薄く出す */
+.client-poll-values.stale {
+  opacity: 0.45;
+}
+
+.client-poll-value {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.5rem;
+  border-bottom: 1px solid #1a3d22;
+  padding: 1px 0;
+}
+
+.client-poll-value-label {
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.client-poll-value-text {
+  font-family: "Consolas", "Courier New", monospace;
+}

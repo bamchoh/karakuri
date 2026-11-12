@@ -59,10 +59,14 @@ func TestBuildRequest(t *testing.T) {
 	}
 }
 
-// すべてのコマンドの定義が BuildRequest で組み立てられる（既定値のままで）
+// すべてのコマンドの定義が BuildRequest で組み立てられる（既定値のままで）。ポーリングに使えるのは読み取り（FC01〜04）だけ
 func TestCommands_DefaultsBuild(t *testing.T) {
 	f := &TCPClientFactory{}
 	for _, cmd := range f.Commands() {
+		wantPollable := cmd.ID == "1" || cmd.ID == "2" || cmd.ID == "3" || cmd.ID == "4"
+		if cmd.Pollable != wantPollable {
+			t.Errorf("%s: Pollable = %v", cmd.DisplayName, cmd.Pollable)
+		}
 		params := map[string]interface{}{}
 		for _, field := range cmd.Fields {
 			params[field.Name] = field.Default
@@ -82,11 +86,17 @@ func TestDecodeResponse(t *testing.T) {
 		if values[0].Label != "アドレス 5" || values[0].Value != "10 (0x000A)" || values[1].Value != "65535 (0xFFFF)" {
 			t.Fatalf("values=%v", values)
 		}
+		if values[0].Word == nil || *values[0].Word != 10 || *values[1].Word != 0xFFFF || values[0].Bit != nil {
+			t.Fatalf("元の値（Word）が入っていない: %+v", values)
+		}
 	})
 	t.Run("FC01", func(t *testing.T) {
 		status, values, _ := decodeResponse([]byte{0x01, 0x00, 0x00, 0x00, 0x03}, []byte{0x01, 0x01, 0x05})
 		if status != protocol.CommandOK || len(values) != 3 || values[0].Value != "ON" || values[1].Value != "OFF" || values[2].Value != "ON" {
 			t.Fatalf("status=%s values=%v", status, values)
+		}
+		if values[0].Bit == nil || !*values[0].Bit || *values[1].Bit || values[0].Word != nil {
+			t.Fatalf("元の値（Bit）が入っていない: %+v", values)
 		}
 	})
 	t.Run("例外応答", func(t *testing.T) {

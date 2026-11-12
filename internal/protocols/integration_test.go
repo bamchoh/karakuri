@@ -401,6 +401,64 @@ func TestModbusClient_AgainstOwnServer(t *testing.T) {
 	}
 }
 
+// ポーリングで、Karakuri 自身の Modbus TCP サーバーのレジスタを周期的に読む
+func TestModbusClient_Polling(t *testing.T) {
+	svc := newService(t)
+	port := addModbus(t, svc)
+	must(t, svc.StartServer(modbusTCP))
+	c, err := svc.AddClient(modbusTCP, "自分", map[string]interface{}{"host": "127.0.0.1", "port": port, "unitId": 1, "timeoutMs": 200})
+	must(t, err)
+	must(t, svc.SetClientPollInterval(c.ID, 50))
+	_, err = svc.AddClientPollItem(c.ID, "3", map[string]interface{}{"address": float64(20), "count": float64(2)}, "")
+	must(t, err)
+	if _, err := svc.AddClientPollItem(c.ID, "16", map[string]interface{}{"address": float64(0), "values": "1"}, ""); err == nil {
+		t.Fatal("書き込みのコマンドはポーリングに使えない")
+	}
+	must(t, svc.StartClientPolling(c.ID))
+	t.Cleanup(func() { _ = svc.StopClientPolling(c.ID) })
+
+	words := func() []int {
+		p, err := svc.GetClientPolling(c.ID)
+		must(t, err)
+		it := p.Items[0]
+		if it.Status != "ok" || len(it.Values) != 2 {
+			return nil
+		}
+		return []int{*it.Values[0].Word, *it.Values[1].Word}
+	}
+	waitUntil := func(what string, cond func() bool) {
+		t.Helper()
+		deadline := time.Now().Add(3 * time.Second)
+		for !cond() {
+			if time.Now().After(deadline) {
+				t.Fatalf("待っても %s にならない", what)
+			}
+			time.Sleep(10 * time.Millisecond)
+		}
+	}
+
+	must(t, svc.WriteWord(modbusTCP, hr, 20, 111))
+	must(t, svc.WriteWord(modbusTCP, hr, 21, 222))
+	waitUntil("[111 222]", func() bool { return reflect.DeepEqual(words(), []int{111, 222}) })
+	must(t, svc.WriteWord(modbusTCP, hr, 21, 333))
+	waitUntil("[111 333]", func() bool { return reflect.DeepEqual(words(), []int{111, 333}) })
+
+	// 応答しない UnitID にすると、タイムアウトになり、最後に読めた値は残る
+	must(t, svc.SetUnitIDEnabled(modbusTCP, 1, false))
+	waitUntil("タイムアウト", func() bool {
+		p, _ := svc.GetClientPolling(c.ID)
+		return p.Items[0].Status == "timeout"
+	})
+	p, _ := svc.GetClientPolling(c.ID)
+	if v := p.Items[0].Values; len(v) != 2 || *v[1].Word != 333 {
+		t.Fatalf("最後に読めた値が残っていない: %+v", v)
+	}
+	// 応答するようにすると、また読める
+	must(t, svc.SetUnitIDEnabled(modbusTCP, 1, true))
+	must(t, svc.WriteWord(modbusTCP, hr, 20, 444))
+	waitUntil("[444 333]", func() bool { return reflect.DeepEqual(words(), []int{444, 333}) })
+}
+
 // ===== プロジェクトの保存と読み込み =====
 
 func TestProject_ImportReplacesServersAndState(t *testing.T) {

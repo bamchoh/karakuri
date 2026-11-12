@@ -10,11 +10,16 @@ import { Trash2, Unplug } from "lucide-react";
 import { DynamicField } from "./DynamicField";
 import { ClientCommandComposer } from "./ClientCommandComposer";
 import { ClientCommandLog } from "./ClientCommandLog";
+import { ClientPollingView } from "./ClientPollingView";
+
+export type ClientSubTab = "command" | "polling";
 
 interface ClientDetailPaneProps {
   client: application.ClientDTO;
   protocol: application.ClientProtocolDTO;
   logs: application.ClientCommandLogDTO[]; // この接続先の履歴（新しい順）
+  subTab: ClientSubTab; // 接続先を選び直しても保つよう、親が持つ
+  onSubTabChange: (tab: ClientSubTab) => void;
   onClientsChanged: () => Promise<unknown>;
   onLogsChanged: () => Promise<void>;
   onRemove: (id: string) => void;
@@ -29,6 +34,8 @@ export function ClientDetailPane({
   client,
   protocol,
   logs,
+  subTab,
+  onSubTabChange,
   onClientsChanged,
   onLogsChanged,
   onRemove,
@@ -169,7 +176,7 @@ export function ClientDetailPane({
         {dirty && (
           <div className="client-settings-actions">
             <span className="client-note">
-              保存していない変更があります（送信すると保存します）
+              保存していない変更があります（送信・ポーリングの開始で保存します）
             </span>
             <button className="btn-secondary" onClick={revertSettings}>
               元に戻す
@@ -180,22 +187,47 @@ export function ClientDetailPane({
           </div>
         )}
 
-        <div className="vscode-setting-category">コマンド</div>
-        <ClientCommandComposer
-          protocol={protocol}
-          sending={sending}
-          onSend={send}
-        />
+        <div className="sub-tab-nav client-sub-tabs">
+          <button
+            className={`sub-tab-button ${subTab === "command" ? "active" : ""}`}
+            onClick={() => onSubTabChange("command")}
+          >
+            コマンド
+          </button>
+          <button
+            className={`sub-tab-button ${subTab === "polling" ? "active" : ""}`}
+            onClick={() => onSubTabChange("polling")}
+          >
+            ポーリング{client.polling ? "（実行中）" : ""}
+          </button>
+        </div>
 
-        <div className="vscode-setting-category">結果と履歴</div>
-        <ClientCommandLog
-          logs={logs}
-          selected={selectedLog}
-          sending={sending}
-          onSelect={setSelectedSeq}
-          onResend={send}
-          onClear={handleClearLogs}
-        />
+        {subTab === "command" ? (
+          <>
+            <ClientCommandComposer
+              protocol={protocol}
+              sending={sending}
+              onSend={send}
+            />
+
+            <div className="vscode-setting-category">結果と履歴</div>
+            <ClientCommandLog
+              logs={logs}
+              selected={selectedLog}
+              sending={sending}
+              onSelect={setSelectedSeq}
+              onResend={send}
+              onClear={handleClearLogs}
+            />
+          </>
+        ) : (
+          <ClientPollingView
+            client={client}
+            protocol={protocol}
+            beforeStart={async () => !dirty || (await saveSettings())}
+            onClientsChanged={onClientsChanged}
+          />
+        )}
       </div>
     </div>
   );

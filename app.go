@@ -351,6 +351,41 @@ func (a *App) ClearClientCommandLogs() {
 	a.plcService.ClearClientCommandLogs()
 }
 
+// GetClientPolling は接続先のポーリングの状態（周期・読み取り項目と最後の結果）を返す
+func (a *App) GetClientPolling(id string) (*application.ClientPollingDTO, error) {
+	return a.plcService.GetClientPolling(id)
+}
+
+// AddClientPollItem はポーリングの読み取り項目を足す
+func (a *App) AddClientPollItem(id string, commandID string, params map[string]interface{}, format string) (*application.ClientPollItemDTO, error) {
+	return a.plcService.AddClientPollItem(id, commandID, params, format)
+}
+
+// UpdateClientPollItem はポーリングの読み取り項目を変える
+func (a *App) UpdateClientPollItem(id string, itemID string, commandID string, params map[string]interface{}, format string) error {
+	return a.plcService.UpdateClientPollItem(id, itemID, commandID, params, format)
+}
+
+// RemoveClientPollItem はポーリングの読み取り項目を削除する
+func (a *App) RemoveClientPollItem(id string, itemID string) error {
+	return a.plcService.RemoveClientPollItem(id, itemID)
+}
+
+// SetClientPollInterval はポーリングの周期（ms）を変える
+func (a *App) SetClientPollInterval(id string, intervalMs int) error {
+	return a.plcService.SetClientPollInterval(id, intervalMs)
+}
+
+// StartClientPolling はポーリングを始める
+func (a *App) StartClientPolling(id string) error {
+	return a.plcService.StartClientPolling(id)
+}
+
+// StopClientPolling はポーリングを止める
+func (a *App) StopClientPolling(id string) error {
+	return a.plcService.StopClientPolling(id)
+}
+
 // === プロジェクト管理 ===
 
 // ExportProject はプロジェクトをファイルにエクスポートする
