@@ -2531,26 +2531,31 @@ button:disabled {
   margin-left: 0.25rem;
 }
 
-.client-save-group {
+/* 保存したコマンドの一覧の上（「新しいコマンド」） */
+.client-saved-toolbar {
   display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  margin-left: 1.5rem;
+  padding: 0.6rem 1rem 0.5rem;
 }
 
-.client-save-group input {
-  width: 220px;
-  padding: 0.4rem 0.5rem;
-  border: 1px solid #1a3d22;
-  background: #071510;
-  color: #eaeaea;
-  border-radius: 2px;
-  font-size: 0.875rem;
-}
-
-.client-save-group .btn-secondary {
+.client-saved-toolbar .btn-primary {
   display: inline-flex;
   align-items: center;
+}
+
+/* コマンドのダイアログ */
+.dialog.client-command-dialog {
+  width: min(720px, 92vw);
+  max-width: 92vw;
+}
+
+.client-command-dialog .dialog-buttons button {
+  display: inline-flex;
+  align-items: center;
+}
+
+.client-result.client-dialog-result {
+  margin: 0.75rem 1rem 0.25rem;
+  text-align: left;
 }
 
 .client-log-label {

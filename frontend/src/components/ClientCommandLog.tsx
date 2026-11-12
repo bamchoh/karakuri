@@ -32,7 +32,7 @@ export function ClientCommandLog({
             <span className={`client-status client-status-${selected.status}`}>
               {statusLabel(selected.status)}
             </span>
-            {selected.label && (
+            {selected.label && selected.label !== selected.summary && (
               <span className="client-log-label">{selected.label}</span>
             )}
             <span className="client-result-summary">{selected.summary}</span>
@@ -117,7 +117,8 @@ export function ClientCommandLog({
                 >
                   <td className="client-history-time">{formatTime(l.at)}</td>
                   <td>
-                    {l.label && (
+                    {/* 名前が内容の要約と同じ（名前を付けずに保存した）なら、2 回出さない */}
+                    {l.label && l.label !== l.summary && (
                       <div className="client-log-label">{l.label}</div>
                     )}
                     <div>{l.summary}</div>

@@ -11,7 +11,7 @@ import {
   MODBUS_PORT,
 } from "./helpers";
 
-// クライアントの保存したコマンド: 組み立てたコマンドを名前を付けて保存しておき、あとから送る。
+// クライアントの保存したコマンド: 「新しいコマンド」のダイアログで組み立て、名前を付けて保存しておき、あとから送る。
 // 接続先は、テストで起動した Karakuri 自身の Modbus TCP サーバー（127.0.0.1:MODBUS_PORT）。
 
 test.beforeEach(async ({ page }) => {
@@ -44,7 +44,7 @@ function setting(scope: Locator, label: string) {
 }
 
 const savedArea = (page: Page) => page.locator(".client-saved-commands-area");
-const composer = (page: Page) => page.locator(".client-composer");
+const dialog = (page: Page) => page.locator(".client-command-dialog");
 const savedRows = (page: Page) => page.getByTestId("client-saved-command");
 const savedRow = (page: Page, name: string) =>
   savedRows(page).filter({
@@ -52,32 +52,44 @@ const savedRow = (page: Page, name: string) =>
       hasText: new RegExp("^" + escapeRegExp(name) + "$"),
     }),
   });
-const result = (page: Page) => page.getByTestId("client-result");
-const saveButton = (page: Page) =>
-  composer(page).getByRole("button", { name: "コマンドを保存", exact: true });
+const button = (page: Page, name: string) =>
+  dialog(page).getByRole("button", { name, exact: true });
 
-test("組み立てたコマンドを名前を付けて保存し、一覧から送れる", async ({
+test("新しいコマンドのダイアログで組み立て、試しに送ってから保存し、一覧から送れる", async ({
   page,
 }) => {
   await expect(savedArea(page)).toContainText("保存したコマンドはありません");
 
-  // 組み立てたコマンドを名前を付けて保存する（グループを作る手順はいらない）
-  await setting(composer(page), "コマンド").selectOption({
+  await page.getByRole("button", { name: "新しいコマンド" }).click();
+  await expect(dialog(page).locator("h3")).toHaveText("新しいコマンド");
+  await setting(dialog(page), "コマンド").selectOption({
     label: "FC06 保持レジスタ 1 点の書き込み",
   });
-  await setting(composer(page), "アドレス").fill("3");
-  await setting(composer(page), "値").fill("0x1234");
-  await composer(page).getByLabel("保存する名前").fill("速度を書く");
-  await saveButton(page).click();
+  await setting(dialog(page), "アドレス").fill("3");
+  await setting(dialog(page), "値").fill("0x1234");
+
+  // 「送信」はダイアログを開いたまま送り、結果をダイアログに出す（保存はしない）
+  await button(page, "送信").click();
+  const dialogResult = page.getByTestId("client-dialog-result");
+  await expect(dialogResult.locator(".client-status")).toHaveText("正常");
+  expect(await readWords(page, 3)).toEqual([0x1234]);
+  await expect(dialog(page)).toBeVisible();
+  await expect(savedRows(page)).toHaveCount(0);
+  await shot(page, "client-command-dialog");
+
+  // 名前を付けて保存すると、ダイアログが閉じて一覧に並ぶ
+  await dialog(page).getByLabel("保存する名前").fill("速度を書く");
+  await button(page, "保存して閉じる").click();
+  await expect(dialog(page)).toBeHidden();
   await expect(savedRow(page, "速度を書く")).toContainText("06 00 03 12 34");
 
   // 名前が空なら、内容の要約が名前になる
-  await setting(composer(page), "コマンド").selectOption({
+  await page.getByRole("button", { name: "新しいコマンド" }).click();
+  await setting(dialog(page), "コマンド").selectOption({
     label: "FC03 保持レジスタの読み取り",
   });
-  await setting(composer(page), "アドレス").fill("3");
-  await composer(page).getByLabel("保存する名前").fill("");
-  await saveButton(page).click();
+  await setting(dialog(page), "アドレス").fill("3");
+  await button(page, "保存して閉じる").click();
   await expect(savedRows(page)).toHaveCount(2);
   await expect(savedRows(page).nth(1)).toContainText(
     "FC03 保持レジスタの読み取り アドレス 3 から 1 個",
@@ -85,17 +97,19 @@ test("組み立てたコマンドを名前を付けて保存し、一覧から�
   await expect(page.getByText("保存したコマンド（2）")).toBeVisible();
 
   // 一覧から送ると、結果と履歴にコマンドの名前が付く
-  await savedRow(page, "速度を書く").getByLabel("送信").click();
-  await expect(result(page).locator(".client-status")).toHaveText("正常");
-  await expect(result(page)).toContainText("速度を書く");
-  expect(await readWords(page, 3)).toEqual([0x1234]);
+  await savedRow(page, "FC03 保持レジスタの読み取り アドレス 3 から 1 個")
+    .getByLabel("送信")
+    .click();
+  const result = page.getByTestId("client-result");
+  await expect(result.locator(".client-status")).toHaveText("正常");
+  await expect(result).toContainText("4660 (0x1234)");
   await expect(page.locator(".client-history tbody tr").first()).toContainText(
-    "速度を書く",
+    "FC03 保持レジスタの読み取り アドレス 3 から 1 個",
   );
   await shot(page, "client-saved-commands");
 });
 
-test("保存したコマンドを読み込んで変え、上書き保存できる。名前の変更と削除もできる", async ({
+test("保存したコマンドを編集ダイアログで直して上書きできる。閉じると変わらず、削除もできる", async ({
   page,
 }) => {
   const c = (await api<any[]>(page, "GetClients"))[0];
@@ -118,41 +132,45 @@ test("保存したコマンドを読み込んで変え、上書き保存でき�
   await openClient(page, "自分");
   await expect(savedRows(page)).toHaveCount(2);
 
-  // 組み立てたコマンドを読み込むと、組み立て欄に入る
-  await savedRow(page, "先頭を読む").getByLabel("組み立て欄に読み込む").click();
-  await expect(setting(composer(page), "コマンド")).toHaveValue("3");
-  await expect(composer(page).getByLabel("保存する名前")).toHaveValue(
+  // 組み立てたコマンドを編集すると、組み立ての欄に入った状態で開く
+  await savedRow(page, "先頭を読む").getByLabel("編集").click();
+  await expect(dialog(page).locator("h3")).toHaveText(
+    "コマンドを編集: 先頭を読む",
+  );
+  await expect(setting(dialog(page), "コマンド")).toHaveValue("3");
+  await expect(dialog(page).getByLabel("保存する名前")).toHaveValue(
     "先頭を読む",
   );
-  await setting(composer(page), "個数").fill("4");
-  await composer(page)
-    .getByRole("button", { name: "「先頭を読む」を上書き保存" })
-    .click();
-  await expect(savedRow(page, "先頭を読む")).toContainText("03 00 00 00 04");
+  await setting(dialog(page), "個数").fill("4");
+  await dialog(page).getByLabel("保存する名前").fill("先頭 4 個");
+  await button(page, "保存して閉じる").click();
+  await expect(savedRow(page, "先頭 4 個")).toContainText("03 00 00 00 04");
   await expect(savedRows(page)).toHaveCount(2);
 
-  // 16 進で保存したコマンドは、16 進の欄に入る
-  await savedRow(page, "生の PDU").getByLabel("組み立て欄に読み込む").click();
-  await expect(
-    composer(page).getByLabel("送るリクエスト（16 進）"),
-  ).toHaveValue("03 00 05 00 01");
+  // 16 進で保存したコマンドは、16 進の欄に入った状態で開く。変えても「閉じる」なら保存しない
+  await savedRow(page, "生の PDU").getByLabel("編集").click();
+  const hex = dialog(page).getByLabel("送るリクエスト（16 進）");
+  await expect(hex).toHaveValue("03 00 05 00 01");
+  await hex.fill("03 00 06 00 01");
+  await button(page, "閉じる").click();
+  await expect(savedRow(page, "生の PDU")).toContainText("03 00 05 00 01");
 
-  // 名前を変える（Esc で取り消し、Enter で決定）
-  await savedRow(page, "生の PDU").getByLabel("名前を変える").click();
-  const nameInput = savedArea(page).getByLabel("コマンドの名前", {
-    exact: true,
-  });
-  await nameInput.fill("取り消す");
-  await nameInput.press("Escape");
-  await expect(savedRow(page, "生の PDU")).toHaveCount(1);
-  await savedRow(page, "生の PDU").getByLabel("名前を変える").click();
-  await nameInput.fill("アドレス 5");
-  await nameInput.press("Enter");
-  await expect(savedRow(page, "アドレス 5")).toHaveCount(1);
+  // Esc でも閉じる
+  await savedRow(page, "生の PDU").getByLabel("編集").click();
+  await page.keyboard.press("Escape");
+  await expect(dialog(page)).toBeHidden();
+
+  // 読めない 16 進は、ダイアログの中にエラーを出し、閉じない
+  await savedRow(page, "生の PDU").getByLabel("編集").click();
+  await hex.fill("0G");
+  await button(page, "保存して閉じる").click();
+  await expect(dialog(page).locator(".config-error")).toContainText("16 進");
+  await expect(dialog(page)).toBeVisible();
+  await button(page, "閉じる").click();
 
   // 削除する
-  await savedRow(page, "アドレス 5").getByLabel("削除").click();
+  await savedRow(page, "生の PDU").getByLabel("削除").click();
   await expect(savedRows(page)).toHaveCount(1);
-  await savedRow(page, "先頭を読む").getByLabel("削除").click();
+  await savedRow(page, "先頭 4 個").getByLabel("削除").click();
   await expect(savedArea(page)).toContainText("保存したコマンドはありません");
 });

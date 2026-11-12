@@ -18,12 +18,7 @@ import {
 import { application } from "../../wailsjs/go/models";
 import { ChevronDown, ChevronRight, Trash2, Unplug } from "lucide-react";
 import { DynamicField } from "./DynamicField";
-import {
-  ClientCommandComposer,
-  ComposerLoad,
-  ComposerLoadedFrom,
-  ComposerSaveInput,
-} from "./ClientCommandComposer";
+import { ClientCommandDialog, CommandSaveInput } from "./ClientCommandDialog";
 import { ClientSavedCommands } from "./ClientSavedCommands";
 import { ClientCommandLog } from "./ClientCommandLog";
 import { ClientPollingView } from "./ClientPollingView";
@@ -98,7 +93,10 @@ export const ClientDetailPane = forwardRef<
   const [savedCommands, setSavedCommands] = useState<
     application.ClientSavedCommandDTO[]
   >([]);
-  const [composerLoad, setComposerLoad] = useState<ComposerLoad | null>(null);
+  // コマンドのダイアログ（editing が null なら新しいコマンド）。閉じているときは null
+  const [dialog, setDialog] = useState<{
+    editing: application.ClientSavedCommandDTO | null;
+  } | null>(null);
 
   const loadSavedCommands = useCallback(async () => {
     try {
@@ -150,20 +148,14 @@ export const ClientDetailPane = forwardRef<
     setDirty(true);
   };
 
-  // リクエスト（16 進）を送る。保存していない設定があれば、先に保存する
+  // 履歴のリクエスト（16 進）を送り直す。保存していない設定があれば、先に保存する
   const send = async (requestHex: string) => {
     if (sending) return;
-    if (dirty && !(await saveSettings())) return;
-    setSending(true);
     try {
       setError(null);
-      const entry = await SendClientRequest(client.id, requestHex);
-      setSelectedSeq(entry.seq);
+      await sendFromDialog(requestHex);
     } catch (e) {
       setError(String(e));
-    } finally {
-      setSending(false);
-      await Promise.all([onLogsChanged(), onClientsChanged()]);
     }
   };
 
@@ -184,33 +176,34 @@ export const ClientDetailPane = forwardRef<
     }
   };
 
-  // 組み立て欄の内容を保存する（overwrite があれば、そのコマンドを上書きする）
-  const saveCommand = async (
-    input: ComposerSaveInput,
-    overwrite: ComposerLoadedFrom | null,
-  ): Promise<boolean> => {
-    const dto = application.ClientSavedCommandInputDTO.createFrom(input);
+  // ダイアログから送る。失敗（16 進が読めないなど）は例外のまま返し、ダイアログが表示する
+  const sendFromDialog = async (
+    requestHex: string,
+  ): Promise<application.ClientCommandLogDTO> => {
+    if (dirty && !(await saveSettings())) {
+      throw new Error("接続先の設定を保存できませんでした");
+    }
+    setSending(true);
     try {
-      setError(null);
-      if (overwrite) {
-        await UpdateClientSavedCommand(client.id, overwrite.commandId, dto);
-      } else {
-        await AddClientSavedCommand(client.id, dto);
-      }
-      await loadSavedCommands();
-      return true;
-    } catch (e) {
-      setError(String(e));
-      return false;
+      const entry = await SendClientRequest(client.id, requestHex);
+      setSelectedSeq(entry.seq);
+      return entry;
+    } finally {
+      setSending(false);
+      await Promise.all([onLogsChanged(), onClientsChanged()]);
     }
   };
 
-  const loadIntoComposer = (command: application.ClientSavedCommandDTO) => {
-    setComposerLoad((prev) => ({
-      seq: (prev?.seq ?? 0) + 1,
-      command,
-      from: { commandId: command.id, name: command.name },
-    }));
+  // ダイアログの内容を保存する（編集中のコマンドがあれば上書き）。失敗は例外のまま返し、ダイアログが表示する
+  const saveFromDialog = async (input: CommandSaveInput) => {
+    const dto = application.ClientSavedCommandInputDTO.createFrom(input);
+    const editing = dialog?.editing;
+    if (editing) {
+      await UpdateClientSavedCommand(client.id, editing.id, dto);
+    } else {
+      await AddClientSavedCommand(client.id, dto);
+    }
+    await loadSavedCommands();
   };
 
   const handleDisconnect = async () => {
@@ -357,18 +350,20 @@ export const ClientDetailPane = forwardRef<
               commands={savedCommands}
               onChanged={loadSavedCommands}
               sending={sending}
+              onNew={() => setDialog({ editing: null })}
+              onEdit={(c) => setDialog({ editing: c })}
               onSend={sendSaved}
-              onLoad={loadIntoComposer}
             />
-
-            <div className="vscode-setting-category">コマンド</div>
-            <ClientCommandComposer
-              protocol={protocol}
-              sending={sending}
-              onSend={send}
-              onSave={saveCommand}
-              load={composerLoad}
-            />
+            {dialog && (
+              <ClientCommandDialog
+                protocol={protocol}
+                editing={dialog.editing}
+                sending={sending}
+                onSend={sendFromDialog}
+                onSave={saveFromDialog}
+                onClose={() => setDialog(null)}
+              />
+            )}
 
             <div className="vscode-setting-category">結果と履歴</div>
             <ClientCommandLog
