@@ -112,16 +112,19 @@ proto/                    # protobuf 定義
 │   └── variable_accessor_service.proto # VariableAccessorService（ホストの変数アクセス）
 pb/pluginpb/              # protoc 生成 Go コード（コミット対象）
 cmd/
-├── modbus-plugin/        # Modbus プラグインバイナリ
-│   ├── main.go           # gRPC サーバー起動・GRPC_PORT 出力
-│   ├── internal/
-│   │   └── modbus/       # Modbus プロトコル実装（ホストから隔離）
-│   │       ├── factory.go      # ModbusServerFactory（TCP/RTU/ASCIIの3ファクトリー）
-│   │       ├── server.go       # ModbusServer
-│   │       ├── datastore.go    # ModbusDataStore（SetChangeHook でクライアント書き込みフック）
-│   │       └── rtu/            # RTU/ASCII フレーム処理
-│   └── server/
-│       └── plugin_server.go  # PluginService + DataStoreService 実装
+├── modbus-plugin/        # Modbus プラグインバイナリ（TCP / RTU / ASCII で共通の exe。-protocol-type で切り替える）
+│   ├── main.go           # pluginruntime.RunFactory で gRPC サーバー起動
+│   ├── plugin/           # ResolveFactory（-protocol-type の値 → ファクトリー）
+│   ├── plugin-manifest/  # plugin.json 生成（task plugins から実行）
+│   └── internal/
+│       └── modbus/       # Modbus プロトコル実装（ホストから隔離）
+│           ├── factory.go      # TCPFactory / RTUFactory / ASCIIFactory、ModbusConfig、ModbusServer、プロトコルタイプの定数
+│           ├── server.go       # Server（トランスポートの起動・停止）
+│           ├── *_transport.go  # TCP / RTU / ASCII のトランスポート
+│           ├── datastore.go    # ModbusDataStore（SetChangeHook でクライアント書き込みフック）
+│           ├── datastore_adapter.go # リクエスト → DataStore の読み書き（通信イベントの発行もここ）
+│           ├── session.go      # SessionManager（UnitID ごとの通信を接続数として数える）
+│           └── rtu/            # RTU/ASCII フレーム処理
 └── opcua-plugin/         # OPC UA プラグインバイナリ（bamchoh/uastack 使用）
     ├── main.go           # pluginruntime.RunFactory で gRPC サーバー起動
     ├── plugin-manifest/  # plugin.json 生成（task plugins から実行）
@@ -133,10 +136,12 @@ cmd/
             ├── nodes.go        # plcNodes（公開変数 → uastack アドレス空間のノード、値の同期）
             ├── types.go        # PLC 型解析・PLC 値 ↔ ua.Variant 変換
             └── datastore.go    # emptyDataStore（OPC UA はレジスタを持たない）
-plugins/                  # ビルド済みプラグイン配置先（task plugins で生成）
-├── modbus-plugin/
+plugins/                  # ビルド済みプラグイン配置先（task plugins で生成。git には入れない）
+├── modbus-tcp-plugin/    # プロトコルタイプごとにフォルダを分ける（exe は同じもののコピー）
 │   ├── modbus-plugin.exe
-│   └── plugin.json
+│   └── plugin.json       # protocol_type: "modbus-tcp"
+├── modbus-rtu-plugin/
+├── modbus-ascii-plugin/
 └── opcua-plugin/
     ├── opcua-plugin.exe
     └── plugin.json
@@ -147,13 +152,21 @@ internal/
 │   └── variable/     # 変数・構造体型・NodePublishing
 ├── application/      # アプリケーション層
 │   ├── plc_service.go            # メインサービス本体（構造体・初期化・プラグイン登録・サーバーの追加/削除・終了処理・イベント）
+│   ├── plc_service_instance.go   # サーバーの組み立て（attachServer / detachSync）とプラグイン操作用インターフェース
 │   ├── plc_service_servers.go    # サーバーの起動/停止・設定・プロトコルスキーマ・ノードアドレス・UnitID
 │   ├── plc_service_memory.go     # 汎用メモリ操作
 │   ├── plc_service_scripts.go    # スクリプト管理・コンソールログ
 │   ├── plc_service_project.go    # プロジェクト Export/Import
 │   ├── plc_service_monitoring.go # モニタリング項目と設定ファイル
 │   ├── plc_service_variables.go  # 変数・マッピング・ノード公開設定・構造体型
-│   └── dto.go          # DTO定義（ProtocolSchemaDTO, MonitoringItemDTO等）
+│   ├── app_events.go             # Wails イベントの送信（WailsAppStateEmitter / WailsEventEmitter）
+│   └── dto.go                    # DTO定義（ProtocolSchemaDTO, MonitoringItemDTO等）
+├── pluginruntime/    # プラグイン側の共通実装（各プラグインの main から使う。Wails に依存しない）
+│   ├── runtime.go            # RunFactory（gRPC サーバー起動・GRPC_PORT 出力）
+│   ├── server.go             # PluginService + DataStoreService の実装
+│   ├── comm_events.go        # commEventHub（通信イベントをまとめてホストへ送る）
+│   ├── variable_accessor.go  # RemoteVariableStoreAccessor（ホストの変数にアクセスする gRPC クライアント）
+│   └── interfaces.go         # NewManifest（plugin.json の内容）など
 └── infrastructure/   # インフラ層（ホスト側インフラ。プロトコル固有実装は含まない）
     ├── plugin/       # プラグインインフラ（ホスト側）
     │   ├── process_manager.go         # PluginProcessManager（plugin.json スキャン・オンデマンドプロセス起動）
@@ -178,30 +191,30 @@ internal/
 - **PLCService** (`internal/application/plc_service*.go`、機能ごとにファイルを分割): メインサービス。プロトコル非依存で、複数のサーバーインスタンスを同時管理
   - `servers map[protocol.ProtocolType]*serverInstance` で各プロトコルのサーバーを保持
   - 各プロトコルタイプは最大1インスタンス（プロトコルタイプをサーバー識別子として利用）
-  - Modbus プラグインの ProtocolType は `"modbus"`（TCP/RTU/ASCII はバリアントとして管理）
-  - OPC UA の ProtocolType は `"opcua"`
+  - プロトコルタイプの値は各プラグインが決める（Modbus は `"modbus-tcp"` / `"modbus-rtu"` / `"modbus-ascii"` の 3 つ、OPC UA は `"opcua"`）。ホストは値の意味を持たない
   - `variableStore` と `scriptEngine` は全サーバーで共有
-  - `factories map[protocol.ProtocolType]protocol.ServerFactory` でプロトコルファクトリーを管理（registry は廃止）
+  - `factories map[protocol.ProtocolType]protocol.ServerFactory` でプロトコルファクトリーを管理
   - `RegisterPluginFactory()`: ファクトリーを登録する（ホスト起動時に `InitPlugins()` が呼び出す）
   - `InitPlugins(pluginsDir)`: `PluginProcessManager.DiscoverManifests()` でマニフェストを読み込み `LazyRemoteServerFactory` を登録（プロセスは起動しない）
   - `AddServer()` 時に `LazyRemoteServerFactory.EnsureStarted()` でプラグインプロセスをオンデマンド起動
   - `RemoveServer()` 時に `LazyRemoteServerFactory.StopProcess()` でプラグインプロセスを停止
   - `StartHostGrpcServer()`: `HostGrpcServer` を起動（OPC UA プラグインが変数にアクセスするための gRPC サーバー）
   - `AddServer()` 時に `VariableStoreInjector` を実装するファクトリーへ `VariableStoreAccessor` を注入
-  - リモート DataStore: `RemoteVariableChangeListener` で変数↔プラグイン DataStore を双方向 gRPC 同期
-  - インプロセス DataStore（テスト用）: `VariableBackedDataStore`（後方互換）
+  - `attachServer()`（`plc_service_instance.go`）: DataStore とサーバーを作り、変数との同期を始める。`AddServer()` とプラグイン再接続時の作り直しで共通
+    - リモート DataStore: `RemoteVariableChangeListener` で変数↔プラグイン DataStore を双方向 gRPC 同期
+    - インプロセス DataStore（テスト用のフェイク）: `VariableBackedDataStore` で包む
   - `UpdateVariableMappings()` 後に `NodePublishingAware` を実装するサーバーへ変更通知を送信
 - **ServerFactory** (`internal/domain/protocol/server.go`): プロトコルサーバーを作成するファクトリーインターフェース
   - `GetConfigFields()`: スキーマ駆動UIのためのフィールド定義を返す
   - `GetProtocolCapabilities()`: UnitIDサポート等の機能情報を返す
   - `ConfigToMap()` / `MapToConfig()`: 設定の変換
-- **ModbusServerFactory** (`cmd/modbus-plugin/internal/modbus/factory.go`): `fixedVariant` フィールドで TCP/RTU/ASCII を固定した3種のファクトリー
-  - `NewModbusTCPServerFactory()`, `NewModbusRTUServerFactory()`, `NewModbusASCIIServerFactory()` で生成
-  - それぞれ `ProtocolType()` が `"modbus-tcp"` / `"modbus-rtu"` / `"modbus-ascii"` を返す
+- **Modbus のファクトリー** (`cmd/modbus-plugin/internal/modbus/factory.go`): `TCPFactory` / `RTUFactory` / `ASCIIFactory` の 3 種
+  - それぞれ `ProtocolType()` が `"modbus-tcp"` / `"modbus-rtu"` / `"modbus-ascii"`（`modbus.ProtocolModbusTCP` など）を返す
+  - プラグインの exe は 1 つで、起動引数 `-protocol-type` から `plugin.ResolveFactory()` がファクトリーを選ぶ
   - ホスト本体からは直接使用しない（プラグインバイナリ `cmd/modbus-plugin/` からインポート）
   - テストでは `fakeServerFactory`（`internal/application/fake_factory_test.go`）を使用（プロトコル固有実装に依存しない）
 - **opcua.Factory** (`cmd/opcua-plugin/internal/opcua/factory.go`): OPC UA サーバーのファクトリー
-  - `ProtocolType()` が `"opcua"`（`protocol.ProtocolOPCUA`）を返す
+  - `ProtocolType()` が `"opcua"`（`opcua.ProtocolOPCUA`）を返す
   - `VariableStoreInjector` を実装。プラグイン内の `pluginruntime.Server.CreateAndStart()` が `host_grpc_addr` に接続した `RemoteVariableStoreAccessor` を注入する
   - `GetProtocolCapabilities()` が `SupportsNodePublishing: true` を返す
   - ホスト本体からは直接使用しない（プラグインバイナリ `cmd/opcua-plugin/` からインポート）
@@ -249,7 +262,7 @@ internal/
   - `NodeAddressResolver`: `NodeAddresses(variables)`（`NodeVariable{ID, Name}` のスライス）で公開変数のノードアドレス（OPC UA なら NodeID 文字列）と、公開できない場合の理由（`NodeAddress.Error`）を返す。書式と判定はプロトコルが決める
   - `ProtocolCapabilities.SupportsNodePublishing: true` のプロトコルで利用される
 - **通信イベント（RX / TX ランプ）** : ヘッダーの通信インジケーター（`CommunicationIndicator.tsx`）は Wails イベント `comm:rx` / `comm:tx` で点灯する
-  - 経路: プラグイン内のサーバー → `CommunicationEventEmitter`（`pluginruntime` の `commEventHub`）→ gRPC ストリーム `SubscribeCommunicationEvents` → `RemoteProtocolServer` → ホストの `WailsEventEmitter`
+  - 経路: プラグイン内のサーバー → `CommunicationEventEmitter`（`pluginruntime` の `commEventHub`）→ gRPC ストリーム `SubscribeCommunicationEvents` → `RemoteProtocolServer` → ホストの `WailsEventEmitter`（`internal/application/app_events.go`）
   - `protocol.CommunicationEventAware`（`SetEventEmitter`）を実装するサーバーに、`pluginruntime.Server.CreateAndStart()` が起動前に送信先を渡す。ホスト側は `RemoteProtocolServer` が同じインターフェースを実装し、`Start()` でストリームの購読を始め、`Stop()` でやめる
   - `commEventHub` は購読者ごとに「前回の送信以降に起きたこと」（rx / tx / 接続数の変化）だけを持ち、50ms 間隔でまとめて送る（高頻度のポーリングでもイベントを 1 件ずつ送らない）
   - Modbus は `ModbusServer.SetEventEmitter()` を実装。起動中は `SessionManager` が UnitID ごとの通信を接続数として数える。OPC UA は未対応（uastack にリクエストごとのフックがない）
@@ -324,16 +337,13 @@ frontend/src/
   - ダイアログごとの違いは props で渡す: 変数追加は「初期値」の行（`scalarExtra`）、構造体型のフィールドは短い文言（`compact`）と、編集中の型自身を除いた構造体型の一覧
 - **共有するデータ**: `dataTypes` / `structTypes` / `variables` / `serverInstances` / `memoryAreasByProtocol` は `VariableView` が読み込み、props で渡す。保存後の再読み込みは `onChanged`（`loadVariables` / `loadStructTypes`）で行う
 - **画面のテスト**: `frontend/e2e/variable-dialogs.spec.ts` が各ダイアログの動きを確認する。ダイアログを変更したら実行する
-IEC 61131-3準拠の変数管理機能。
-- **データ型サポート**:
-  - スカラー型: BOOL, SINT, INT, DINT, USINT, UINT, UDINT, REAL, LREAL, STRING[n]
-  - 配列型: ARRAY[型;サイズ]（例: ARRAY[INT;10]）
-  - 構造体型: カスタム構造体定義（ネスト可能）
+- **データ型サポート**: スカラー型・配列型・構造体型（詳細は「変数管理とデータ型システム」）
 - **変数表示**: 構造体フィールドと配列要素をフラット化して行単位で表示
   - 展開/折りたたみ機能（構造体・配列のヘッダー行）
   - アドレスオフセット計算（フィールド・要素ごと）
-- **変数メタデータ編集**: 操作列の「編集」ボタンで変数の名前・データタイプを変更可能
-  - 変数追加ダイアログと同じ型カテゴリ/データタイプ選択フォームを使用
+- **行の操作**: 値のセルのクリックで値の編集、マッピングのセルのクリックでマッピング設定、右クリックメニューで編集・マッピング・削除
+  - キーボード: 矢印キーで移動と展開、Enter で値の編集（見出し行は展開）、Insert で追加、F2 で編集、M でマッピング、Delete で削除
+- **変数メタデータ編集**: 右クリックメニューの「編集」または F2 で、変数の名前・データタイプを変更可能
   - データタイプ変更時は値をデフォルト値にリセット（マッピングは保持）
   - OPC UA サーバーが起動中の場合はノード再構築のため `OnNodePublishingUpdated()` を呼び出す
   - バックエンド: `VariableStore.UpdateMetadata()` → `PLCService.UpdateVariable()` → `App.UpdateVariable()`
@@ -341,8 +351,8 @@ IEC 61131-3準拠の変数管理機能。
   - 再帰的エディタで複雑なデータ構造に対応
   - 構造体配列要素は折りたたみ可能（`StructArrayElementEditor`）
   - 数値入力は10進、16進（0x）、2進（0b）対応
-- **プロトコルマッピング**: 変数を複数の起動中サーバーのメモリアドレスにマッピング可能
-  - マッピングダイアログのプロトコル選択は `GetServerInstances()` で取得した起動中サーバーから生成
+- **プロトコルマッピング**: 変数を、追加済みの複数サーバーのメモリアドレスにマッピング可能
+  - マッピングダイアログのプロトコル選択は `GetServerInstances()` で取得した追加済みサーバーから生成
   - メモリエリア選択は `memoryAreasByProtocol[m.protocolType]` で取得
   - 2行表示レイアウト（ヘッダ行 + コントロール行）
   - マッピング競合警告: 他の変数と同じレジスタを使用している場合、ダイアログ内と変数一覧の両方に警告を表示
@@ -352,14 +362,13 @@ IEC 61131-3準拠の変数管理機能。
   - `loadServerInstancesAndAreas` は `useCallback` で定義し、マウント時・ダイアログオープン時の両方から呼び出す
 - **一括マッピング編集**: ツールバーの「一括マッピング編集」ボタンで全変数のマッピングをテーブル形式で一括設定
   - プロトコルを選択すると全変数が一覧表示され、まとめて編集・保存できる
-  - **Modbus系**: メモリエリア / アドレス（空欄=そのプロトコルのマッピング削除） / エンディアンをテーブル表示
-  - **OPC UA系** (`SupportsNodePublishing=true`): 公開チェック / アクセスモード / NodeID をテーブル表示
+  - **レジスタ型プロトコル**（Modbus など）: メモリエリア / アドレス（空欄=そのプロトコルのマッピング削除） / エンディアンをテーブル表示
+  - **ノード公開型プロトコル**（OPC UA など、`SupportsNodePublishing=true`）: 公開チェック / アクセスモード / NodeID をテーブル表示
   - アドレス重複検出: `findBulkRowConflicts()` で同じメモリエリア内のアドレス範囲重複を検出し、該当行をオレンジハイライト・入力欄のボーダーをオレンジに・⚠アイコン表示。重複件数バナーをダイアログ下部（スクロール外・ボタン上）に固定表示
   - 保存時に他プロトコルのマッピングを保持（`variable.mappings.filter(m => m.protocolType !== bulkProtocol)`）
 - **OPC UA 公開設定表示**: `formatNodePublishings()` で有効な NodePublishing を `opcua(RO)` / `opcua(WO)` / `opcua(R/W)` 形式にフォーマットして変数一覧の「マッピング」列に追加表示
 - **構造体型管理**: 構造体型の登録・編集・削除機能
-  - 編集時は既存の定義を読み込んでフォームに展開
-  - データ型の自動解析（ARRAY、STRING、構造体、スカラー）
+  - 編集時は既存の定義を読み込んでフォームに展開（`parseDataTypeToForm()`）。型名は変更できない
   - スクロール対応（多数のフィールドを持つ構造体に対応）
 
 #### ScriptPanel.tsx
@@ -393,6 +402,8 @@ JavaScript（goja）でPLC動作を記述。
   - `GetServerConfig(protocolType)`: 特定サーバーの設定を取得
   - `UpdateServerConfig(dto)`: サーバー設定を更新（`ServerConfigDTO.protocolType` で対象を指定）
   - `GetAvailableProtocols()`: 追加可能なプロトコル一覧を取得
+  - `GetNodeAddresses(protocolType, variableIDs)`: 公開変数のノードアドレス（OPC UA なら NodeID）と、公開できない場合の理由を取得
+  - `GetSerialPorts()`: 利用可能なシリアルポート一覧を取得（設定画面の選択肢）
 - **UnitID 設定**:
   - `GetUnitIDSettings(protocolType)`, `SetUnitIDEnabled(protocolType, unitId, enabled)`: UnitID 応答設定
   - `GetDisabledUnitIDs(protocolType)`, `SetDisabledUnitIDs(protocolType, ids)`: 無効 UnitID の一括管理
@@ -401,17 +412,23 @@ JavaScript（goja）でPLC動作を記述。
   - `ReadBits(protocolType, area, address, count)`, `WriteBit(protocolType, area, address, value)`
   - `ReadWords(protocolType, area, address, count)`, `WriteWord(protocolType, area, address, value)`
 - **モニタリング**:
-  - `GetMonitoringItems()`, `AddMonitoringItem()`, `UpdateMonitoringItem()`, `DeleteMonitoringItem()`, `ReorderMonitoringItem()`, `ClearMonitoringItems()`
+  - `GetMonitoringItems()`, `AddMonitoringItem()`, `UpdateMonitoringItem()`, `DeleteMonitoringItem()`, `MoveMonitoringItem()`, `ReorderMonitoringItem()`, `ClearMonitoringItems()`
 - **変数管理**:
   - `GetVariables()`, `CreateVariable()`, `UpdateVariableValue()`, `DeleteVariable()`: 変数CRUD操作
+  - `UpdateVariable(id, name, dataType)`: 変数の名前・データ型を変更
+  - `UpdateVariableFieldValue(id, fieldPath, value)`: 構造体フィールド・配列要素を部分更新（`fieldPath` は `.field` / `[添字]` の連結。添字は外部インデックス）
   - `GetDataTypes()`: サポートされているデータ型一覧を取得
   - `GetStructTypes()`, `RegisterStructType()`, `DeleteStructType()`: 構造体型管理
-  - `UpdateVariableMappings()`: 変数のプロトコルマッピング設定
+  - `GetVariableMappings()`, `UpdateVariableMappings()`: 変数のプロトコルマッピング設定
+  - `UpdateVariableNodePublishing(variableID, protocolType, dto)`: ノード公開設定（公開するか・アクセスモード）
 - **スクリプト**:
   - `GetScripts()`, `GetScript()`, `CreateScript()`, `UpdateScript()`, `DeleteScript()`: スクリプトCRUD操作
-  - `StartScript()`, `StopScript()`: スクリプト実行制御
+  - `StartScript()`, `StopScript()`, `RunScriptOnce()`: スクリプト実行制御（`RunScriptOnce` はテスト実行）
+  - `GetIntervalPresets()`: 実行周期の選択肢
   - `ClearScriptError()`: スクリプトエラーをクリア
   - `GetConsoleLogs()`, `ClearConsoleLogs()`: コンソールログの取得・クリア
+- **プロジェクト**:
+  - `ExportProject()`, `ImportProject()`: プロジェクトのファイルへの保存・読み込み
 - **HTTP API 設定**:
   - `GetHTTPAPIPort()`: 現在のHTTP APIポート番号を返す
   - `SetHTTPAPIPort(port)`: ポートを変更してHTTP APIサーバーを再起動（1024〜65535、設定ファイルに永続化）
@@ -423,7 +440,7 @@ JavaScript（goja）でPLC動作を記述。
 変数は以下のデータ型をサポート：
 
 1. **スカラー型**:
-   - 整数: SINT(8bit), INT(16bit), DINT(32bit), USINT, UINT, UDINT
+   - 整数: SINT(8bit), INT(16bit), DINT(32bit), LINT(64bit), USINT, UINT, UDINT, ULINT
    - 浮動小数点: REAL(32bit), LREAL(64bit)
    - 論理: BOOL
    - 文字列: STRING[n] (固定長、nはバイト数)
@@ -433,9 +450,11 @@ JavaScript（goja）でPLC動作を記述。
      - TIME_OF_DAY: 1日の中の時刻（"TOD#12:30:15" など、内部はミリ秒uint32で2ワード保存）
      - DATE_AND_TIME: 日付と時刻（"DT#2024-01-01-12:30:15" など、内部はUnix秒uint64で4ワード保存）
 
-2. **配列型**: `ARRAY[要素型;要素数]`
-   - 例: `ARRAY[INT;10]`, `ARRAY[MyStruct;5]`
-   - 多次元配列は `ARRAY[ARRAY[INT;5];3]` のように表現
+2. **配列型**: `ARRAY[開始..終了] OF 要素型`（IEC 61131-3 形式）
+   - 例: `ARRAY[0..9] OF INT`, `ARRAY[1..5] OF MyStruct`
+   - 多次元配列は `ARRAY[0..2, 0..4] OF INT`（最大 3 次元まで画面から作れる）
+   - 値は入れ子の配列で持つ。画面の表示とフィールドパスの添字は外部インデックス（`ARRAY[1..3]` の先頭は `[1]`）
+   - 旧形式（`ARRAY[INT;10]`、`ARRAY[ARRAY[INT;5];3]`）も読める（開始インデックスは 0）。画面からは新しい形式で作る
 
 3. **構造体型**: カスタム定義可能
    - フィールドはスカラー、配列、構造体のいずれか
@@ -528,22 +547,24 @@ JavaScript（goja）でPLC動作を記述。
 ### 値編集ダイアログ
 
 - **スクロール**: ダイアログ全体で1つのスクロール領域を使用（配列要素部分に独自スクロールを設定しない）
-- **再帰的エディタ**: `renderValueEditor`は`depth`パラメータで再帰の深さを追跡し、インデントを調整
+- **再帰的エディタ**: `renderValueEditor`（`ValueEditDialog.tsx`）は`depth`パラメータで再帰の深さを追跡し、インデントを調整
+- **行単位の編集**: 行（`FlatRow`）は、値をたどるための位置（`valuePath`、0 始まり）と、バックエンドに渡すフィールドパス（`fieldPath`、外部インデックス）の両方を持つ。保存には `fieldPath` を使う
 
 ### マッピング競合検出
 
-- **`findMappingConflicts(mapping)`** (`VariableView.tsx`): マッピングダイアログで各行の競合チェック。`getWordCount` でワード数を計算し、アドレス範囲の重複をチェック
+- **`findMappingConflicts(mapping)`** (`MappingDialog.tsx`): マッピングダイアログで各行の競合チェック。`getWordCount` でワード数を計算し、アドレス範囲の重複をチェック
 - **`getVariableMappingConflicts(variable)`** (`VariableView.tsx`): 変数一覧テーブルで各変数の競合チェック。保存済みマッピングをすべてスキャン
-- **`findBulkRowConflicts(rows, protocolType)`** (`VariableView.tsx`): 一括マッピング編集ダイアログ内のアドレス重複を検出。`addressStr` が入力されている行の0ベースアドレス範囲（`addr0 〜 addr0+wordCount-1`）を計算し、同じメモリエリア内で重なるペアを返す。空欄行は対象外。競合バナーはスクロール外（`dialog-buttons` の直前）に固定表示し、テーブルが縦にスクロールしてもバナーが見切れないようにする
+- **`findBulkRowConflicts(rows, protocolType)`** (`BulkMappingDialog.tsx`): 一括マッピング編集ダイアログ内のアドレス重複を検出。`addressStr` が入力されている行の0ベースアドレス範囲（`addr0 〜 addr0+wordCount-1`）を計算し、同じメモリエリア内で重なるペアを返す。空欄行は対象外。競合バナーはスクロール外（`dialog-buttons` の直前）に固定表示し、テーブルが縦にスクロールしてもバナーが見切れないようにする
 - **未定義動作の注意**: 同一レジスタへの複数変数マッピングはサポート対象外。書き込みは last-writer-wins、DataStore → Variable の同期は Go マップの反復順に依存して非決定的
 
 ### 構造体型管理ダイアログ
 
-- **編集機能**: 既存の構造体型を編集可能（編集ボタンで定義を読み込み、更新で保存）
-- **データ型解析**: フィールドのデータ型文字列を解析してフォーム形式に変換
-  - `ARRAY[型;サイズ]` → 配列カテゴリ + 要素型 + サイズ
+- **編集機能**: 既存の構造体型を編集可能（編集ボタンで定義を読み込み、更新で保存）。更新は「古い型を削除して登録し直す」動き
+- **データ型解析**: フィールドのデータ型文字列を `parseDataTypeToForm()`（`variableTypes.ts`）でフォームの入力内容に変換
+  - `ARRAY[0..9, 0..4] OF 型` → 配列カテゴリ + 要素型 + 次元数 + 各次元の開始・終了インデックス
   - `STRING[n]` → スカラーカテゴリ + STRING型 + バイト長
   - 構造体型名 → 構造体カテゴリ + 型名
+- **自己参照の防止**: フィールドの型として、編集中の型自身は選べない
 - **型名の不変性**: 編集モード時は型名の入力欄を無効化（型名は変更不可）
 
 ### OPC UA 実装
