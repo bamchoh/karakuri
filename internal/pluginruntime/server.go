@@ -35,7 +35,9 @@ type Server struct {
 	commEvents *commEventHub
 }
 
-func newServer(factory protocol.ServerFactory) *Server {
+// NewServer はファクトリーからプラグイン側の gRPC サービス実装を作る。
+// RunFactory が内部で使う。テストではインプロセスの gRPC サーバーに Register して使える。
+func NewServer(factory protocol.ServerFactory) *Server {
 	return &Server{
 		factory:    factory,
 		commEvents: newCommEventHub(),

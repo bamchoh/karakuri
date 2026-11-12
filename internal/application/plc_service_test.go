@@ -3,6 +3,8 @@ package application
 import (
 	"testing"
 	"time"
+
+	"karakuri/internal/domain/protocol/protocoltest"
 )
 
 // newTestService はテスト用のクリーンな PLCService を作成する。
@@ -12,9 +14,9 @@ func newTestService(t *testing.T) *PLCService {
 	svc := NewPLCService()
 
 	// Modbus 互換フェイクファクトリーを登録（プロトコル固有実装に依存しない）
-	svc.RegisterPluginFactory(newFakeModbusFactory("modbus-tcp", "tcp", "Modbus TCP"))
-	svc.RegisterPluginFactory(newFakeModbusFactory("modbus-rtu", "rtu", "Modbus RTU"))
-	svc.RegisterPluginFactory(newFakeModbusFactory("modbus-ascii", "ascii", "Modbus ASCII"))
+	svc.RegisterPluginFactory(protocoltest.NewFactory("modbus-tcp", "tcp", "Modbus TCP"))
+	svc.RegisterPluginFactory(protocoltest.NewFactory("modbus-rtu", "rtu", "Modbus RTU"))
+	svc.RegisterPluginFactory(protocoltest.NewFactory("modbus-ascii", "ascii", "Modbus ASCII"))
 
 	// デフォルトで modbus-tcp を追加（旧 NewPLCService() の初期動作を再現）
 	_ = svc.AddServer("modbus-tcp", "tcp")
