@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sync"
 	"time"
 
 	"karakuri/internal/domain/protocol"
@@ -576,7 +577,10 @@ func (s *ModbusServer) SetDisabledUnitIDs(ids []uint8) {
 
 // DataStoreHandler はDataStoreを使用するModbusハンドラー
 type DataStoreHandler struct {
-	store           protocol.DataStore
+	store protocol.DataStore
+
+	// 応答しない UnitID。設定の変更と通信の処理が別のゴルーチンから触るため mu で保護する
+	mu              sync.RWMutex
 	disabledUnitIDs map[uint8]bool
 }
 
@@ -590,6 +594,8 @@ func NewDataStoreHandler(store protocol.DataStore) *DataStoreHandler {
 
 // SetUnitIdEnabled sets whether a unit ID responds
 func (h *DataStoreHandler) SetUnitIdEnabled(unitId uint8, enabled bool) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
 	if enabled {
 		delete(h.disabledUnitIDs, unitId)
 	} else {
@@ -599,11 +605,15 @@ func (h *DataStoreHandler) SetUnitIdEnabled(unitId uint8, enabled bool) {
 
 // IsUnitIdEnabled checks if a unit ID responds
 func (h *DataStoreHandler) IsUnitIdEnabled(unitId uint8) bool {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
 	return !h.disabledUnitIDs[unitId]
 }
 
 // GetDisabledUnitIDs returns the list of disabled unit IDs
 func (h *DataStoreHandler) GetDisabledUnitIDs() []uint8 {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
 	ids := make([]uint8, 0, len(h.disabledUnitIDs))
 	for id := range h.disabledUnitIDs {
 		ids = append(ids, id)
@@ -613,6 +623,8 @@ func (h *DataStoreHandler) GetDisabledUnitIDs() []uint8 {
 
 // SetDisabledUnitIDs sets the list of disabled unit IDs
 func (h *DataStoreHandler) SetDisabledUnitIDs(ids []uint8) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
 	h.disabledUnitIDs = make(map[uint8]bool)
 	for _, id := range ids {
 		h.disabledUnitIDs[id] = true

@@ -7,6 +7,7 @@ import (
 	pb "karakuri/pb/pluginpb"
 
 	"karakuri/internal/domain/protocol"
+	"sort"
 	"sync"
 
 	"google.golang.org/grpc"
@@ -24,6 +25,11 @@ type Server struct {
 	// サーバーの起動・停止をまたいで使い続ける。直接は参照しない
 	store     protocol.DataStore
 	storeOnce sync.Once
+
+	// disabledUnitIDs は応答しない UnitID（mu で保護）。
+	// サーバーは起動のたびに作り直すため、設定はここで持ち、作ったサーバーに毎回渡す。
+	// サーバーを一度も起動していなくても設定できる
+	disabledUnitIDs map[uint8]bool
 
 	// accessor はホストの変数ストアへの接続（SupportsNodePublishing=true のプラグインのみ）
 	accessor *RemoteVariableStoreAccessor
@@ -231,6 +237,11 @@ func (s *Server) CreateAndStart(ctx context.Context, req *pb.CreateAndStartReque
 	s.server = srv
 	s.factory = factory
 
+	// 応答しない UnitID を、作り直したサーバーに引き継ぐ
+	if u, ok := srv.(protocol.UnitIDConfigurable); ok {
+		u.SetDisabledUnitIDs(s.disabledUnitIDList())
+	}
+
 	// 通信イベントの送信先を渡す（ホストの通信インジケーター用）
 	if aware, ok := srv.(protocol.CommunicationEventAware); ok {
 		aware.SetEventEmitter(s.commEvents)
@@ -354,50 +365,61 @@ func (s *Server) configFromRequest(variantID, settingsJSON string) (protocol.Pro
 
 // UnitID サポート
 
+// disabledUnitIDList は応答しない UnitID を小さい順に返す（mu をロック済みで呼ぶ）
+func (s *Server) disabledUnitIDList() []uint8 {
+	ids := make([]uint8, 0, len(s.disabledUnitIDs))
+	for id := range s.disabledUnitIDs {
+		ids = append(ids, id)
+	}
+	sort.Slice(ids, func(i, j int) bool { return ids[i] < ids[j] })
+	return ids
+}
+
 func (s *Server) GetUnitIDSettings(ctx context.Context, _ *pb.Empty) (*pb.UnitIDSettingsResponse, error) {
 	s.mu.Lock()
-	srv := s.server
+	ids := s.disabledUnitIDList()
 	s.mu.Unlock()
 
-	if srv != nil {
-		if u, ok := srv.(protocol.UnitIDConfigurable); ok {
-			ids := u.GetDisabledUnitIDs()
-			int32IDs := make([]int32, len(ids))
-			for i, id := range ids {
-				int32IDs[i] = int32(id)
-			}
-			return &pb.UnitIDSettingsResponse{DisabledIds: int32IDs}, nil
-		}
+	int32IDs := make([]int32, len(ids))
+	for i, id := range ids {
+		int32IDs[i] = int32(id)
 	}
-	return &pb.UnitIDSettingsResponse{}, nil
+	return &pb.UnitIDSettingsResponse{DisabledIds: int32IDs}, nil
 }
 
 func (s *Server) SetUnitIDEnabled(ctx context.Context, req *pb.SetUnitIDEnabledRequest) (*pb.Empty, error) {
 	s.mu.Lock()
-	srv := s.server
-	s.mu.Unlock()
+	defer s.mu.Unlock()
 
-	if srv != nil {
-		if u, ok := srv.(protocol.UnitIDConfigurable); ok {
-			u.SetUnitIdEnabled(uint8(req.UnitId), req.Enabled)
+	unitID := uint8(req.UnitId)
+	if req.Enabled {
+		delete(s.disabledUnitIDs, unitID)
+	} else {
+		if s.disabledUnitIDs == nil {
+			s.disabledUnitIDs = make(map[uint8]bool)
 		}
+		s.disabledUnitIDs[unitID] = true
+	}
+
+	// 動いているサーバーにもすぐ反映する
+	if u, ok := s.server.(protocol.UnitIDConfigurable); ok {
+		u.SetUnitIdEnabled(unitID, req.Enabled)
 	}
 	return &pb.Empty{}, nil
 }
 
 func (s *Server) SetDisabledUnitIDs(ctx context.Context, req *pb.SetDisabledUnitIDsRequest) (*pb.Empty, error) {
 	s.mu.Lock()
-	srv := s.server
-	s.mu.Unlock()
+	defer s.mu.Unlock()
 
-	if srv != nil {
-		if u, ok := srv.(protocol.UnitIDConfigurable); ok {
-			ids := make([]uint8, len(req.Ids))
-			for i, id := range req.Ids {
-				ids[i] = uint8(id)
-			}
-			u.SetDisabledUnitIDs(ids)
-		}
+	s.disabledUnitIDs = make(map[uint8]bool, len(req.Ids))
+	for _, id := range req.Ids {
+		s.disabledUnitIDs[uint8(id)] = true
+	}
+
+	// 動いているサーバーにもすぐ反映する
+	if u, ok := s.server.(protocol.UnitIDConfigurable); ok {
+		u.SetDisabledUnitIDs(s.disabledUnitIDList())
 	}
 	return &pb.Empty{}, nil
 }
