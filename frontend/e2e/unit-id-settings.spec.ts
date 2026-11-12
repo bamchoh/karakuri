@@ -72,14 +72,14 @@ test("起動前に切り替えた UnitID の設定が残り、起動・起動し
   await expect(toggles.nth(5).locator("input")).toBeChecked();
 });
 
-test("オフにした UnitID は、起動前に設定しても、起動し直しても拒否する", async ({
+test("オフにした UnitID には、起動前に設定しても、起動し直しても応答しない", async ({
   page,
 }) => {
   const net = await import("net");
-  // Modbus TCP で保持レジスタを 1 つ読み、応答の機能コードを返す。
-  // 通常は 0x03、拒否されると 0x83（例外応答。Modbus TCP ではオフにした UnitID に例外を返す）
+  // Modbus TCP で保持レジスタを 1 つ読み、応答の機能コードを返す（通常は 0x03）。
+  // 応答がなければ null（例外応答も返らないことを確かめる）
   const functionCode = (unitId: number) =>
-    new Promise<number>((resolve, reject) => {
+    new Promise<number | null>((resolve, reject) => {
       const socket = net.connect(MODBUS_PORT, "127.0.0.1", () => {
         socket.write(Buffer.from([0, 1, 0, 0, 0, 6, unitId, 3, 0, 0, 0, 1]));
       });
@@ -88,9 +88,9 @@ test("オフにした UnitID は、起動前に設定しても、起動し直し
         resolve(data[7]);
       });
       socket.once("error", reject);
-      socket.setTimeout(3000, () => {
+      socket.setTimeout(700, () => {
         socket.destroy();
-        reject(new Error("Modbus の応答がありません"));
+        resolve(null);
       });
     });
 
@@ -99,12 +99,12 @@ test("オフにした UnitID は、起動前に設定しても、起動し直し
   await api(page, "SetUnitIDEnabled", "modbus-tcp", 2, false);
   await api(page, "StartServer", "modbus-tcp");
   expect(await functionCode(1)).toBe(0x03);
-  expect(await functionCode(2)).toBe(0x83);
+  expect(await functionCode(2)).toBeNull();
 
   await api(page, "StopServer", "modbus-tcp");
   await api(page, "StartServer", "modbus-tcp");
   expect(await functionCode(1)).toBe(0x03);
-  expect(await functionCode(2)).toBe(0x83);
+  expect(await functionCode(2)).toBeNull();
 
   // オンに戻すと応答する
   await api(page, "SetUnitIDEnabled", "modbus-tcp", 2, true);

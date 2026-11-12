@@ -48,8 +48,8 @@ func (h *DataStoreRequestHandler) HandleCoils(req *modbus.CoilsRequest) ([]bool,
 	}
 
 	if req.IsWrite {
-		// 書き込みリクエスト (Function Code 6, 16)
-		if err := h.handler.store.WriteBits(AreaHoldingRegs, uint32(req.Addr), req.Args); err != nil {
+		// 書き込みリクエスト (Function Code 5, 15)
+		if err := h.handler.store.WriteBits(AreaCoils, uint32(req.Addr), req.Args); err != nil {
 			return nil, modbus.ErrIllegalDataAddress
 		}
 		return req.Args, nil

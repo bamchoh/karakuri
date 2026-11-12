@@ -121,7 +121,7 @@ cmd/
 │       └── modbus/       # Modbus プロトコル実装（ホストから隔離）
 │           ├── factory.go      # TCPFactory / RTUFactory / ASCIIFactory、ModbusConfig、ModbusServer、プロトコルタイプの定数
 │           ├── server.go       # Server（トランスポートの起動・停止）
-│           ├── *_transport.go  # TCP / RTU / ASCII のトランスポート
+│           ├── *_transport.go  # TCP / RTU / ASCII のトランスポート（TCP は、オフにした UnitID 宛てのリクエストを捨てる中継を持つ）
 │           ├── datastore.go    # ModbusDataStore（SetChangeHook でクライアント書き込みフック）
 │           ├── datastore_adapter.go # リクエスト → DataStore の読み書き（通信イベントの発行もここ）
 │           ├── session.go      # SessionManager（UnitID ごとの通信を接続数として数える）
@@ -275,7 +275,8 @@ internal/
   - `ProtocolCapabilities.SupportsUnitID: true` のプロトコルで利用される。ホストと pluginruntime はこの型で判定する（個別のローカル定義は持たない）
   - UnitID ごとのセッション追跡（`SessionManager`）は Modbus 固有のため `cmd/modbus-plugin/internal/modbus/session.go` にある
   - 応答しない UnitID の一覧は、プラグイン側の `pluginruntime.Server` が持つ。サーバーは起動のたびに作り直すため、作ったサーバーに毎回渡す。サーバーを一度も起動していなくても設定でき、起動し直しても残る
-  - Modbus TCP は、オフにした UnitID に例外応答（Illegal Function）を返す。RTU / ASCII は応答しない
+  - オフにした UnitID には、TCP / RTU / ASCII のどれも応答しない（例外応答も返さない）
+  - Modbus TCP は simonvetter/modbus のサーバーを使うが、このライブラリは受け取ったリクエストに必ず応答する。そのため `TCPTransport`（`tcp_transport.go`）がクライアントとの間に中継を入れ、オフにした UnitID 宛てのフレームを捨てる。ライブラリのサーバーは 127.0.0.1 の空きポートで動く
 - **ScriptEngine** (`internal/infrastructure/scripting/engine.go`): gojaベースのJavaScript実行エンジン
   - `plc`オブジェクトでDataStoreおよびVariableStoreにアクセス可能
   - スクリプトコードをIIFE `(function(){...})();` でラップして、const/let再宣言エラーを回避
