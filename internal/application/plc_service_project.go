@@ -159,7 +159,7 @@ func (s *PLCService) ImportProject(data *ProjectDataDTO) error {
 					DataType: variable.DataType(f.DataType),
 				}
 			}
-			st, err := variable.NewStructTypeDef(stDTO.Name, fields, s.variableStore)
+			st, err := variable.NewStructTypeDef(stDTO.Name, fields, s.variableStore.TypeResolver())
 			if err != nil {
 				continue
 			}

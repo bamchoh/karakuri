@@ -75,13 +75,13 @@ func (a *VariableBackedDataStore) writeVariableToInner(v *variable.Variable, m *
 		if err != nil {
 			return
 		}
-		words = variable.ArrayValueToWords(v.Value, elemType, size, m.Endianness, a.varStore)
+		words = variable.ArrayValueToWords(v.Value, elemType, size, m.Endianness, a.varStore.TypeResolver())
 	} else if v.DataType.IsStructType() {
 		structDef, err := a.varStore.GetStructType(string(v.DataType))
 		if err != nil || structDef == nil {
 			return
 		}
-		words = variable.StructValueToWords(v.Value, structDef, m.Endianness, a.varStore)
+		words = variable.StructValueToWords(v.Value, structDef, m.Endianness, a.varStore.TypeResolver())
 	} else {
 		words = variable.ValueToWords(v.Value, v.DataType, m.Endianness)
 	}
@@ -114,7 +114,7 @@ func (a *VariableBackedDataStore) readVariableFromInner(v *variable.Variable, m 
 		return bit, err == nil
 	}
 
-	wordCount := v.DataType.WordCountWithResolver(a.varStore)
+	wordCount := v.DataType.WordCountWithResolver(a.varStore.TypeResolver())
 	words, err := a.inner.ReadWords(m.MemoryArea, m.Address, uint16(wordCount))
 	if err != nil {
 		return nil, false
@@ -126,13 +126,13 @@ func (a *VariableBackedDataStore) readVariableFromInner(v *variable.Variable, m 
 		if parseErr != nil {
 			return nil, false
 		}
-		value, err = variable.WordsToArrayValue(words, elemType, size, m.Endianness, a.varStore)
+		value, err = variable.WordsToArrayValue(words, elemType, size, m.Endianness, a.varStore.TypeResolver())
 	} else if v.DataType.IsStructType() {
 		structDef, getErr := a.varStore.GetStructType(string(v.DataType))
 		if getErr != nil || structDef == nil {
 			return nil, false
 		}
-		value, err = variable.WordsToStructValue(words, structDef, m.Endianness, a.varStore)
+		value, err = variable.WordsToStructValue(words, structDef, m.Endianness, a.varStore.TypeResolver())
 	} else {
 		value, err = variable.WordsToValue(words, v.DataType, m.Endianness)
 	}

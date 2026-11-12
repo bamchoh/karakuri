@@ -209,7 +209,7 @@ func (s *PLCService) RegisterStructType(dto StructTypeDTO) (*StructTypeDTO, erro
 		}
 	}
 
-	st, err := variable.NewStructTypeDef(dto.Name, fields, s.variableStore)
+	st, err := variable.NewStructTypeDef(dto.Name, fields, s.variableStore.TypeResolver())
 	if err != nil {
 		return nil, err
 	}

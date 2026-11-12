@@ -376,7 +376,7 @@ func TestDataType_WordCountWithResolver_Struct(t *testing.T) {
 	def, err := NewStructTypeDef("Point", []StructField{
 		{Name: "x", DataType: TypeINT},
 		{Name: "y", DataType: TypeINT},
-	}, store)
+	}, store.TypeResolver())
 	if err != nil {
 		t.Fatalf("NewStructTypeDef failed: %v", err)
 	}
@@ -385,7 +385,7 @@ func TestDataType_WordCountWithResolver_Struct(t *testing.T) {
 	}
 
 	// resolverありで解決
-	got := DataType("Point").WordCountWithResolver(store)
+	got := DataType("Point").WordCountWithResolver(store.TypeResolver())
 	if got != 2 {
 		t.Errorf("Point.WordCountWithResolver(store) = %d, want 2", got)
 	}
@@ -404,12 +404,12 @@ func TestDataType_WordCountWithResolver_StructArray(t *testing.T) {
 		{Name: "x", DataType: TypeDINT},
 		{Name: "y", DataType: TypeDINT},
 		{Name: "z", DataType: TypeDINT},
-	}, store)
+	}, store.TypeResolver())
 	_ = store.RegisterStructType(def)
 
 	// ARRAY[0..3] OF Vec3 = 6 * 4 = 24ワード
 	arrType := NewArrayType(DataType("Vec3"), 4)
-	got := arrType.WordCountWithResolver(store)
+	got := arrType.WordCountWithResolver(store.TypeResolver())
 	if got != 24 {
 		t.Errorf("%q.WordCountWithResolver = %d, want 24", arrType, got)
 	}

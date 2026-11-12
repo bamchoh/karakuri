@@ -229,7 +229,7 @@ func (s *VariableStore) UpdateFieldValue(id, fieldPath string, value interface{}
 		return fmt.Errorf("failed to navigate path %q in variable %s", fieldPath, id)
 	}
 
-	converted, err := ConvertValueWithResolver(updated, v.DataType, s)
+	converted, err := ConvertValueWithResolver(updated, v.DataType, s.unlocked())
 	if err != nil {
 		s.mu.Unlock()
 		return fmt.Errorf("failed to convert updated value: %w", err)

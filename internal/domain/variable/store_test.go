@@ -154,7 +154,7 @@ func TestVariableStore_CreateVariable_Struct(t *testing.T) {
 	def, _ := NewStructTypeDef("Point", []StructField{
 		{Name: "x", DataType: TypeINT},
 		{Name: "y", DataType: TypeINT},
-	}, s)
+	}, s.TypeResolver())
 	_ = s.RegisterStructType(def)
 
 	v, err := s.CreateVariable("p", DataType("Point"), nil)
@@ -459,7 +459,7 @@ func TestVariableStore_RegisterStructType(t *testing.T) {
 	def, err := NewStructTypeDef("Point", []StructField{
 		{Name: "x", DataType: TypeINT},
 		{Name: "y", DataType: TypeINT},
-	}, s)
+	}, s.TypeResolver())
 	if err != nil {
 		t.Fatalf("NewStructTypeDef error: %v", err)
 	}
@@ -478,11 +478,11 @@ func TestVariableStore_RegisterStructType(t *testing.T) {
 
 func TestVariableStore_RegisterStructType_Duplicate(t *testing.T) {
 	s := NewVariableStore()
-	def, _ := NewStructTypeDef("Foo", []StructField{{Name: "a", DataType: TypeINT}}, s)
+	def, _ := NewStructTypeDef("Foo", []StructField{{Name: "a", DataType: TypeINT}}, s.TypeResolver())
 	_ = s.RegisterStructType(def)
 
 	// 同名を再登録→エラー
-	def2, _ := NewStructTypeDef("Foo", []StructField{{Name: "b", DataType: TypeINT}}, s)
+	def2, _ := NewStructTypeDef("Foo", []StructField{{Name: "b", DataType: TypeINT}}, s.TypeResolver())
 	// NewStructTypeDef は型名が既存と被っても作れるが（自身は未登録）、
 	// 同じ名前の定義は存在確認なしに作成できる。RegisterStructType がチェックする。
 	err := s.RegisterStructType(def2)
@@ -501,8 +501,8 @@ func TestVariableStore_GetStructType_NotFound(t *testing.T) {
 
 func TestVariableStore_GetAllStructTypes(t *testing.T) {
 	s := NewVariableStore()
-	defA, _ := NewStructTypeDef("A", []StructField{{Name: "a", DataType: TypeINT}}, s)
-	defB, _ := NewStructTypeDef("B", []StructField{{Name: "b", DataType: TypeINT}}, s)
+	defA, _ := NewStructTypeDef("A", []StructField{{Name: "a", DataType: TypeINT}}, s.TypeResolver())
+	defB, _ := NewStructTypeDef("B", []StructField{{Name: "b", DataType: TypeINT}}, s.TypeResolver())
 	_ = s.RegisterStructType(defA)
 	_ = s.RegisterStructType(defB)
 
@@ -514,7 +514,7 @@ func TestVariableStore_GetAllStructTypes(t *testing.T) {
 
 func TestVariableStore_DeleteStructType(t *testing.T) {
 	s := NewVariableStore()
-	def, _ := NewStructTypeDef("TempType", []StructField{{Name: "v", DataType: TypeINT}}, s)
+	def, _ := NewStructTypeDef("TempType", []StructField{{Name: "v", DataType: TypeINT}}, s.TypeResolver())
 	_ = s.RegisterStructType(def)
 
 	err := s.DeleteStructType("TempType")
@@ -530,7 +530,7 @@ func TestVariableStore_DeleteStructType(t *testing.T) {
 
 func TestVariableStore_DeleteStructType_InUse(t *testing.T) {
 	s := NewVariableStore()
-	def, _ := NewStructTypeDef("Pt", []StructField{{Name: "x", DataType: TypeINT}}, s)
+	def, _ := NewStructTypeDef("Pt", []StructField{{Name: "x", DataType: TypeINT}}, s.TypeResolver())
 	_ = s.RegisterStructType(def)
 	_, _ = s.CreateVariable("myPt", DataType("Pt"), nil)
 
@@ -557,19 +557,19 @@ func TestNewStructTypeDef_Validation(t *testing.T) {
 	s := NewVariableStore()
 
 	// 名前なし
-	_, err := NewStructTypeDef("", []StructField{{Name: "x", DataType: TypeINT}}, s)
+	_, err := NewStructTypeDef("", []StructField{{Name: "x", DataType: TypeINT}}, s.TypeResolver())
 	if err == nil {
 		t.Error("empty name should return error")
 	}
 
 	// 予約語名
-	_, err = NewStructTypeDef("INT", []StructField{{Name: "x", DataType: TypeINT}}, s)
+	_, err = NewStructTypeDef("INT", []StructField{{Name: "x", DataType: TypeINT}}, s.TypeResolver())
 	if err == nil {
 		t.Error("reserved type name should return error")
 	}
 
 	// フィールドなし
-	_, err = NewStructTypeDef("Empty", []StructField{}, s)
+	_, err = NewStructTypeDef("Empty", []StructField{}, s.TypeResolver())
 	if err == nil {
 		t.Error("no fields should return error")
 	}
@@ -578,13 +578,13 @@ func TestNewStructTypeDef_Validation(t *testing.T) {
 	_, err = NewStructTypeDef("Dup", []StructField{
 		{Name: "x", DataType: TypeINT},
 		{Name: "x", DataType: TypeINT},
-	}, s)
+	}, s.TypeResolver())
 	if err == nil {
 		t.Error("duplicate field names should return error")
 	}
 
 	// フィールド名なし
-	_, err = NewStructTypeDef("EmptyField", []StructField{{Name: "", DataType: TypeINT}}, s)
+	_, err = NewStructTypeDef("EmptyField", []StructField{{Name: "", DataType: TypeINT}}, s.TypeResolver())
 	if err == nil {
 		t.Error("empty field name should return error")
 	}
@@ -597,7 +597,7 @@ func TestNewStructTypeDef_WordCount_Offsets(t *testing.T) {
 		{Name: "a", DataType: TypeINT},
 		{Name: "b", DataType: TypeDINT},
 		{Name: "c", DataType: TypeBOOL},
-	}, s)
+	}, s.TypeResolver())
 	if err != nil {
 		t.Fatalf("NewStructTypeDef error: %v", err)
 	}
@@ -688,7 +688,7 @@ func TestVariableStore_Snapshot_Restore_StructType(t *testing.T) {
 	def, _ := NewStructTypeDef("Pt", []StructField{
 		{Name: "x", DataType: TypeINT},
 		{Name: "y", DataType: TypeINT},
-	}, s)
+	}, s.TypeResolver())
 	_ = s.RegisterStructType(def)
 	_, _ = s.CreateVariable("p", DataType("Pt"), nil)
 
@@ -724,7 +724,7 @@ func TestVariableStore_ClearAll(t *testing.T) {
 	s := NewVariableStore()
 	_, _ = s.CreateVariable("a", TypeINT, nil)
 	_, _ = s.CreateVariable("b", TypeBOOL, nil)
-	def, _ := NewStructTypeDef("MyType", []StructField{{Name: "x", DataType: TypeINT}}, s)
+	def, _ := NewStructTypeDef("MyType", []StructField{{Name: "x", DataType: TypeINT}}, s.TypeResolver())
 	_ = s.RegisterStructType(def)
 
 	s.ClearAll()
