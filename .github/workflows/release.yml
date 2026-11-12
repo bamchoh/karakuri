@@ -1,0 +1,104 @@
+name: Release
+
+# v で始まるタグを push すると、Windows 用の exe をビルドして、GitHub のリリース（下書き）を作る。
+#
+#   git tag v0.0.39 && git push origin v0.0.39
+#
+# タグの名前は、画面に表示するバージョン（frontend/src/App.tsx の APP_VERSION）と同じにする（違うと失敗する）。
+# リリースは下書きで作るので、内容と exe を確かめてから GitHub の画面で公開する。
+#
+# このファイルを変更する Pull Request でも実行する（ビルドまで。リリースは作らない）。
+# できた zip は、実行結果のページの Artifacts から取り出せる。
+
+on:
+  push:
+    tags: ["v*"]
+  pull_request:
+    paths: [".github/workflows/release.yml"]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: ビルド（Windows）
+    runs-on: windows-latest
+    timeout-minutes: 30
+    permissions:
+      contents: write # リリースを作るため
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      # タグで実行したときはタグの名前、Pull Request では APP_VERSION をバージョンにする
+      - name: バージョンを決める
+        id: version
+        run: |
+          app_version=$(sed -n 's/^const APP_VERSION = "\(.*\)";.*/\1/p' frontend/src/App.tsx)
+          if [ -z "$app_version" ]; then
+            echo "frontend/src/App.tsx から APP_VERSION を読めません"
+            exit 1
+          fi
+          if [ "$GITHUB_REF_TYPE" = "tag" ]; then
+            if [ "$GITHUB_REF_NAME" != "$app_version" ]; then
+              echo "タグ（$GITHUB_REF_NAME）と、画面に表示するバージョン（APP_VERSION = $app_version）が違います。"
+              echo "frontend/src/App.tsx の APP_VERSION を直してから、タグを打ち直してください。"
+              exit 1
+            fi
+          fi
+          echo "version=$app_version" >> "$GITHUB_OUTPUT"
+          echo "バージョン: $app_version"
+
+      # go.mod と同じバージョンの Wails を入れる
+      - name: Wails を入れる
+        run: |
+          wails_version=$(go list -m -f '{{.Version}}' github.com/wailsapp/wails/v2)
+          go install "github.com/wailsapp/wails/v2/cmd/wails@$wails_version"
+
+      - name: 画面の依存パッケージを入れる
+        working-directory: frontend
+        run: npm ci
+
+      - name: ビルド
+        run: wails build -clean
+
+      # 壊れたものをリリースしないよう、ビルドした状態でテストも実行する
+      - name: Go のテスト
+        run: go test -count=1 ./...
+
+      - name: zip にまとめる
+        id: package
+        run: |
+          zip="Karakuri_${{ steps.version.outputs.version }}.zip"
+          test -f build/bin/Karakuri.exe
+          mkdir release
+          cp build/bin/Karakuri.exe LICENSE release/
+          (cd release && 7z a "../$zip" Karakuri.exe LICENSE)
+          ls -l "$zip"
+          echo "zip=$zip" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: Karakuri_${{ steps.version.outputs.version }}
+          path: ${{ steps.package.outputs.zip }}
+          if-no-files-found: error
+
+      - name: リリース（下書き）を作る
+        if: github.ref_type == 'tag'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" "${{ steps.package.outputs.zip }}" \
+            --draft --verify-tag --title "$GITHUB_REF_NAME" --generate-notes

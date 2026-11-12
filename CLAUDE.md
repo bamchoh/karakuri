@@ -67,6 +67,17 @@ go build ./...
   - 設定は `frontend/.prettierrc.json`（改行コードは、ファイルのものをそのまま使う）。自動生成される `wailsjs/` などは `frontend/.prettierignore` で対象から外している
 - 画面の確認用テスト（Playwright）は対象外（開発サーバーと WebView2 が要る）。画面を変更したら手元で `task e2e` を実行する
 
+### リリース
+
+`.github/workflows/release.yml` が、`v` で始まるタグの push で Windows 用の exe をビルドし、GitHub のリリースを**下書き**で作る（`Karakuri_<バージョン>.zip` に `Karakuri.exe` と `LICENSE`）。
+
+1. `frontend/src/App.tsx` の `APP_VERSION` を新しいバージョンにして、main にマージする
+2. main でタグを打って push する: `git tag v0.0.39 && git push origin v0.0.39`
+3. Actions の実行が終わったら、GitHub のリリースの画面で下書きの内容と zip を確かめて、公開する
+
+- タグの名前が `APP_VERSION` と違うと、ワークフローは失敗する（画面に表示するバージョンと、リリースのバージョンがずれないようにするため）
+- ワークフローのファイルを変更する Pull Request でも実行される（ビルドまで。リリースは作らない）。できた zip は実行結果のページの Artifacts から取り出せる
+
 ### 画面の確認用テスト（Playwright）
 
 `frontend/e2e/` に、ブラウザで画面を操作して確認するテストがある。`task dev` が立てる開発用サーバー（`http://localhost:34115`）に接続するため、Go 側の API とプロトコルの実装を含めた動作を確認できる。手順と注意は `frontend/e2e/README.md` を参照。
