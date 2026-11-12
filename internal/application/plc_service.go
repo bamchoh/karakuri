@@ -196,7 +196,6 @@ func (s *PLCService) AddServer(protocolType string, variantID string) error {
 	}
 
 	// プラグインプロセスをオンデマンドで起動（LazyRemoteServerFactory の場合）
-	type pluginStarter interface{ EnsureStarted() error }
 	if starter, ok := factory.(pluginStarter); ok {
 		if err := starter.EnsureStarted(); err != nil {
 			return fmt.Errorf("プラグイン起動失敗: %w", err)
@@ -208,62 +207,20 @@ func (s *PLCService) AddServer(protocolType string, variantID string) error {
 		injector.InjectVariableStore(s.vsAccessor)
 	}
 
-	// サーバーインスタンスを作成
-	config := factory.CreateConfigFromVariant(variantID)
-	innerDataStore := factory.CreateDataStore()
-
-	// DataStore の種類に応じて変数↔DataStore 双方向同期を設定
-	// - RemoteDataStore（プラグインプロセス）: RemoteVariableChangeListener を使用
-	// - インプロセス DataStore: VariableBackedDataStore でラップ
-	var dataStore protocol.DataStore
-	var changeListener *plugininfra.RemoteVariableChangeListener
-	var cancelChange context.CancelFunc
-
-	if remoteDS, isRemote := innerDataStore.(*plugininfra.RemoteDataStore); isRemote {
-		dataStore = innerDataStore
-		changeListener = plugininfra.NewRemoteVariableChangeListener(remoteDS, s.variableStore, protocolType)
-		ctx, cancel := context.WithCancel(context.Background())
-		cancelChange = cancel
-		go changeListener.StartChangeSubscription(ctx)
-	} else {
-		// インプロセス DataStore は VariableBackedDataStore でラップして双方向同期
-		dataStore = adapter.NewVariableBackedDataStore(innerDataStore, s.variableStore, protocolType)
+	// サーバーインスタンスを作成（DataStore・サーバー・変数との同期）
+	inst := &serverInstance{
+		protocolType: pt,
+		variant:      variantID,
+		factory:      factory,
+		config:       factory.CreateConfigFromVariant(variantID),
 	}
-
-	server, err := factory.CreateServer(config, dataStore)
-	if err != nil {
+	if err := s.attachServer(inst); err != nil {
 		return err
 	}
 
-	// HostGrpcAddr をサーバーに設定（NodePublishing 対応プロトコル向け）
-	if s.hostGrpcServer != nil {
-		type hostAddrSetter interface {
-			SetHostGrpcAddr(addr string)
-		}
-		if setter, ok := server.(hostAddrSetter); ok {
-			setter.SetHostGrpcAddr(s.hostGrpcServer.Addr())
-		}
-	}
-
 	s.serverSeq++
-	inst := &serverInstance{
-		protocolType:   pt,
-		variant:        variantID,
-		factory:        factory,
-		dataStore:      dataStore,
-		config:         config,
-		server:         server,
-		changeListener: changeListener,
-		cancelChange:   cancelChange,
-		addedOrder:     s.serverSeq,
-	}
-
+	inst.addedOrder = s.serverSeq
 	s.servers[pt] = inst
-
-	// イベントエミッターをサーバーに設定
-	if s.eventEmitter != nil {
-		s.setEmitterToServerInstance(inst)
-	}
 
 	go s.emitServerChanged()
 
@@ -281,9 +238,6 @@ func (s *PLCService) RemoveServer(protocolType string) error {
 		return fmt.Errorf("server not found for protocol: %s", protocolType)
 	}
 
-	type pluginStopper interface{ StopProcess() }
-	type pluginCrashChecker interface{ IsProcessCrashed() bool }
-
 	if inst.server != nil {
 		if err := inst.server.Stop(); err != nil {
 			if checker, ok := inst.factory.(pluginCrashChecker); ok && checker.IsProcessCrashed() {
@@ -295,18 +249,8 @@ func (s *PLCService) RemoveServer(protocolType string) error {
 		}
 	}
 
-	// 変更サブスクリプションをキャンセル
-	if inst.cancelChange != nil {
-		inst.cancelChange()
-	}
-	// リスナーを解除（リモートプラグイン用）
-	if inst.changeListener != nil {
-		inst.changeListener.Detach()
-	}
-	// インプロセス DataStore アダプターを解除
-	if ds, ok := inst.dataStore.(*adapter.VariableBackedDataStore); ok {
-		ds.Detach()
-	}
+	// 変数と DataStore の同期を止める
+	inst.detachSync()
 
 	if stopper, ok := inst.factory.(pluginStopper); ok {
 		stopper.StopProcess()
@@ -341,15 +285,7 @@ func (s *PLCService) Shutdown() {
 		s.scriptEngine.StopAll()
 	}
 	for _, inst := range s.servers {
-		if inst.cancelChange != nil {
-			inst.cancelChange()
-		}
-		if inst.changeListener != nil {
-			inst.changeListener.Detach()
-		}
-		if ds, ok := inst.dataStore.(*adapter.VariableBackedDataStore); ok {
-			ds.Detach()
-		}
+		inst.detachSync()
 		if inst.server != nil {
 			inst.server.Stop()
 		}
