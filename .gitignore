@@ -5,3 +5,5 @@ frontend/dist
 plugins/
 frontend/e2e/.results/
 frontend/e2e/.screenshots/
+# Wails が npm install の要否を判断するために書くメモ（PC ごとに値が変わる）
+frontend/package.json.md5

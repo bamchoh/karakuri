@@ -1,0 +1,5 @@
+# Go と Wails が LF で書き出すファイル。作業フォルダでも LF のまま扱う
+# （core.autocrlf=true の環境で、書き直されるたびに「変更あり」と表示されるのを防ぐ）
+go.mod text eol=lf
+go.sum text eol=lf
+frontend/wailsjs/** text eol=lf
