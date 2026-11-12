@@ -23,8 +23,14 @@ type Manifest struct {
 	Version      string               `json:"version"`
 	ProtocolType string               `json:"protocol_type"`
 	DisplayName  string               `json:"display_name"`
-	Variants     []string             `json:"variants"`
+	Variants     []ManifestVariant    `json:"variants"`
 	Capabilities ManifestCapabilities `json:"capabilities"`
+}
+
+// ManifestVariant は plugin.json の variants の 1 項目（ホスト側の plugin.ManifestVariant と同じ形）
+type ManifestVariant struct {
+	ID          string `json:"id"`
+	DisplayName string `json:"display_name"`
 }
 
 // ManifestCapabilities は plugin.json の capabilities セクション（snake_case）
@@ -44,7 +50,7 @@ func NewManifest(factory protocol.ServerFactory, entryPoint string) Manifest {
 		Version:      factory.Version(),
 		ProtocolType: string(factory.ProtocolType()),
 		DisplayName:  factory.DisplayName(),
-		Variants:     []string{},
+		Variants:     []ManifestVariant{},
 		Capabilities: ManifestCapabilities{
 			SupportsUnitID:         caps.SupportsUnitID,
 			UnitIDMin:              caps.UnitIDMin,
