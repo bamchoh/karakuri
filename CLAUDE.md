@@ -694,7 +694,8 @@ JavaScript（goja）でPLC動作を記述。
 
 #### OPC UA ライブラリ
 
-- **bamchoh/uastack v0.1.1**（`github.com/bamchoh/uastack/server`）
+- **bamchoh/uastack v0.1.2**（サーバーは `github.com/bamchoh/uastack/server`、クライアントは `github.com/bamchoh/uastack/client`）
+- v0.1.2 より前は、自動のつなぎ直し（`AutoReconnect`）でセッションを作り直すと keep-alive とデータ競合になる（`go test -race` が落ちる）。サブスクリプションが `AutoReconnect` を使うので、v0.1.2 以上にする
 - セキュリティなし・匿名認証のみ（証明書は作られない。`PKIDir` はアプリの exe と同じフォルダの `pki`）
 - `Start()` で `net.Listen` してから `server.Serve(ln)` をゴルーチンで実行（ポート使用中を Start のエラーで返すため）
 - `Stop()` は `server.Close()` を呼んで `Serve` の終了を待つ（v0.1.1 以降は Serve の開始前に Close しても Serve が終了する）
