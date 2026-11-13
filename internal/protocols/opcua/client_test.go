@@ -697,3 +697,99 @@ func TestClient_Subscription_Unreachable(t *testing.T) {
 		t.Fatal("取り消しても戻らない")
 	}
 }
+
+// ノードの参照: 子ノードの一覧と、変数の型・入力欄に入れる内容が返る
+func TestClient_Browse(t *testing.T) {
+	acc := newFakeAccessor()
+	acc.publish("v-int", "Counter", "INT", "readwrite", int64(42))
+	acc.publish("v-arr", "Values", "ARRAY[0..2] OF DINT", "readwrite", []interface{}{int64(1), int64(2), int64(3)})
+	acc.publish("v-str", "Motor1", "Motor", "readwrite", map[string]interface{}{"speed": int64(100), "on": true})
+	srv, _, ns := startTestServer(t, acc)
+	c := newTestClient(t, map[string]interface{}{"endpointUrl": fmt.Sprintf("opc.tcp://127.0.0.1:%d", srv.config.Port), "timeoutMs": 3000})
+	bc := c.(protocol.BrowsableClient)
+	ctx := context.Background()
+	node := func(name string) string { return fmt.Sprintf("ns=%d;s=%s", ns, name) }
+	find := func(entries []protocol.BrowseEntry, address string) protocol.BrowseEntry {
+		t.Helper()
+		for _, e := range entries {
+			if e.Address == address {
+				return e
+			}
+		}
+		t.Fatalf("%s がない: %+v", address, entries)
+		return protocol.BrowseEntry{}
+	}
+
+	// いちばん上は Objects フォルダの子。公開変数のフォルダと Server がある
+	top, err := bc.Browse(ctx, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !c.Connected() {
+		t.Error("参照すると接続する")
+	}
+	folder := find(top, node(folderNodeName))
+	if folder.Kind != "Object" || folder.Selectable || !folder.HasChildren || folder.Name != folderNodeName {
+		t.Errorf("公開変数のフォルダ: %+v", folder)
+	}
+	if server := find(top, "i=2253"); server.Name != "Server" || !server.HasChildren {
+		t.Errorf("Server: %+v", server)
+	}
+
+	vars, err := bc.Browse(ctx, node(folderNodeName))
+	if err != nil {
+		t.Fatal(err)
+	}
+	// スカラー: 型と、Write の欄に入れる内容が付く。子はない
+	counter := find(vars, node("Counter"))
+	if counter.Kind != "Variable" || !counter.Selectable || counter.HasChildren || counter.Detail != "Int16" {
+		t.Errorf("Counter: %+v", counter)
+	}
+	wantFields := map[string]string{
+		"nodeId": node("Counter"), "dataType": "Int16", "rank": "scalar", "items": node("Counter") + " : Int16 := ",
+	}
+	if fmt.Sprint(counter.Fields) != fmt.Sprint(wantFields) {
+		t.Errorf("Counter の Fields = %v, want %v", counter.Fields, wantFields)
+	}
+	// 入れた内容で、そのまま Write（複数のノード）を組み立てられる
+	if _, err := (&ClientFactory{}).BuildRequest(cmdWriteMulti, map[string]interface{}{"items": counter.Fields["items"] + "5", "dataType": "Int16"}); err != nil {
+		t.Errorf("Fields の items で組み立てられない: %v", err)
+	}
+	// 配列: 型に [] が付き、要素の子ノードがある
+	values := find(vars, node("Values"))
+	if values.Detail != "Int32[]" || !values.HasChildren || values.Fields["rank"] != "array" || values.Fields["items"] != node("Values")+" : Int32[] := " {
+		t.Errorf("Values: %+v", values)
+	}
+	elems, err := bc.Browse(ctx, values.Address)
+	if err != nil || len(elems) != 3 || find(elems, node("Values[1]")).Detail != "Int32" {
+		t.Errorf("Values の子: %+v, %v", elems, err)
+	}
+	// 構造体（JSON の文字列で公開）: フィールドの子ノードがある
+	motor := find(vars, node("Motor1"))
+	if motor.Detail != "String" || !motor.HasChildren {
+		t.Errorf("Motor1: %+v", motor)
+	}
+	fields, err := bc.Browse(ctx, motor.Address)
+	if err != nil || find(fields, node("Motor1.on")).Fields["dataType"] != "Boolean" {
+		t.Errorf("Motor1 の子: %+v, %v", fields, err)
+	}
+
+	// ないノード・読めない NodeId はエラー。接続は閉じない
+	if _, err := bc.Browse(ctx, node("NoSuchNode")); err == nil || !strings.Contains(err.Error(), "BadNodeIdUnknown") {
+		t.Errorf("ないノード: %v", err)
+	}
+	if _, err := bc.Browse(ctx, "???"); err == nil {
+		t.Error("読めない NodeId がエラーにならない")
+	}
+	if !c.Connected() {
+		t.Error("サーバーが断っただけなら、接続は閉じない")
+	}
+
+	// サーバーを止めると、エラーになって接続を閉じる
+	if err := srv.Stop(); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := bc.Browse(ctx, ""); err == nil || c.Connected() {
+		t.Errorf("停止後: err=%v connected=%v", err, c.Connected())
+	}
+}

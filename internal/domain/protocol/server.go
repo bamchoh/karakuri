@@ -126,7 +126,17 @@ type ConfigField struct {
 	Max         *int            `json:"max,omitempty"`
 	Condition   *FieldCondition `json:"condition,omitempty"` // 表示条件
 	Category    string          `json:"category,omitempty"`  // カテゴリ名（空の場合はカテゴリなし）
+	// Browse は、クライアントの入力項目で、値を機器のアドレスの一覧（BrowsableClient）から選べることを示す。
+	// BrowseValues なら値を持つアドレス（BrowseEntry.Selectable）だけ、BrowseAll ならどのアドレスも選べる。空なら選べない。
+	// "textarea" の項目は選んだものを 1 行ずつ足し、ほかの項目は選んだ 1 つで置き換える
+	Browse string `json:"browse,omitempty"`
 }
+
+// ConfigField.Browse の値
+const (
+	BrowseValues = "values"
+	BrowseAll    = "all"
+)
 
 // FieldOption はセレクトフィールドのオプション
 type FieldOption struct {

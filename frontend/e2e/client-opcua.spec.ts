@@ -476,3 +476,200 @@ test("サブスクリプションのタブは、対応するプロトコルの�
   await page.locator(".client-tab-item", { hasText: "UA" }).click();
   await expect(page.locator(".client-subscription")).toBeVisible();
 });
+
+// ----- ノードをツリーから選ぶ（参照のダイアログ） -----
+
+const browseDialog = (page: Page) => page.locator(".client-browse-dialog");
+const browseRow = (page: Page, address: string) =>
+  browseDialog(page).locator(
+    `[data-testid="client-browse-row"][data-address="${address}"]`,
+  );
+
+// 公開変数 Label（STRING）を足す。NodeId を返す
+async function publishLabel(page: Page) {
+  const label = await api<{ id: string }>(
+    page,
+    "CreateVariable",
+    "Label",
+    "STRING[10]",
+    "abc",
+  );
+  await api(page, "UpdateVariableNodePublishing", label.id, "opcua", {
+    protocolType: "opcua",
+    enabled: true,
+    accessMode: "readwrite",
+  });
+  return nodeId.replace(";s=Counter", ";s=Label");
+}
+
+// scope の中の「NodeId を参照」などのボタンで参照のダイアログを開き、公開変数のフォルダを開く
+async function openBrowse(page: Page, scope: Locator, label: string) {
+  await scope.getByRole("button", { name: `${label} を参照` }).click();
+  await expect(browseDialog(page)).toBeVisible();
+  const folder = nodeId.replace(";s=Counter", ";s=PLCVariables");
+  await expect(browseRow(page, folder)).toBeVisible();
+  await browseRow(page, folder)
+    .getByRole("button", { name: "PLCVariables を開く" })
+    .click();
+  await expect(browseRow(page, nodeId)).toBeVisible();
+}
+
+test("Read の NodeId をツリーから選んで追加できる", async ({ page }) => {
+  const labelNode = await publishLabel(page);
+  await addClient(page);
+  await openCommandDialog(page);
+  await setting(composer(page), "NodeId").fill("");
+  await openBrowse(page, composer(page), "NodeId");
+
+  // フォルダは選べない（チェックがない）。変数には型が出る
+  const folder = nodeId.replace(";s=Counter", ";s=PLCVariables");
+  await expect(browseRow(page, folder).locator("input")).toHaveCount(0);
+  await expect(browseRow(page, nodeId)).toContainText("Int16");
+  await expect(browseRow(page, labelNode)).toContainText("String");
+  await expect(
+    browseDialog(page).getByRole("button", { name: "追加" }),
+  ).toBeDisabled();
+
+  await browseRow(page, nodeId).getByRole("checkbox").check();
+  await browseRow(page, labelNode).click(); // 行のクリックでも選べる
+  await expect(browseDialog(page)).toContainText("2 個を選択中");
+  await shot(page, "client-opcua-browse-dialog");
+  await browseDialog(page).getByRole("button", { name: "追加" }).click();
+  await expect(browseDialog(page)).toBeHidden();
+  await expect(setting(composer(page), "NodeId")).toHaveValue(
+    `${nodeId}\n${labelNode}`,
+  );
+
+  // もう一度選んでも、同じ行は足さない
+  await openBrowse(page, composer(page), "NodeId");
+  await browseRow(page, nodeId).getByRole("checkbox").check();
+  await browseDialog(page).getByRole("button", { name: "追加" }).click();
+  await expect(setting(composer(page), "NodeId")).toHaveValue(
+    `${nodeId}\n${labelNode}`,
+  );
+
+  await sendButton(page).click();
+  await expect(result(page).locator(".client-status")).toHaveText("正常");
+  await expect(valueRow(page, `${labelNode} Value（String）`)).toContainText(
+    "abc",
+  );
+});
+
+test("Write はノードを選ぶと、データ型も入る。Esc は参照のダイアログだけを閉じる", async ({
+  page,
+}) => {
+  const labelNode = await publishLabel(page);
+  await addClient(page);
+  await openCommandDialog(page);
+  await setting(composer(page), "コマンド").selectOption({
+    label: "Write（ノードの値の書き込み）",
+  });
+
+  // 行を選んで「選択」
+  await openBrowse(page, composer(page), "NodeId");
+  await browseRow(page, labelNode).click();
+  await browseDialog(page).getByRole("button", { name: "選択" }).click();
+  await expect(setting(composer(page), "NodeId")).toHaveValue(labelNode);
+  await expect(setting(composer(page), "データ型")).toHaveValue("String");
+
+  // ダブルクリックで決める
+  await openBrowse(page, composer(page), "NodeId");
+  await browseRow(page, nodeId).dblclick();
+  await expect(browseDialog(page)).toBeHidden();
+  await expect(setting(composer(page), "NodeId")).toHaveValue(nodeId);
+  await expect(setting(composer(page), "データ型")).toHaveValue("Int16");
+  await expect(setting(composer(page), "スカラー / 配列")).toHaveValue(
+    "scalar",
+  );
+  await setting(composer(page), "値").fill("64");
+  await sendButton(page).click();
+  await expect(result(page).locator(".client-status")).toHaveText("正常");
+  await expect.poll(() => variableValue(page)).toBe(64);
+
+  // Esc は参照のダイアログだけを閉じる（コマンドのダイアログは残る）
+  await openBrowse(page, composer(page), "NodeId");
+  await page.keyboard.press("Escape");
+  await expect(browseDialog(page)).toBeHidden();
+  await expect(composer(page)).toBeVisible();
+
+  // Write（複数のノード）は「NodeId : 型 := 」の行が入るので、値だけ書けばよい
+  await setting(composer(page), "コマンド").selectOption({
+    label: "Write（複数のノードへの書き込み）",
+  });
+  await openBrowse(page, composer(page), "書き込む内容");
+  await browseRow(page, nodeId).getByRole("checkbox").check();
+  await browseRow(page, labelNode).getByRole("checkbox").check();
+  await browseDialog(page).getByRole("button", { name: "追加" }).click();
+  const items = setting(composer(page), "書き込む内容");
+  await expect(items).toHaveValue(
+    `${nodeId} : Int16 := \n${labelNode} : String := `,
+  );
+  await items.fill(`${nodeId} : Int16 := 65\n${labelNode} : String := xyz`);
+  await sendButton(page).click();
+  await expect(result(page).locator(".client-status")).toHaveText("正常");
+  await expect.poll(() => variableValue(page)).toBe(65);
+});
+
+test("Browse の欄はフォルダも選べる。サブスクリプションの監視項目もツリーから足せる", async ({
+  page,
+}) => {
+  await addClient(page);
+  await openCommandDialog(page);
+  await setting(composer(page), "コマンド").selectOption({
+    label: "Browse（子ノードの一覧）",
+  });
+  await composer(page).getByRole("button", { name: "NodeId を参照" }).click();
+  const folder = nodeId.replace(";s=Counter", ";s=PLCVariables");
+  await browseRow(page, folder).click();
+  await browseDialog(page).getByRole("button", { name: "選択" }).click();
+  await expect(setting(composer(page), "NodeId")).toHaveValue(folder);
+  await composer(page)
+    .getByRole("button", { name: "閉じる", exact: true })
+    .click();
+
+  await page
+    .locator(".sub-tab-button", { hasText: "サブスクリプション" })
+    .click();
+  const view = page.locator(".client-subscription");
+  await openBrowse(page, view, "NodeId");
+  await browseRow(page, nodeId).getByRole("checkbox").check();
+  await browseDialog(page).getByRole("button", { name: "追加" }).click();
+  await expect(setting(view, "NodeId")).toHaveValue(nodeId);
+  await view.getByRole("button", { name: "項目を追加" }).click();
+  await expect(page.getByTestId("client-subscription-item")).toHaveCount(1);
+  await expect(page.getByTestId("client-subscription-item")).toContainText(
+    nodeId,
+  );
+});
+
+test("参照のダイアログは、つながらないときに理由を出し、再読み込みできる", async ({
+  page,
+}) => {
+  const c = await addClient(page);
+  await api(page, "UpdateClient", c.id, "UA", {
+    endpointUrl: ENDPOINT,
+    timeoutMs: 1000,
+  });
+  await api(page, "StopServer", "opcua");
+  await openCommandDialog(page);
+  await composer(page).getByRole("button", { name: "NodeId を参照" }).click();
+  await expect(
+    browseDialog(page).locator(".client-browse-error"),
+  ).toContainText("接続できませんでした");
+
+  await api(page, "StartServer", "opcua");
+  await browseDialog(page).getByRole("button", { name: "再読み込み" }).click();
+  await expect(browseRow(page, "i=2253")).toContainText("Server");
+
+  // Modbus の接続先には、参照のボタンは出ない
+  await browseDialog(page).getByRole("button", { name: "キャンセル" }).click();
+  await composer(page)
+    .getByRole("button", { name: "閉じる", exact: true })
+    .click();
+  await api(page, "AddClient", "modbus-tcp", "MB");
+  await page.locator(".client-tab-item", { hasText: "MB" }).click();
+  await openCommandDialog(page);
+  await expect(
+    composer(page).getByRole("button", { name: /を参照$/ }),
+  ).toHaveCount(0);
+});

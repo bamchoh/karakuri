@@ -2583,3 +2583,157 @@ button:disabled {
   flex-wrap: wrap;
   gap: 0.5rem 0;
 }
+
+/* ----- 通信画面（クライアント）: 機器のアドレスの一覧から選ぶ ----- */
+.vscode-setting-control.field-with-browse {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  max-width: none;
+}
+
+.vscode-setting-control.field-with-browse > input,
+.vscode-setting-control.field-with-browse > textarea {
+  flex: 0 1 400px;
+  min-width: 0;
+}
+
+.vscode-setting-control.field-with-browse > button {
+  display: inline-flex;
+  align-items: center;
+  white-space: nowrap;
+  flex: none;
+}
+
+.dialog.client-browse-dialog {
+  width: min(680px, 92vw);
+  max-width: 92vw;
+  height: 70vh;
+}
+
+.client-browse-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 0.5rem;
+}
+
+.client-browse-toolbar button {
+  display: inline-flex;
+  align-items: center;
+  white-space: nowrap;
+}
+
+.dialog-content.client-browse-tree {
+  /* .dialog-content の flex と gap（行の間が空く）を使わない */
+  display: block;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--bg-input);
+  padding: 4px 0;
+  text-align: left;
+}
+
+.client-browse-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 8px;
+  cursor: pointer;
+  font-size: 0.875rem;
+  white-space: nowrap;
+}
+
+.client-browse-row:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.client-browse-row.selected,
+.client-browse-row.selected:hover {
+  background: rgba(34, 197, 94, 0.18);
+}
+
+.client-browse-row.not-selectable {
+  cursor: default;
+}
+
+.client-browse-row.not-selectable .client-browse-name {
+  color: var(--text-muted);
+}
+
+.client-browse-toggle,
+.client-browse-toggle-space {
+  flex: none;
+  width: 20px;
+  height: 20px;
+}
+
+.client-browse-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: none;
+  border-radius: 3px;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.client-browse-toggle:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--text-main);
+}
+
+.client-browse-row input[type="checkbox"] {
+  flex: none;
+  margin: 0;
+}
+
+.client-browse-name {
+  color: var(--text-main);
+}
+
+.client-browse-kind {
+  flex: none;
+  font-size: 0.7rem;
+  padding: 0 5px;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text-muted);
+}
+
+.client-browse-address {
+  margin-left: auto;
+  padding-left: 1rem;
+  font-family: monospace;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.client-browse-note {
+  padding: 3px 8px;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+
+.client-browse-note.client-browse-error {
+  color: #f87171;
+  white-space: normal;
+}
+
+.client-browse-dialog .dialog-buttons {
+  align-items: center;
+}
+
+.client-browse-count {
+  margin-right: auto;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

@@ -26,6 +26,10 @@ export function AddServer(arg1, arg2) {
   return window['go']['main']['App']['AddServer'](arg1, arg2);
 }
 
+export function BrowseClient(arg1, arg2) {
+  return window['go']['main']['App']['BrowseClient'](arg1, arg2);
+}
+
 export function BuildClientRequest(arg1, arg2, arg3) {
   return window['go']['main']['App']['BuildClientRequest'](arg1, arg2, arg3);
 }

@@ -14,6 +14,8 @@ export function AddMonitoringItem(arg1:application.MonitoringItemDTO):Promise<ap
 
 export function AddServer(arg1:string,arg2:string):Promise<void>;
 
+export function BrowseClient(arg1:string,arg2:string):Promise<Array<application.ClientBrowseEntryDTO>>;
+
 export function BuildClientRequest(arg1:string,arg2:string,arg3:Record<string, any>):Promise<string>;
 
 export function ClearClientCommandLogs():Promise<void>;

@@ -232,3 +232,20 @@ func (c *Client) Subscriptions() []*Subscription {
 	defer c.factory.mu.Unlock()
 	return append([]*Subscription(nil), c.subs...)
 }
+
+// ===== アドレスの参照 =====
+
+// Browse は、フェイクのアドレスの一覧を返す（protocol.BrowsableClient）。
+// いちばん上は "folder"（子に "folder/a"、"folder/b" を持つ）。"missing" の子はエラー
+func (c *Client) Browse(_ context.Context, parent string) ([]protocol.BrowseEntry, error) {
+	switch parent {
+	case "":
+		return []protocol.BrowseEntry{{Address: "folder", Name: "Folder", Kind: "Folder", HasChildren: true}}, nil
+	case "folder":
+		return []protocol.BrowseEntry{
+			{Address: "folder/a", Name: "A", Kind: "Value", Detail: "INT", Selectable: true, Fields: map[string]string{"keys": "a"}},
+			{Address: "folder/b", Name: "B", Kind: "Value", Selectable: true},
+		}, nil
+	}
+	return nil, fmt.Errorf("アドレスがありません: %s", parent)
+}

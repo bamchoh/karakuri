@@ -6,6 +6,7 @@ import { DynamicField } from "./DynamicField";
 import { FocusTrap } from "./FocusTrap";
 import { useEscapeKey } from "./useEscapeKey";
 import { clientStatusLabel, formatClientElapsed } from "./clientFormat";
+import { ClientBrowseDialog, applyBrowsePick } from "./ClientBrowseDialog";
 
 type Mode = "build" | "hex";
 
@@ -19,7 +20,10 @@ export interface CommandSaveInput {
 }
 
 interface ClientCommandDialogProps {
+  clientId: string;
   protocol: application.ClientProtocolDTO;
+  // 機器のアドレスの一覧を開く前に呼ぶ（保存していない接続先の設定を保存する）。false なら開かない
+  beforeBrowse: () => Promise<boolean>;
   // 編集する保存したコマンド（新しいコマンドなら null）
   editing: application.ClientSavedCommandDTO | null;
   sending: boolean;
@@ -46,7 +50,9 @@ function defaultParams(cmd: application.ClientCommandDTO): Record<string, any> {
 // - 16 進で入れる: 送るバイト列（Modbus なら PDU、OPC UA ならサービスのリクエスト本体）を直接入れる。何を入れるかの説明はプロトコルの実装が返す。組み立てた内容を写して、一部だけ変えて送ることもできる
 // 「送信」はダイアログを開いたまま送り、結果をダイアログの下に出す（保存せずに試せる）。開くたびにマウントする
 export function ClientCommandDialog({
+  clientId,
   protocol,
+  beforeBrowse,
   editing,
   sending,
   onSend,
@@ -78,7 +84,12 @@ export function ClientCommandDialog({
     null,
   );
   const [error, setError] = useState<string | null>(null);
-  useEscapeKey(true, onClose);
+  // アドレスの一覧（参照のダイアログ）を開いている項目
+  const [browseField, setBrowseField] = useState<application.FieldDTO | null>(
+    null,
+  );
+  // 参照のダイアログを開いている間は、Esc はそちらを閉じる
+  useEscapeKey(!browseField, onClose);
 
   // 送った結果・エラーは入力欄の下に出るので、見える位置までスクロールする
   const feedbackRef = useRef<HTMLDivElement>(null);
@@ -131,7 +142,8 @@ export function ClientCommandDialog({
     mode === "build" ? preview !== "" && !buildError : hexInput.trim() !== "";
 
   const handleSend = async () => {
-    if (!ready || sending) return;
+    // 参照のダイアログを開いている間の Enter は、そちらの確定
+    if (!ready || sending || browseField) return;
     try {
       setError(null);
       setResult(await onSend(mode === "build" ? preview : hexInput));
@@ -218,6 +230,9 @@ export function ClientCommandDialog({
                     disabled={false}
                     serialPorts={noPorts}
                     onRefreshPorts={noop}
+                    onBrowse={async () => {
+                      if (await beforeBrowse()) setBrowseField(field);
+                    }}
                   />
                 ))}
                 <div className="vscode-setting-item">
@@ -365,6 +380,24 @@ export function ClientCommandDialog({
           </button>
         </div>
       </div>
+      {browseField && command && (
+        <ClientBrowseDialog
+          clientId={clientId}
+          field={browseField}
+          onPick={(picked) =>
+            setParamsByCommand((prev) => ({
+              ...prev,
+              [command.id]: applyBrowsePick(
+                browseField,
+                command.fields,
+                params,
+                picked,
+              ),
+            }))
+          }
+          onClose={() => setBrowseField(null)}
+        />
+      )}
     </FocusTrap>
   );
 }

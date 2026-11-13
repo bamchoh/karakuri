@@ -96,6 +96,7 @@ func toFieldDTOs(fields []protocol.ConfigField) []FieldDTO {
 			Min:         f.Min,
 			Max:         f.Max,
 			Category:    f.Category,
+			Browse:      f.Browse,
 		}
 		if f.Options != nil {
 			dtos[j].Options = make([]OptionDTO, len(f.Options))
@@ -568,4 +569,41 @@ func parseHex(s string) ([]byte, error) {
 		return nil, fmt.Errorf("16 進として読めない文字があります")
 	}
 	return b, nil
+}
+
+// BrowseClient は、接続先の機器が持つアドレス（OPC UA ならノード）のうち、parent の子を返す。
+// parent が空なら、いちばん上の一覧を返す
+func (s *PLCService) BrowseClient(id, parent string) ([]ClientBrowseEntryDTO, error) {
+	m := s.clients
+	m.mu.Lock()
+	inst, ok := m.clients[id]
+	var client protocol.Client
+	if ok {
+		client = inst.client
+	}
+	m.mu.Unlock()
+	if !ok {
+		return nil, fmt.Errorf("接続先が見つかりません: %s", id)
+	}
+	bc, ok := client.(protocol.BrowsableClient)
+	if !ok {
+		return nil, fmt.Errorf("このプロトコルは、アドレスの参照に対応していません")
+	}
+	// 通信を待つ間、ロックは持たない
+	entries, err := bc.Browse(context.Background(), parent)
+	if err != nil {
+		return nil, err
+	}
+	dtos := make([]ClientBrowseEntryDTO, len(entries))
+	for i, e := range entries {
+		fields := make(map[string]string, len(e.Fields))
+		for k, v := range e.Fields {
+			fields[k] = v
+		}
+		dtos[i] = ClientBrowseEntryDTO{
+			Address: e.Address, Name: e.Name, Kind: e.Kind, Detail: e.Detail,
+			HasChildren: e.HasChildren, Selectable: e.Selectable, Fields: fields,
+		}
+	}
+	return dtos, nil
 }
