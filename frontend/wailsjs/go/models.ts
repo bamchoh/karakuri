@@ -99,6 +99,7 @@ export namespace application {
 	    displayName: string;
 	    fields: FieldDTO[];
 	    pollable: boolean;
+	    wordValues: boolean;
 	
 	    static createFrom(source: any = {}) {
 	        return new ClientCommandDTO(source);
@@ -110,6 +111,7 @@ export namespace application {
 	        this.displayName = source["displayName"];
 	        this.fields = this.convertValues(source["fields"], FieldDTO);
 	        this.pollable = source["pollable"];
+	        this.wordValues = source["wordValues"];
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
@@ -210,6 +212,7 @@ export namespace application {
 	    settings: Record<string, any>;
 	    connected: boolean;
 	    polling: boolean;
+	    subscribing: boolean;
 	
 	    static createFrom(source: any = {}) {
 	        return new ClientDTO(source);
@@ -224,6 +227,7 @@ export namespace application {
 	        this.settings = source["settings"];
 	        this.connected = source["connected"];
 	        this.polling = source["polling"];
+	        this.subscribing = source["subscribing"];
 	    }
 	}
 	export class ClientMappingSummaryDTO {
@@ -349,6 +353,10 @@ export namespace application {
 	    displayName: string;
 	    connectionFields: FieldDTO[];
 	    commands: ClientCommandDTO[];
+	    supportsSubscription: boolean;
+	    monitoredItemFields: FieldDTO[];
+	    requestDescription: string;
+	    requestExample: string;
 	
 	    static createFrom(source: any = {}) {
 	        return new ClientProtocolDTO(source);
@@ -360,6 +368,10 @@ export namespace application {
 	        this.displayName = source["displayName"];
 	        this.connectionFields = this.convertValues(source["connectionFields"], FieldDTO);
 	        this.commands = this.convertValues(source["commands"], ClientCommandDTO);
+	        this.supportsSubscription = source["supportsSubscription"];
+	        this.monitoredItemFields = this.convertValues(source["monitoredItemFields"], FieldDTO);
+	        this.requestDescription = source["requestDescription"];
+	        this.requestExample = source["requestExample"];
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
@@ -425,6 +437,91 @@ export namespace application {
 	        this.request = source["request"];
 	    }
 	}
+	export class ClientSubscriptionItemDTO {
+	    id: string;
+	    params: Record<string, any>;
+	    summary: string;
+	    status: string;
+	    error?: string;
+	    at?: string;
+	    values: ClientResultValueDTO[];
+	    valuesAt?: string;
+	    count: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new ClientSubscriptionItemDTO(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.params = source["params"];
+	        this.summary = source["summary"];
+	        this.status = source["status"];
+	        this.error = source["error"];
+	        this.at = source["at"];
+	        this.values = this.convertValues(source["values"], ClientResultValueDTO);
+	        this.valuesAt = source["valuesAt"];
+	        this.count = source["count"];
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	export class ClientSubscriptionDTO {
+	    intervalMs: number;
+	    running: boolean;
+	    state: string;
+	    error?: string;
+	    items: ClientSubscriptionItemDTO[];
+	
+	    static createFrom(source: any = {}) {
+	        return new ClientSubscriptionDTO(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.intervalMs = source["intervalMs"];
+	        this.running = source["running"];
+	        this.state = source["state"];
+	        this.error = source["error"];
+	        this.items = this.convertValues(source["items"], ClientSubscriptionItemDTO);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	
 	
 	export class ConfigVariantDTO {
 	    id: string;

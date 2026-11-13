@@ -386,6 +386,36 @@ func (a *App) StopClientPolling(id string) error {
 	return a.plcService.StopClientPolling(id)
 }
 
+// GetClientSubscription は接続先のサブスクリプション（値の変化の通知）の状態を返す
+func (a *App) GetClientSubscription(id string) (*application.ClientSubscriptionDTO, error) {
+	return a.plcService.GetClientSubscription(id)
+}
+
+// AddClientSubscriptionItems はサブスクリプションの監視項目を足す（1 回の入力から、いくつも足されることがある）
+func (a *App) AddClientSubscriptionItems(id string, params map[string]interface{}) ([]application.ClientSubscriptionItemDTO, error) {
+	return a.plcService.AddClientSubscriptionItems(id, params)
+}
+
+// RemoveClientSubscriptionItem はサブスクリプションの監視項目を削除する
+func (a *App) RemoveClientSubscriptionItem(id string, itemID string) error {
+	return a.plcService.RemoveClientSubscriptionItem(id, itemID)
+}
+
+// SetClientSubscriptionInterval はサブスクリプションの通知の間隔（ms）を変える
+func (a *App) SetClientSubscriptionInterval(id string, intervalMs int) error {
+	return a.plcService.SetClientSubscriptionInterval(id, intervalMs)
+}
+
+// StartClientSubscription はサブスクリプションの監視を始める
+func (a *App) StartClientSubscription(id string) error {
+	return a.plcService.StartClientSubscription(id)
+}
+
+// StopClientSubscription はサブスクリプションの監視を止める
+func (a *App) StopClientSubscription(id string) error {
+	return a.plcService.StopClientSubscription(id)
+}
+
 // SetClientFailThreshold は、読み取りが続けて何回失敗したら「通信エラー」にするかを変える
 func (a *App) SetClientFailThreshold(id string, n int) error {
 	return a.plcService.SetClientFailThreshold(id, n)

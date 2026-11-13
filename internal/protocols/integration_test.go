@@ -136,6 +136,18 @@ func TestFactories(t *testing.T) {
 		t.Errorf("プロトコル = %v, want %v", types, want)
 	}
 
+	// クライアントとして使えるプロトコルは、コマンドと、16 進で入れるリクエストの説明を持つ
+	var clientTypes []string
+	for _, p := range svc.GetClientProtocols() {
+		clientTypes = append(clientTypes, p.ProtocolType)
+		if len(p.ConnectionFields) == 0 || len(p.Commands) == 0 || p.RequestDescription == "" {
+			t.Errorf("%s: クライアントの定義が足りない: %+v", p.ProtocolType, p)
+		}
+	}
+	if want := []string{"modbus-tcp", "opcua"}; !reflect.DeepEqual(clientTypes, want) {
+		t.Errorf("クライアントのプロトコル = %v, want %v", clientTypes, want)
+	}
+
 	// Factories は呼ぶたびに別のファクトリーを返す（PLCService 同士で状態を共有しない）
 	a, b := protocols.Factories(), protocols.Factories()
 	for i := range a {
@@ -677,5 +689,175 @@ func TestOPCUA_PublishedVariable(t *testing.T) {
 			t.Fatalf("変数の変更が 500ms 以内に届かない: Counter = %v", read("Counter"))
 		}
 		time.Sleep(10 * time.Millisecond)
+	}
+}
+
+// OPC UA クライアントで、Karakuri 自身の OPC UA サーバーの公開変数を読み書きする（コマンドとポーリング）
+func TestOPCUAClient_AgainstOwnServer(t *testing.T) {
+	svc := newService(t)
+	must(t, svc.AddServer(opcUA, ""))
+	port := freePort(t)
+	cfg := svc.GetServerConfig(opcUA)
+	cfg.Settings["host"] = "127.0.0.1"
+	cfg.Settings["port"] = port
+	must(t, svc.UpdateServerConfig(cfg))
+
+	counter, err := svc.CreateVariable("Counter", "INT", 5)
+	must(t, err)
+	must(t, svc.UpdateVariableNodePublishing(counter.ID, opcUA, &application.NodePublishingDTO{
+		ProtocolType: opcUA, Enabled: true, AccessMode: "readwrite",
+	}))
+	must(t, svc.StartServer(opcUA))
+	var nodeID string
+	for _, a := range svc.GetNodeAddresses(opcUA, []string{counter.ID}) {
+		nodeID = a.Address
+	}
+
+	settings := map[string]interface{}{"endpointUrl": fmt.Sprintf("opc.tcp://127.0.0.1:%d", port), "timeoutMs": 3000}
+	c, err := svc.AddClient(opcUA, "自分", settings)
+	must(t, err)
+	send := func(cmd string, params map[string]interface{}) *application.ClientCommandLogDTO {
+		t.Helper()
+		req, err := svc.BuildClientRequest(opcUA, cmd, params)
+		must(t, err)
+		log, err := svc.SendClientRequest(c.ID, req)
+		must(t, err)
+		return log
+	}
+	value := func(log *application.ClientCommandLogDTO, label string) string {
+		for _, v := range log.Values {
+			if v.Label == label {
+				return v.Value
+			}
+		}
+		return ""
+	}
+
+	// 変数の値を読める。画面には、送ったリクエスト本体と応答本体が 16 進で出る
+	log := send("read", map[string]interface{}{"nodeId": nodeID, "attribute": "Value"})
+	if log.Status != "ok" || value(log, "Value（Int16）") != "5" || log.Sent == "" || log.Received == "" {
+		t.Fatalf("Read: %+v", log)
+	}
+	if !svc.GetClients()[0].Connected {
+		t.Fatal("送ったあとは接続中")
+	}
+
+	// 書くと、変数に入る
+	if log := send("write", map[string]interface{}{"nodeId": nodeID, "dataType": "Int16", "rank": "scalar", "value": "-123"}); log.Status != "ok" {
+		t.Fatalf("Write: %+v", log)
+	}
+	if got := variableValue(t, svc, counter.ID); got != "-123" {
+		t.Fatalf("書き込み後の Counter = %s, want -123", got)
+	}
+	// 型が違う書き込みは例外応答（サーバーが断る）
+	if log := send("write", map[string]interface{}{"nodeId": nodeID, "dataType": "Int32", "rank": "scalar", "value": "1"}); log.Status != "exception" {
+		t.Fatalf("型が違う Write: %+v", log)
+	}
+
+	// 公開変数のフォルダをブラウズすると、変数が出る
+	folder := strings.Replace(nodeID, ";s=Counter", ";s=PLCVariables", 1)
+	if log := send("browse", map[string]interface{}{"nodeId": folder}); log.Status != "ok" || !strings.HasPrefix(value(log, "Counter"), nodeID) {
+		t.Fatalf("Browse: %+v", log)
+	}
+
+	// 16 進として読めても、リクエストとして読めないものは、送らずにエラーにする
+	if log, err := svc.SendClientRequest(c.ID, "01 02 03"); err != nil || log.Status != "error" || log.Sent != "" {
+		t.Fatalf("読めないリクエスト: %+v, %v", log, err)
+	}
+
+	// ポーリングで、変数の変化を追う。書き込みのコマンドは使えない
+	must(t, svc.SetClientPollInterval(c.ID, 50))
+	_, err = svc.AddClientPollItem(c.ID, "read", map[string]interface{}{"nodeId": nodeID, "attribute": "Value"}, "")
+	must(t, err)
+	if _, err := svc.AddClientPollItem(c.ID, "write", map[string]interface{}{"nodeId": nodeID, "dataType": "Int16", "rank": "scalar", "value": "1"}, ""); err == nil {
+		t.Fatal("書き込みのコマンドはポーリングに使えない")
+	}
+	must(t, svc.StartClientPolling(c.ID))
+	t.Cleanup(func() { _ = svc.StopClientPolling(c.ID) })
+	polled := func() (status, value string) {
+		p, err := svc.GetClientPolling(c.ID)
+		must(t, err)
+		it := p.Items[0]
+		if len(it.Values) == 0 {
+			return it.Status, ""
+		}
+		return it.Status, it.Values[0].Value
+	}
+	waitUntil := func(what string, cond func() bool) {
+		t.Helper()
+		deadline := time.Now().Add(5 * time.Second)
+		for !cond() {
+			if time.Now().After(deadline) {
+				status, value := polled()
+				t.Fatalf("待っても %s にならない（%s, %q）", what, status, value)
+			}
+			time.Sleep(10 * time.Millisecond)
+		}
+	}
+	waitUntil("-123", func() bool { s, v := polled(); return s == "ok" && v == "-123" })
+	must(t, svc.UpdateVariableValue(counter.ID, 77))
+	waitUntil("77", func() bool { s, v := polled(); return s == "ok" && v == "77" })
+
+	// サーバーを止めると読めなくなり、最後に読めた値は残る。起動し直すと、つなぎ直して読める
+	must(t, svc.StopServer(opcUA))
+	waitUntil("失敗", func() bool { s, _ := polled(); return s == "error" || s == "timeout" })
+	if _, v := polled(); v != "77" {
+		t.Fatalf("最後に読めた値が残っていない: %q", v)
+	}
+	must(t, svc.StartServer(opcUA))
+	must(t, svc.UpdateVariableValue(counter.ID, 88))
+	waitUntil("88", func() bool { s, v := polled(); return s == "ok" && v == "88" })
+
+	// サブスクリプションでも、変数の変化が届く（配列は要素ごとに出る）
+	values, err := svc.CreateVariable("Values", "ARRAY[0..2] OF INT", []interface{}{1, 2, 3})
+	must(t, err)
+	must(t, svc.UpdateVariableNodePublishing(values.ID, opcUA, &application.NodePublishingDTO{
+		ProtocolType: opcUA, Enabled: true, AccessMode: "readwrite",
+	}))
+	valuesNode := strings.Replace(nodeID, ";s=Counter", ";s=Values", 1)
+	must(t, svc.SetClientSubscriptionInterval(c.ID, 50))
+	added, err := svc.AddClientSubscriptionItems(c.ID, map[string]interface{}{"nodeId": nodeID + "\n" + valuesNode})
+	must(t, err)
+	if len(added) != 2 || added[1].Summary != valuesNode {
+		t.Fatalf("監視項目: %+v", added)
+	}
+	must(t, svc.StartClientSubscription(c.ID))
+	t.Cleanup(func() { _ = svc.StopClientSubscription(c.ID) })
+	subscribed := func(i int, label string) string {
+		sub, err := svc.GetClientSubscription(c.ID)
+		must(t, err)
+		for _, v := range sub.Items[i].Values {
+			if v.Label == label {
+				return v.Value
+			}
+		}
+		return ""
+	}
+	waitUntil("監視の最初の値", func() bool {
+		return subscribed(0, "Value（Int16）") == "88" && subscribed(1, "[2]") == "3"
+	})
+	must(t, svc.UpdateVariableValue(counter.ID, 99))
+	must(t, svc.UpdateVariableFieldValue(values.ID, "[2]", 30))
+	waitUntil("監視の変化", func() bool {
+		return subscribed(0, "Value（Int16）") == "99" && subscribed(1, "[2]") == "30"
+	})
+	if sub, _ := svc.GetClientSubscription(c.ID); sub.State != "ok" || !svc.GetClients()[0].Subscribing {
+		t.Fatalf("監視の状態: %+v", sub)
+	}
+	must(t, svc.StopClientSubscription(c.ID))
+
+	// プロジェクトに保存して読み込んでも、接続先と読み取り項目・監視項目が残る
+	must(t, svc.StopClientPolling(c.ID))
+	project := svc.ExportProject()
+	must(t, svc.ImportProject(project))
+	clients := svc.GetClients()
+	if len(clients) != 1 || clients[0].ProtocolType != opcUA || clients[0].Settings["endpointUrl"] != settings["endpointUrl"] {
+		t.Fatalf("読み込んだ接続先: %+v", clients)
+	}
+	if p, err := svc.GetClientPolling(clients[0].ID); err != nil || len(p.Items) != 1 || p.Items[0].Summary != "Read "+nodeID+" の Value" {
+		t.Fatalf("読み込んだ読み取り項目: %+v, %v", p, err)
+	}
+	if sub, err := svc.GetClientSubscription(clients[0].ID); err != nil || sub.Running || sub.IntervalMs != 50 || len(sub.Items) != 2 || sub.Items[1].Summary != valuesNode {
+		t.Fatalf("読み込んだ監視項目: %+v, %v", sub, err)
 	}
 }

@@ -57,6 +57,9 @@ func TestClients_AddUpdateRemove(t *testing.T) {
 	if len(protos) != 1 || protos[0].ProtocolType != "fake-client" || len(protos[0].Commands) != 2 || !protos[0].Commands[0].Pollable || protos[0].Commands[1].Pollable || len(protos[0].ConnectionFields) != 2 {
 		t.Fatalf("protocols = %+v", protos)
 	}
+	if protos[0].RequestDescription == "" || protos[0].RequestExample != "41 42" {
+		t.Fatalf("16 進で入れるリクエストの説明がない: %+v", protos[0])
+	}
 
 	if _, err := svc.AddClient("unknown", "x", nil); err == nil {
 		t.Fatal("知らないプロトコルはエラー")

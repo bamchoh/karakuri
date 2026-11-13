@@ -8,6 +8,8 @@ export function AddClientPollItem(arg1:string,arg2:string,arg3:Record<string, an
 
 export function AddClientSavedCommand(arg1:string,arg2:application.ClientSavedCommandInputDTO):Promise<application.ClientSavedCommandDTO>;
 
+export function AddClientSubscriptionItems(arg1:string,arg2:Record<string, any>):Promise<Array<application.ClientSubscriptionItemDTO>>;
+
 export function AddMonitoringItem(arg1:application.MonitoringItemDTO):Promise<application.MonitoringItemDTO>;
 
 export function AddServer(arg1:string,arg2:string):Promise<void>;
@@ -45,6 +47,8 @@ export function GetClientPolling(arg1:string):Promise<application.ClientPollingD
 export function GetClientProtocols():Promise<Array<application.ClientProtocolDTO>>;
 
 export function GetClientSavedCommands(arg1:string):Promise<Array<application.ClientSavedCommandDTO>>;
+
+export function GetClientSubscription(arg1:string):Promise<application.ClientSubscriptionDTO>;
 
 export function GetClients():Promise<Array<application.ClientDTO>>;
 
@@ -106,6 +110,8 @@ export function RemoveClientPollItem(arg1:string,arg2:string):Promise<void>;
 
 export function RemoveClientSavedCommand(arg1:string,arg2:string):Promise<void>;
 
+export function RemoveClientSubscriptionItem(arg1:string,arg2:string):Promise<void>;
+
 export function RemoveServer(arg1:string):Promise<void>;
 
 export function RenameClientSavedCommand(arg1:string,arg2:string,arg3:string):Promise<void>;
@@ -122,6 +128,8 @@ export function SetClientFailThreshold(arg1:string,arg2:number):Promise<void>;
 
 export function SetClientPollInterval(arg1:string,arg2:number):Promise<void>;
 
+export function SetClientSubscriptionInterval(arg1:string,arg2:number):Promise<void>;
+
 export function SetDisabledUnitIDs(arg1:string,arg2:Array<number>):Promise<void>;
 
 export function SetHTTPAPIPort(arg1:number):Promise<void>;
@@ -130,11 +138,15 @@ export function SetUnitIDEnabled(arg1:string,arg2:number,arg3:boolean):Promise<v
 
 export function StartClientPolling(arg1:string):Promise<void>;
 
+export function StartClientSubscription(arg1:string):Promise<void>;
+
 export function StartScript(arg1:string):Promise<void>;
 
 export function StartServer(arg1:string):Promise<void>;
 
 export function StopClientPolling(arg1:string):Promise<void>;
+
+export function StopClientSubscription(arg1:string):Promise<void>;
 
 export function StopScript(arg1:string):Promise<void>;
 

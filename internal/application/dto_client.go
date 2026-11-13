@@ -8,6 +8,12 @@ type ClientProtocolDTO struct {
 	DisplayName      string             `json:"displayName"`
 	ConnectionFields []FieldDTO         `json:"connectionFields"`
 	Commands         []ClientCommandDTO `json:"commands"`
+	// サブスクリプション（値の変化の通知）に対応しているか。対応していれば、監視項目を追加するときの入力項目
+	SupportsSubscription bool       `json:"supportsSubscription"`
+	MonitoredItemFields  []FieldDTO `json:"monitoredItemFields"`
+	// 16 進で入れるリクエストの説明と入力例（プロトコルが返さなければ空）
+	RequestDescription string `json:"requestDescription"`
+	RequestExample     string `json:"requestExample"`
 }
 
 // ClientCommandDTO は、項目を入れて組み立てられるコマンド（Modbus ならファンクションコード）
@@ -15,7 +21,8 @@ type ClientCommandDTO struct {
 	ID          string     `json:"id"`
 	DisplayName string     `json:"displayName"`
 	Fields      []FieldDTO `json:"fields"`
-	Pollable    bool       `json:"pollable"` // ポーリング（周期的な読み取り）に使えるか
+	Pollable    bool       `json:"pollable"`   // ポーリング（周期的な読み取り）に使えるか
+	WordValues  bool       `json:"wordValues"` // 読み取った値を bit / word でも返すか（値の表示形式を選べる）
 }
 
 // ClientDTO は接続先
@@ -26,7 +33,8 @@ type ClientDTO struct {
 	DisplayName  string                 `json:"displayName"`
 	Settings     map[string]interface{} `json:"settings"`
 	Connected    bool                   `json:"connected"`
-	Polling      bool                   `json:"polling"` // ポーリング中か
+	Polling      bool                   `json:"polling"`     // ポーリング中か
+	Subscribing  bool                   `json:"subscribing"` // サブスクリプションで監視中か
 }
 
 // ClientCommandLogDTO は送ったコマンドの履歴の 1 件。バイト列は "03 00 0A" の形の 16 進
@@ -141,11 +149,12 @@ type ClientPollItemDTO struct {
 
 // ClientSnapshotDTO はプロジェクトに保存する接続先
 type ClientSnapshotDTO struct {
-	ID           string                    `json:"id,omitempty"` // 変数のマッピング（"client:<ID>"）が接続先を指すのに使う
-	Name         string                    `json:"name"`
-	ProtocolType string                    `json:"protocolType"`
-	Settings     map[string]interface{}    `json:"settings"`
-	Polling      *ClientPollingSnapshotDTO `json:"polling,omitempty"`
+	ID           string                         `json:"id,omitempty"` // 変数のマッピング（"client:<ID>"）が接続先を指すのに使う
+	Name         string                         `json:"name"`
+	ProtocolType string                         `json:"protocolType"`
+	Settings     map[string]interface{}         `json:"settings"`
+	Polling      *ClientPollingSnapshotDTO      `json:"polling,omitempty"`
+	Subscription *ClientSubscriptionSnapshotDTO `json:"subscription,omitempty"`
 	// 保存したコマンド。ID は読み込むときに作り直す
 	SavedCommands []ClientSavedCommandDTO `json:"savedCommands,omitempty"`
 }
@@ -162,4 +171,40 @@ type ClientPollItemSnapshotDTO struct {
 	CommandID string                 `json:"commandId"`
 	Params    map[string]interface{} `json:"params"`
 	Format    string                 `json:"format,omitempty"`
+}
+
+// ClientSubscriptionDTO は接続先のサブスクリプション（値の変化の通知）の状態
+type ClientSubscriptionDTO struct {
+	IntervalMs int  `json:"intervalMs"` // 機器が通知をまとめて送る間隔
+	Running    bool `json:"running"`
+	// 監視中の状態: "connecting"（つなごうとしている）/ "ok"（監視中）/ "error"（つながっていない。つなぎ直している）。停止中は空
+	State string                      `json:"state"`
+	Error string                      `json:"error,omitempty"`
+	Items []ClientSubscriptionItemDTO `json:"items"`
+}
+
+// ClientSubscriptionItemDTO はサブスクリプションの監視項目
+type ClientSubscriptionItemDTO struct {
+	ID      string                 `json:"id"`
+	Params  map[string]interface{} `json:"params"`
+	Summary string                 `json:"summary"`
+	// 最後の知らせ。status は "" (まだ届いていない) / "ok" / "exception"（機器がこの項目を断った・値が Bad）/ "error"
+	Status string `json:"status"`
+	Error  string `json:"error,omitempty"`
+	At     string `json:"at,omitempty"` // 最後に知らせが届いた時刻（RFC 3339）
+	// 最後に届いた値。監視が切れても残す
+	Values   []ClientResultValueDTO `json:"values"`
+	ValuesAt string                 `json:"valuesAt,omitempty"`
+	Count    int64                  `json:"count"` // 値が届いた回数
+}
+
+// ClientSubscriptionSnapshotDTO はプロジェクトに保存するサブスクリプションの設定（監視中かどうかは保存しない）
+type ClientSubscriptionSnapshotDTO struct {
+	IntervalMs int                                 `json:"intervalMs"`
+	Items      []ClientSubscriptionItemSnapshotDTO `json:"items"`
+}
+
+// ClientSubscriptionItemSnapshotDTO はプロジェクトに保存する監視項目
+type ClientSubscriptionItemSnapshotDTO struct {
+	Params map[string]interface{} `json:"params"`
 }

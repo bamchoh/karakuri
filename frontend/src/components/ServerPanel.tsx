@@ -410,8 +410,8 @@ export const ServerPanel = forwardRef<ServerPanelHandle, ServerPanelProps>(
             )}
 
             <div className="server-panel-header client-group-header">
-              <span title="Karakuri から外部の機器へつなぐ側（Modbus のマスター）">
-                CLIENTS（マスター）
+              <span title="Karakuri から外部の機器へつなぐ側（Modbus ではマスター）">
+                CLIENTS
               </span>
               <div className="panel-header-actions">
                 {clientProtocols.length > 1 && (
@@ -462,6 +462,14 @@ export const ServerPanel = forwardRef<ServerPanelHandle, ServerPanelProps>(
                   {c.polling && (
                     <span className="client-polling-badge" title="ポーリング中">
                       ポーリング中
+                    </span>
+                  )}
+                  {c.subscribing && (
+                    <span
+                      className="client-polling-badge"
+                      title="サブスクリプションで監視中"
+                    >
+                      監視中
                     </span>
                   )}
                 </div>
@@ -515,7 +523,7 @@ export const ServerPanel = forwardRef<ServerPanelHandle, ServerPanelProps>(
                   <p>
                     SERVERS の
                     <SquarePlus size={14} />
-                    でサーバーを、CLIENTS（マスター）の
+                    でサーバーを、CLIENTS の
                     <SquarePlus size={14} />
                     で外部の機器への接続先を追加してください。
                   </p>

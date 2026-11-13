@@ -179,9 +179,18 @@ func (f *TCPClientFactory) DescribeRequest(pdu []byte) string {
 	return describeRequest(pdu)
 }
 
+// RequestHelp は、16 進で入れるリクエストの説明を返す
+func (f *TCPClientFactory) RequestHelp() protocol.RequestHelp {
+	return protocol.RequestHelp{
+		Description: "PDU（ファンクションコード + データ）を入れます。MBAP ヘッダーはクライアントが付けます。",
+		Example:     "03 00 00 00 0A",
+	}
+}
+
 // pollable はコマンドを、ポーリングに使える（読み取りの）コマンドにする
 func pollable(c protocol.CommandDefinition) protocol.CommandDefinition {
 	c.Pollable = true
+	c.WordValues = true
 	return c
 }
 

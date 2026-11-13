@@ -47,6 +47,13 @@ type clientInstance struct {
 
 	// 保存したコマンド（plc_service_client_commands.go）
 	savedCommands []*savedCommand
+
+	// サブスクリプション（plc_service_client_subscription.go）
+	subIntervalMs int
+	subItems      []*subscriptionItem
+	subscriber    *poller // nil なら停止中
+	subState      string  // 監視中の状態（subscriptionState*）。停止中は空
+	subError      string
 }
 
 type clientManager struct {
@@ -119,13 +126,22 @@ func (s *PLCService) GetClientProtocols() []ClientProtocolDTO {
 		cmds := f.Commands()
 		cmdDTOs := make([]ClientCommandDTO, len(cmds))
 		for j, c := range cmds {
-			cmdDTOs[j] = ClientCommandDTO{ID: c.ID, DisplayName: c.DisplayName, Fields: toFieldDTOs(c.Fields), Pollable: c.Pollable}
+			cmdDTOs[j] = ClientCommandDTO{ID: c.ID, DisplayName: c.DisplayName, Fields: toFieldDTOs(c.Fields), Pollable: c.Pollable, WordValues: c.WordValues}
 		}
 		result[i] = ClientProtocolDTO{
 			ProtocolType:     string(f.ProtocolType()),
 			DisplayName:      f.DisplayName(),
 			ConnectionFields: toFieldDTOs(f.ConnectionFields()),
 			Commands:         cmdDTOs,
+		}
+		if sf, ok := f.(protocol.SubscriptionClientFactory); ok {
+			result[i].SupportsSubscription = true
+			result[i].MonitoredItemFields = toFieldDTOs(sf.MonitoredItemFields())
+		}
+		if hp, ok := f.(protocol.RequestHelpProvider); ok {
+			help := hp.RequestHelp()
+			result[i].RequestDescription = help.Description
+			result[i].RequestExample = help.Example
 		}
 	}
 	return result
@@ -144,6 +160,7 @@ func (inst *clientInstance) toDTO() ClientDTO {
 		Settings:     settings,
 		Connected:    inst.client != nil && inst.client.Connected(),
 		Polling:      inst.poller != nil,
+		Subscribing:  inst.subscriber != nil,
 	}
 }
 
@@ -209,6 +226,7 @@ func (m *clientManager) addLocked(id, protocolType, name string, settings map[st
 		order:        m.seq,
 
 		pollIntervalMs: defaultPollIntervalMs,
+		subIntervalMs:  defaultSubscriptionIntervalMs,
 		failThreshold:  defaultFailThreshold,
 		wake:           make(chan struct{}, 1),
 	}
@@ -234,11 +252,29 @@ func (m *clientManager) unusedDefaultNameLocked() string {
 }
 
 // UpdateClient は接続先の名前と設定を変える。設定を変えると接続を閉じる（次の送信でつなぎ直す）
+//
+// サブスクリプションは、クライアントのオブジェクトが持つ接続で動いているので、監視中なら止めてから変え、始め直す
 func (s *PLCService) UpdateClient(id, name string, settings map[string]interface{}) error {
-	old, err := s.clients.update(id, name, settings)
+	m := s.clients
+	m.mu.Lock()
+	var sub *poller
+	if inst, ok := m.clients[id]; ok {
+		sub = inst.stopSubscriberLocked()
+	}
+	m.mu.Unlock()
+	sub.wait()
+
+	old, err := m.update(id, name, settings)
 	if old != nil {
 		// 送信中なら、終わるまで待ってから閉じる（ロックの外で待つ）
 		_ = old.Close()
+	}
+	if sub != nil {
+		m.mu.Lock()
+		if inst, ok := m.clients[id]; ok {
+			_ = m.startSubscriberLocked(inst)
+		}
+		m.mu.Unlock()
 	}
 	return err
 }
@@ -274,16 +310,18 @@ func (s *PLCService) RemoveClient(id string) error {
 	m := s.clients
 	m.mu.Lock()
 	inst, ok := m.clients[id]
-	var p *poller
+	var p, sub *poller
 	if ok {
 		delete(m.clients, id)
 		p = inst.stopPollerLocked()
+		sub = inst.stopSubscriberLocked()
 	}
 	m.mu.Unlock()
 	if !ok {
 		return fmt.Errorf("接続先が見つかりません: %s", id)
 	}
 	p.wait()
+	sub.wait()
 	inst.detachSync()
 	if inst.client != nil {
 		_ = inst.client.Close()
@@ -425,6 +463,7 @@ func (m *clientManager) export() []ClientSnapshotDTO {
 			ProtocolType: d.ProtocolType,
 			Settings:     d.Settings,
 			Polling:      m.clients[d.ID].pollingSnapshotLocked(),
+			Subscription: m.clients[d.ID].subscriptionSnapshotLocked(),
 
 			SavedCommands: m.clients[d.ID].savedCommandsSnapshotLocked(),
 		}
@@ -442,7 +481,7 @@ func (m *clientManager) replaceAll(snapshots []ClientSnapshotDTO) {
 	old := m.clients
 	pollers := make([]*poller, 0, len(old))
 	for _, inst := range old {
-		pollers = append(pollers, inst.stopPollerLocked())
+		pollers = append(pollers, inst.stopPollerLocked(), inst.stopSubscriberLocked())
 	}
 	m.clients = make(map[string]*clientInstance)
 	m.mu.Unlock()
@@ -460,6 +499,7 @@ func (m *clientManager) replaceAll(snapshots []ClientSnapshotDTO) {
 			continue
 		}
 		m.clients[dto.ID].restorePollingLocked(snap.Polling)
+		m.clients[dto.ID].restoreSubscriptionLocked(snap.Subscription)
 		m.clients[dto.ID].restoreSavedCommandsLocked(snap.SavedCommands)
 	}
 }
@@ -470,7 +510,7 @@ func (m *clientManager) closeAll() {
 	old := m.clients
 	pollers := make([]*poller, 0, len(old))
 	for _, inst := range old {
-		pollers = append(pollers, inst.stopPollerLocked())
+		pollers = append(pollers, inst.stopPollerLocked(), inst.stopSubscriberLocked())
 	}
 	m.clients = make(map[string]*clientInstance)
 	m.mu.Unlock()

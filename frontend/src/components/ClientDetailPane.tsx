@@ -22,8 +22,9 @@ import { ClientCommandDialog, CommandSaveInput } from "./ClientCommandDialog";
 import { ClientSavedCommands } from "./ClientSavedCommands";
 import { ClientCommandLog } from "./ClientCommandLog";
 import { ClientPollingView } from "./ClientPollingView";
+import { ClientSubscriptionView } from "./ClientSubscriptionView";
 
-export type ClientSubTab = "command" | "polling";
+export type ClientSubTab = "command" | "polling" | "subscription";
 
 // 親（通信画面）から、保存していない接続先の設定を保存・破棄するための操作
 export interface ClientDetailPaneHandle {
@@ -49,13 +50,16 @@ interface ClientDetailPaneProps {
 const noPorts: string[] = [];
 const noop = () => {};
 
-// 設定の欄を閉じているときに出す 1 行の要約（例: "ホスト: 127.0.0.1 / ポート: 502"）
+// 設定の欄を閉じているときに出す 1 行の要約（例: "ホスト: 127.0.0.1 / ポート: 502"）。パスワードと、空の項目は出さない
 function settingsSummary(
   protocol: application.ClientProtocolDTO,
   settings: Record<string, any>,
 ): string {
   return protocol.connectionFields
-    .map((f) => `${f.label}: ${settings[f.name] ?? f.default ?? ""}`)
+    .filter((f) => f.type !== "password")
+    .map((f) => ({ label: f.label, value: settings[f.name] ?? f.default }))
+    .filter((x) => x.value !== undefined && x.value !== "")
+    .map((x) => `${x.label}: ${x.value}`)
     .join(" / ");
 }
 
@@ -227,6 +231,12 @@ export const ClientDetailPane = forwardRef<
     (selectedSeq === null ? logs[0] : undefined) ??
     null;
 
+  // サブスクリプションのタブを選んだまま、対応していないプロトコルの接続先に切り替えたら、コマンドのタブを出す
+  const shownTab: ClientSubTab =
+    subTab === "subscription" && !protocol.supportsSubscription
+      ? "command"
+      : subTab;
+
   return (
     <div className="server-config-pane">
       <div className="server-config-pane-header">
@@ -327,20 +337,28 @@ export const ClientDetailPane = forwardRef<
 
         <div className="sub-tab-nav client-sub-tabs">
           <button
-            className={`sub-tab-button ${subTab === "command" ? "active" : ""}`}
+            className={`sub-tab-button ${shownTab === "command" ? "active" : ""}`}
             onClick={() => onSubTabChange("command")}
           >
             コマンド
           </button>
           <button
-            className={`sub-tab-button ${subTab === "polling" ? "active" : ""}`}
+            className={`sub-tab-button ${shownTab === "polling" ? "active" : ""}`}
             onClick={() => onSubTabChange("polling")}
           >
             ポーリング{client.polling ? "（実行中）" : ""}
           </button>
+          {protocol.supportsSubscription && (
+            <button
+              className={`sub-tab-button ${shownTab === "subscription" ? "active" : ""}`}
+              onClick={() => onSubTabChange("subscription")}
+            >
+              サブスクリプション{client.subscribing ? "（監視中）" : ""}
+            </button>
+          )}
         </div>
 
-        {subTab === "command" ? (
+        {shownTab === "command" ? (
           <>
             <div className="vscode-setting-category">
               保存したコマンド（{savedCommands.length}）
@@ -375,8 +393,15 @@ export const ClientDetailPane = forwardRef<
               onClear={handleClearLogs}
             />
           </>
-        ) : (
+        ) : shownTab === "polling" ? (
           <ClientPollingView
+            client={client}
+            protocol={protocol}
+            beforeStart={async () => !dirty || (await saveSettings())}
+            onClientsChanged={onClientsChanged}
+          />
+        ) : (
+          <ClientSubscriptionView
             client={client}
             protocol={protocol}
             beforeStart={async () => !dirty || (await saveSettings())}
