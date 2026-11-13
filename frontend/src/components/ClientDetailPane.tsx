@@ -374,7 +374,9 @@ export const ClientDetailPane = forwardRef<
             />
             {dialog && (
               <ClientCommandDialog
+                clientId={client.id}
                 protocol={protocol}
+                beforeBrowse={async () => !dirty || (await saveSettings())}
                 editing={dialog.editing}
                 sending={sending}
                 onSend={sendFromDialog}

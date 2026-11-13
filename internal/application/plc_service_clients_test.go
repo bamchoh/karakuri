@@ -19,6 +19,30 @@ func newClientTestService(t *testing.T) (*PLCService, *protocoltest.ClientFactor
 	return svc, f
 }
 
+func TestClients_Browse(t *testing.T) {
+	svc, _ := newClientTestService(t)
+	c, _ := svc.AddClient("fake-client", "PLC", nil)
+
+	top, err := svc.BrowseClient(c.ID, "")
+	if err != nil || len(top) != 1 || top[0].Address != "folder" || !top[0].HasChildren || top[0].Selectable {
+		t.Fatalf("いちばん上: %+v, %v", top, err)
+	}
+	children, err := svc.BrowseClient(c.ID, "folder")
+	if err != nil || len(children) != 2 || !children[0].Selectable || children[0].Detail != "INT" || children[0].Fields["keys"] != "a" {
+		t.Fatalf("子: %+v, %v", children, err)
+	}
+	// 入れる内容がない項目でも、画面で扱いやすいよう空のマップにする
+	if children[1].Fields == nil {
+		t.Fatalf("Fields が nil: %+v", children[1])
+	}
+	if _, err := svc.BrowseClient(c.ID, "missing"); err == nil {
+		t.Fatal("プロトコルのエラーは、そのまま返す")
+	}
+	if _, err := svc.BrowseClient("nope", ""); err == nil {
+		t.Fatal("ない接続先はエラー")
+	}
+}
+
 func TestParseHex(t *testing.T) {
 	cases := []struct {
 		in   string

@@ -158,3 +158,27 @@ type SubscriptionEvent struct {
 	Error  string
 	Values []ResultValue
 }
+
+// --- アドレスの参照（機器が持つアドレスの一覧から選ぶ） ---
+
+// BrowsableClient は、機器が持つアドレス（OPC UA ならノード）を一覧できるクライアント（任意で実装する）。
+// 画面は、ConfigField.Browse を指定した項目に「参照」ボタンを出し、ツリーから選ばせる
+type BrowsableClient interface {
+	// Browse は、parent の子を返す。parent が空なら、いちばん上の一覧を返す。
+	// 通信の失敗は error で返す（Send と同じく、タイムアウトしたら接続を閉じる）
+	Browse(ctx context.Context, parent string) ([]BrowseEntry, error)
+}
+
+// BrowseEntry は、アドレスの一覧の 1 項目
+type BrowseEntry struct {
+	Address     string // このアドレスを表す文字列（Browse の parent に渡せる。OPC UA なら NodeId）
+	Name        string // 表示する名前
+	Kind        string // 種類の表示（OPC UA なら "Variable"、"Object" など）
+	Detail      string // 補足の表示（OPC UA の変数ならデータ型）
+	HasChildren bool   // 子がある（ツリーで開ける）
+	Selectable  bool   // 入力欄に入れられる（値を持つアドレス）
+	// Fields は、選んだときに入力欄に入れる内容。キーは項目の名前（ConfigField.Name）。
+	// 選ぶのに使った項目のほかに、同じフォームにある項目（書き込みのデータ型など）にも入れる。
+	// 項目の名前がなければ Address を入れる
+	Fields map[string]string
+}

@@ -208,3 +208,15 @@ type ClientSubscriptionSnapshotDTO struct {
 type ClientSubscriptionItemSnapshotDTO struct {
 	Params map[string]interface{} `json:"params"`
 }
+
+// ClientBrowseEntryDTO は、接続先の機器が持つアドレスの一覧の 1 項目（OPC UA ならノード）
+type ClientBrowseEntryDTO struct {
+	Address     string `json:"address"`     // このアドレスを表す文字列（BrowseClient の parent に渡せる）
+	Name        string `json:"name"`        // 表示する名前
+	Kind        string `json:"kind"`        // 種類の表示
+	Detail      string `json:"detail"`      // 補足の表示（OPC UA の変数ならデータ型）
+	HasChildren bool   `json:"hasChildren"` // 子がある（ツリーで開ける）
+	Selectable  bool   `json:"selectable"`  // 入力欄に入れられる
+	// 選んだときに入力欄に入れる内容（キーは項目の名前。なければ address を入れる）
+	Fields map[string]string `json:"fields"`
+}

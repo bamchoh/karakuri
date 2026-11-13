@@ -16,6 +16,30 @@ export namespace application {
 	        this.unitIdMax = source["unitIdMax"];
 	    }
 	}
+	export class ClientBrowseEntryDTO {
+	    address: string;
+	    name: string;
+	    kind: string;
+	    detail: string;
+	    hasChildren: boolean;
+	    selectable: boolean;
+	    fields: Record<string, string>;
+	
+	    static createFrom(source: any = {}) {
+	        return new ClientBrowseEntryDTO(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.address = source["address"];
+	        this.name = source["name"];
+	        this.kind = source["kind"];
+	        this.detail = source["detail"];
+	        this.hasChildren = source["hasChildren"];
+	        this.selectable = source["selectable"];
+	        this.fields = source["fields"];
+	    }
+	}
 	export class ConditionDTO {
 	    field: string;
 	    value: string;
@@ -56,6 +80,7 @@ export namespace application {
 	    max?: number;
 	    showWhen?: ConditionDTO;
 	    category?: string;
+	    browse?: string;
 	
 	    static createFrom(source: any = {}) {
 	        return new FieldDTO(source);
@@ -74,6 +99,7 @@ export namespace application {
 	        this.max = source["max"];
 	        this.showWhen = this.convertValues(source["showWhen"], ConditionDTO);
 	        this.category = source["category"];
+	        this.browse = source["browse"];
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {

@@ -169,6 +169,7 @@ internal/
 │       ├── types.go        # PLC 型解析・PLC 値 ↔ ua.Variant 変換
 │       ├── client.go       # ClientFactory（OPC UA クライアント。接続先の設定・コマンドの定義・リクエストの組み立てと要約）
 │       ├── client_conn.go  # Client（セッションの接続・送受信・応答の解釈）
+│       ├── client_browse.go # ノードの参照（子ノードの一覧・変数の型・入力欄に入れる内容）
 │       ├── client_subscription.go # サブスクリプション（監視項目の定義・別のセッションでの監視・つなぎ直し）
 │       └── datastore.go    # emptyDataStore（OPC UA はレジスタを持たない）
 └── infrastructure/   # インフラ層（プロトコル固有実装は含まない）
@@ -285,6 +286,7 @@ frontend/src/
 │   ├── ClientCommandLog.tsx    # コマンドの結果と履歴
 │   ├── ClientSavedCommands.tsx # 保存したコマンドの一覧（「新しいコマンド」・送信・編集・削除）
 │   ├── ClientPollingView.tsx   # ポーリング（周期・読み取り項目の追加・最後の結果と値）
+│   ├── ClientBrowseDialog.tsx  # 機器のアドレス（OPC UA ならノード）をツリーでたどって選ぶダイアログ。選んだものを入力欄に入れる `applyBrowsePick()` もここ
 │   ├── ClientSubscriptionView.tsx # サブスクリプション（通知の間隔・監視項目の追加・届いた値）。対応するプロトコルの接続先だけ
 │   └── clientFormat.ts         # クライアント（通信画面の右側）で共通の表示の書式（状態の名前・時刻・かかった時間）
 └── App.tsx                 # タブベースのメインUI
@@ -450,6 +452,7 @@ JavaScript（goja）でPLC動作を記述。
   - `AddClientPollItem(id, commandID, params, format)`, `UpdateClientPollItem(id, itemID, commandID, params, format)`, `RemoveClientPollItem(id, itemID)`: 読み取り項目（`Pollable` のコマンドだけ。1 つの接続先に 50 個まで）
   - `SetClientPollInterval(id, ms)`（50〜3600000）, `StartClientPolling(id)`, `StopClientPolling(id)`
   - `SetClientFailThreshold(id, n)`（1〜100、既定 3）: 読み取りが続けて何回失敗したら、マッピングした変数を「通信エラー」にするか
+  - `BrowseClient(id, parent)`: 接続先の機器が持つアドレス（OPC UA ならノード）のうち、`parent` の子（空なら、いちばん上）。項目は `address` / `name` / `kind` / `detail` / `hasChildren` / `selectable` / `fields`
   - `GetClientSubscription(id)`: サブスクリプションの状態（間隔・監視中か・全体の状態・監視項目と最後に届いた値）
   - `AddClientSubscriptionItems(id, params)`（1 回の入力から、いくつも足されることがある）, `RemoveClientSubscriptionItem(id, itemID)`, `SetClientSubscriptionInterval(id, ms)`, `StartClientSubscription(id)`, `StopClientSubscription(id)`
   - `GetMappingTargets()`: 変数をマッピングできる先（サーバーと、マッピングできる接続先）
@@ -554,6 +557,7 @@ JavaScript（goja）でPLC動作を記述。
    - 読み取りのコマンドには `Pollable: true` を付ける（ポーリングに使える）。読み取った値をビット・ワードで返すなら `ResultValue.Bit` / `Word` にも入れ、コマンドに `WordValues: true` を付ける（画面で 10 進・16 進などの表示形式を選べる。付けなければ `Value` の文字列をそのまま出す）
    - 16 進で直接入れる欄に出す説明と入力例は、`protocol.RequestHelpProvider`（`RequestHelp()`）で返す
    - `ConfigField.Type` に `"password"` を使うと、入力を隠す欄になる（閉じた設定の要約にも出さない）。`"textarea"` は複数行の欄
+   - 入力欄の値を機器のアドレスの一覧から選べるようにするなら、クライアントで `protocol.BrowsableClient`（`Browse(parent)`: 子の一覧）を実装し、選ばせたい項目の `ConfigField.Browse` に `protocol.BrowseValues`（値を持つアドレスだけ）か `protocol.BrowseAll`（どれでも）を指定する。`BrowseEntry.Fields` に、選んだときに入力欄に入れる内容を項目の名前ごとに入れる（なければ `Address` を入れる）
    - 値の変化の通知（サブスクリプション）に対応するなら、ファクトリーで `protocol.SubscriptionClientFactory`（監視項目の入力項目・入力から監視項目を作る）、クライアントで `protocol.SubscribingClient`（`RunSubscription()`）を実装する。`RunSubscription()` は ctx が取り消されるまで戻らず、つながらない・切れたときは状態を知らせてから自分でつなぎ直す。`onEvent` は同時に呼ばない
    - 変数をマッピングできるようにするなら `protocol.MappableClientFactory`（エリア・1 回で読み書きできる個数・読み書きのリクエスト）も実装する。機器の側で書けないエリアは `ReadOnly` にする
    - `Send()` は通信の失敗を error ではなく `CommandResult.Status` で返す。タイムアウトしたら接続を閉じる（遅れて届く応答と取り違えないため）。次の `Send()` でつなぎ直す
@@ -728,12 +732,21 @@ JavaScript（goja）でPLC動作を記述。
   - 読み取った値は型付きなので `ResultValue.Value` の文字列だけで返す（`Bit` / `Word` は入れない。ポーリングの表示形式の選択は出ない）。スカラーは「Value（Int16）」の 1 行、配列は型の行と要素ごとの行（1000 行まで）
   - 接続先の設定: エンドポイント URL・セキュリティポリシー（None / Basic256Sha256 / Aes128_Sha256_RsaOaep / Aes256_Sha256_RsaPss / ECC_nistP256 / ECC_nistP384）・セキュリティモード・ユーザー名とパスワード（空なら匿名）・タイムアウト。パスワードはプロジェクトにそのまま保存する
   - None 以外のポリシーでは、クライアントの証明書を exe と同じフォルダの `pki-client` に作る（サーバーの `pki` とは分ける）。サーバーの証明書は確かめずに受け入れる（`AutoAcceptUntrustedCertificates`）
+  - **ノードの参照**（`client_browse.go`）: NodeId の欄の「参照」ボタンで、アドレス空間をツリーでたどって選べる。`Browse(parent)` は親ノードの子（階層の参照の先。親が空なら Objects フォルダの子）を返す。コマンドと同じセッションを使う
+    - 1 回の呼び出しで送るのは、子の Browse（続きも読む）、子ごとに子があるかを調べる Browse（1 件だけ頼む。100 ノードずつ）、変数の DataType と ValueRank の Read（100 ノードずつ）。1 つの親について 2000 個まで
+    - 選べるのは変数のノード（`Selectable`）。Browse コマンドの欄だけは、どのノードも選べる（`BrowseAll`）
+    - `Fields`（`browseFields()`）: `nodeId` は NodeId。組み込み型の変数なら、Write の `dataType` と `rank`、Write（複数のノード）の 1 行 `items`（「NodeId : 型 := 」。配列は型に `[]`）も入れる。組み込み型でなければ、`items` は「NodeId := 」
   - **サブスクリプション**（`client_subscription.go`）: 監視項目 1 つが、1 つのノードの Value 属性の MonitoredItem（サンプリング間隔はサブスクリプションの間隔と同じ、キューは 1）。NodeId を 1 行に 1 つ入れると、行の数だけ監視項目ができる
     - コマンド（`Send`）とは別のセッションで動かす（コマンドのタイムアウトで接続を閉じても、監視が切れないようにするため）。`Connected()` は、どちらかがつながっていれば true
     - 接続が切れたら uastack がつなぎ直し（`AutoReconnect`）、サブスクリプションと MonitoredItem を作り直す。それでも続けられないとき（サーバーがサブスクリプションを捨てたなど）と、最初からつながらないときは、1〜5 秒おきに接続から作り直す
     - サーバーにないノードなど、サーバーが断った項目はその項目だけ `exception` にする（ほかの項目は監視できる）
     - 値の行は Read と同じ（`variantRows()`）。配列は型の行と要素ごとの行（`[2]`）、多次元配列は `[1][0]` の形
   - 変数とのマッピングには対応していない（`MappableClientFactory` はレジスタのエリアとアドレスが前提。ノードへのマッピングは別の仕組みが要る）
+- **アドレスの参照**（`BrowseClient()`、画面は `ClientBrowseDialog`）: `protocol.BrowsableClient` を実装するクライアントの接続先で、機器が持つアドレスの一覧（OPC UA ならノード）をツリーでたどって、入力欄に入れられる。ホストは一覧の意味を持たない（プロトコルが返す項目をそのまま画面に渡す）
+  - 画面は、`FieldDTO.browse` がある項目に「参照」ボタンを出す（`DynamicField` の `onBrowse`。コマンドのダイアログ・ポーリングの読み取り項目・サブスクリプションの監視項目）。子は、ツリーで開いたときに読む
+  - 入れ方（`applyBrowsePick()`）: `textarea` の項目は、チェックを付けたものを 1 行ずつ足す（同じ行は足さない）。ほかの項目は、選んだ 1 つで置き換え、同じフォームにある項目のうち `fields` に内容があるものにも入れる（OPC UA の Write なら、データ型とスカラー / 配列）
+  - 開く前に、保存していない接続先の設定を保存する（送信・ポーリングの開始と同じ）
+  - コマンドのダイアログの上に重ねて開く。開いている間、Esc と Enter は参照のダイアログのもの（コマンドのダイアログは閉じない・送らない）
 - **サブスクリプション**（`plc_service_client_subscription.go`）: 対応するプロトコル（`protocol.SubscriptionClientFactory`。いまは OPC UA だけ）の接続先だけが使える。接続先ごとに監視項目の一覧（200 個まで）と通知の間隔（50〜3600000 ms、既定 1000）を持ち、監視中は 1 つのゴルーチンが `RunSubscription()` を動かして、知らせ（値・状態）を項目に入れる
   - ポーリングとの違い: こちらから周期的に読まない。機器の側が値の変化を知らせる。コマンドの履歴にも入れない
   - 監視全体の状態（`state`）: `connecting`（つなごうとしている）/ `ok`（監視中）/ `error`（つながっていない。プロトコルの実装がつなぎ直している。理由は `error`）。停止中は空

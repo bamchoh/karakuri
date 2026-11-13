@@ -1,4 +1,5 @@
 import { application } from "../../wailsjs/go/models";
+import { FolderTree } from "lucide-react";
 
 // サーバー設定の 1 項目。プロトコルの実装が返す項目の定義（種類・選択肢・範囲）に合わせて入力欄を出す
 interface DynamicFieldProps {
@@ -8,6 +9,8 @@ interface DynamicFieldProps {
   disabled: boolean;
   serialPorts: string[];
   onRefreshPorts: () => void;
+  // 渡すと、値を機器のアドレスの一覧から選べる項目（field.browse）に「参照」ボタンを出す
+  onBrowse?: () => void;
 }
 
 export function DynamicField({
@@ -17,6 +20,7 @@ export function DynamicField({
   disabled,
   serialPorts,
   onRefreshPorts,
+  onBrowse,
 }: DynamicFieldProps) {
   const displayValue = value ?? field.default;
 
@@ -129,7 +133,23 @@ export function DynamicField({
       {field.description && (
         <div className="vscode-setting-description">{field.description}</div>
       )}
-      <div className="vscode-setting-control">{renderControl()}</div>
+      {field.browse && onBrowse ? (
+        <div className="vscode-setting-control field-with-browse">
+          {renderControl()}
+          <button
+            className="btn-secondary btn-small"
+            onClick={onBrowse}
+            disabled={disabled}
+            title="接続先の機器から一覧を読んで選ぶ"
+            aria-label={`${field.label} を参照`}
+          >
+            <FolderTree className="icon-left" size={12} />
+            参照
+          </button>
+        </div>
+      ) : (
+        <div className="vscode-setting-control">{renderControl()}</div>
+      )}
     </div>
   );
 }

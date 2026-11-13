@@ -31,7 +31,7 @@ var _ protocol.SubscribingClient = (*Client)(nil)
 // MonitoredItemFields は、監視項目を追加するときの入力項目を返す
 func (f *ClientFactory) MonitoredItemFields() []protocol.ConfigField {
 	return []protocol.ConfigField{{
-		Name: "nodeId", Label: "NodeId", Type: "textarea", Required: true, Default: "",
+		Name: "nodeId", Label: "NodeId", Type: "textarea", Required: true, Default: "", Browse: protocol.BrowseValues,
 		Description: nodeIDDescription + "いくつも監視するときは、1 行に 1 つずつ入れます（行の数だけ監視項目を追加します）。配列のノードは、要素ごとの値を出します。",
 	}}
 }

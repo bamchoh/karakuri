@@ -245,13 +245,14 @@ func writableType(name string) (ua.TypeID, bool) {
 
 const nodeIDDescription = "NodeId（例: ns=2;s=Motor1、i=2258）。ns= の番号はサーバーごとに決まります（ブラウズで調べられます）。"
 
-func nodeIDField(def string) protocol.ConfigField {
-	return protocol.ConfigField{Name: "nodeId", Label: "NodeId", Description: nodeIDDescription, Type: "text", Required: true, Default: def}
+// nodeIDField は、NodeId を 1 つ入れる欄。browse は、参照で選べるノード（protocol.BrowseValues / BrowseAll）
+func nodeIDField(def, browse string) protocol.ConfigField {
+	return protocol.ConfigField{Name: "nodeId", Label: "NodeId", Description: nodeIDDescription, Type: "text", Required: true, Default: def, Browse: browse}
 }
 
 // nodeIDsField は、NodeId をいくつも入れられる欄（1 行に 1 つ）
 func nodeIDsField(def string) protocol.ConfigField {
-	return protocol.ConfigField{Name: "nodeId", Label: "NodeId", Description: nodeIDDescription + "いくつも読むときは、1 行に 1 つずつ入れます（1 回のリクエストでまとめて読みます）。", Type: "textarea", Required: true, Default: def}
+	return protocol.ConfigField{Name: "nodeId", Label: "NodeId", Description: nodeIDDescription + "いくつも読むときは、1 行に 1 つずつ入れます（1 回のリクエストでまとめて読みます）。", Type: "textarea", Required: true, Default: def, Browse: protocol.BrowseValues}
 }
 
 const writeItemsDescription = "1 行に 1 つ、「NodeId := 値」の形で入れます（例: ns=2;s=Counter := 5）。" +
@@ -279,7 +280,7 @@ func (f *ClientFactory) Commands() []protocol.CommandDefinition {
 		{
 			ID: cmdWrite, DisplayName: "Write（ノードの値の書き込み）",
 			Fields: []protocol.ConfigField{
-				nodeIDField(""),
+				nodeIDField("", protocol.BrowseValues),
 				{Name: "dataType", Label: "データ型", Description: "ノードの型と同じ型を選びます（違うと、サーバーが BadTypeMismatch を返します）。", Type: "select", Required: true, Default: ua.TypeInt16.String(), Options: typeOptions},
 				{Name: "rank", Label: "スカラー / 配列", Type: "select", Required: true, Default: rankScalar, Options: []protocol.FieldOption{
 					{Value: rankScalar, Label: "スカラー"},
@@ -291,14 +292,14 @@ func (f *ClientFactory) Commands() []protocol.CommandDefinition {
 		{
 			ID: cmdWriteMulti, DisplayName: "Write（複数のノードへの書き込み）",
 			Fields: []protocol.ConfigField{
-				{Name: "items", Label: "書き込む内容", Description: writeItemsDescription, Type: "textarea", Required: true, Default: ""},
+				{Name: "items", Label: "書き込む内容", Description: writeItemsDescription, Type: "textarea", Required: true, Default: "", Browse: protocol.BrowseValues},
 				{Name: "dataType", Label: "データ型", Description: "行に型を書かなかったノードの型。", Type: "select", Required: true, Default: ua.TypeInt16.String(), Options: typeOptions},
 			},
 		},
 		{
 			ID: cmdBrowse, DisplayName: "Browse（子ノードの一覧）",
 			Fields: []protocol.ConfigField{
-				nodeIDField("i=85"), // Objects フォルダ
+				nodeIDField("i=85", protocol.BrowseAll), // Objects フォルダ
 			},
 		},
 	}

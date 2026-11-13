@@ -11,6 +11,7 @@ import { application } from "../../wailsjs/go/models";
 import { Play, Square, Trash2, SquarePlus } from "lucide-react";
 import { DynamicField } from "./DynamicField";
 import { clientStatusLabel, formatClientTime } from "./clientFormat";
+import { ClientBrowseDialog, applyBrowsePick } from "./ClientBrowseDialog";
 
 interface ClientSubscriptionViewProps {
   client: application.ClientDTO;
@@ -55,6 +56,10 @@ export function ClientSubscriptionView({
   const [editingInterval, setEditingInterval] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [addParams, setAddParams] = useState<Record<string, any> | null>(null);
+  // アドレスの一覧（参照のダイアログ）を開いている項目
+  const [browseField, setBrowseField] = useState<application.FieldDTO | null>(
+    null,
+  );
 
   const load = useCallback(async () => {
     try {
@@ -192,9 +197,22 @@ export function ClientSubscriptionView({
             disabled={false}
             serialPorts={noPorts}
             onRefreshPorts={noop}
+            onBrowse={async () => {
+              if (await beforeStart()) setBrowseField(field);
+            }}
           />
         ))}
       </div>
+      {browseField && (
+        <ClientBrowseDialog
+          clientId={client.id}
+          field={browseField}
+          onPick={(picked) =>
+            setAddParams(applyBrowsePick(browseField, fields, params, picked))
+          }
+          onClose={() => setBrowseField(null)}
+        />
+      )}
       <div className="client-send-row">
         <button className="btn-secondary" onClick={handleAdd}>
           <SquarePlus className="icon-left" size={14} />

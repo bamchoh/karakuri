@@ -30,6 +30,8 @@ type FieldDTO struct {
 	Max         *int          `json:"max,omitempty"`
 	ShowWhen    *ConditionDTO `json:"showWhen,omitempty"`
 	Category    string        `json:"category,omitempty"` // カテゴリ名（空の場合はカテゴリなし）
+	// クライアントの入力項目で、値を機器のアドレスの一覧から選べる（"values": 値を持つアドレスだけ / "all": どれでも。空なら選べない）
+	Browse string `json:"browse,omitempty"`
 }
 
 // OptionDTO はセレクトフィールドのオプション

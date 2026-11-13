@@ -20,6 +20,7 @@ import {
   formatClientElapsed,
   formatClientTime,
 } from "./clientFormat";
+import { ClientBrowseDialog, applyBrowsePick } from "./ClientBrowseDialog";
 
 interface ClientPollingViewProps {
   client: application.ClientDTO;
@@ -85,6 +86,10 @@ export function ClientPollingView({
   const [editingThreshold, setEditingThreshold] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [addCommandId, setAddCommandId] = useState(pollable[0]?.id ?? "");
+  // アドレスの一覧（参照のダイアログ）を開いている項目
+  const [browseField, setBrowseField] = useState<application.FieldDTO | null>(
+    null,
+  );
   const [addParams, setAddParams] = useState<
     Record<string, Record<string, any>>
   >({});
@@ -327,9 +332,30 @@ export function ClientPollingView({
             disabled={false}
             serialPorts={noPorts}
             onRefreshPorts={noop}
+            onBrowse={async () => {
+              if (await beforeStart()) setBrowseField(field);
+            }}
           />
         ))}
       </div>
+      {browseField && addCommand && (
+        <ClientBrowseDialog
+          clientId={client.id}
+          field={browseField}
+          onPick={(picked) =>
+            setAddParams((prev) => ({
+              ...prev,
+              [addCommand.id]: applyBrowsePick(
+                browseField,
+                addCommand.fields,
+                params,
+                picked,
+              ),
+            }))
+          }
+          onClose={() => setBrowseField(null)}
+        />
+      )}
       <div className="client-send-row">
         <button
           className="btn-secondary"

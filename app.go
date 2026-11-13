@@ -386,6 +386,11 @@ func (a *App) StopClientPolling(id string) error {
 	return a.plcService.StopClientPolling(id)
 }
 
+// BrowseClient は、接続先の機器が持つアドレス（OPC UA ならノード）のうち、parent の子を返す（parent が空なら、いちばん上）
+func (a *App) BrowseClient(id string, parent string) ([]application.ClientBrowseEntryDTO, error) {
+	return a.plcService.BrowseClient(id, parent)
+}
+
 // GetClientSubscription は接続先のサブスクリプション（値の変化の通知）の状態を返す
 func (a *App) GetClientSubscription(id string) (*application.ClientSubscriptionDTO, error) {
 	return a.plcService.GetClientSubscription(id)
