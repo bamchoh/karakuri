@@ -13,10 +13,62 @@ const LEVEL_LABELS: Record<string, string> = {
   error: "エラー",
 };
 
+// ログの行き先（AppLogDTO.target）。"server:<プロトコルタイプ>" / "client:<接続先の ID>" / "script:<スクリプトの ID>"
+export type LogTargetKind = "server" | "client" | "script";
+export interface LogTarget {
+  kind: LogTargetKind;
+  id: string;
+}
+
+export function parseLogTarget(target: string | undefined): LogTarget | null {
+  const i = (target ?? "").indexOf(":");
+  if (i <= 0) return null;
+  const kind = target!.slice(0, i);
+  const id = target!.slice(i + 1);
+  if ((kind !== "server" && kind !== "client" && kind !== "script") || !id) {
+    return null;
+  }
+  return { kind, id };
+}
+
+const TARGET_TITLES: Record<LogTargetKind, string> = {
+  server: "通信画面で、このサーバーを開く",
+  client: "通信画面で、この接続先を開く",
+  script: "スクリプトのページで、このスクリプトを開く",
+};
+
+interface Props {
+  // ログの行の出どころを押したときに呼ぶ（該当のサーバー・接続先・スクリプトの画面に移る）
+  onNavigate?: (target: LogTarget) => void;
+}
+
 function formatTime(at: number): string {
   const d = new Date(at);
   const p = (n: number, width = 2) => String(n).padStart(width, "0");
   return `${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}.${p(d.getMilliseconds(), 3)}`;
+}
+
+// ログの出どころ。行き先があれば、押すとその画面に移るボタンにする
+function LogSource({
+  log,
+  onNavigate,
+}: {
+  log: application.AppLogDTO;
+  onNavigate?: (target: LogTarget) => void;
+}) {
+  const target = parseLogTarget(log.target);
+  if (!target || !onNavigate) {
+    return <span className="app-log-source">[{log.source}]</span>;
+  }
+  return (
+    <button
+      className="app-log-source app-log-link"
+      title={TARGET_TITLES[target.kind]}
+      onClick={() => onNavigate(target)}
+    >
+      [{log.source}]
+    </button>
+  );
 }
 
 // アプリ全体のログの欄。どのページでも画面の下に出す（開閉できる）。
@@ -25,8 +77,9 @@ function formatTime(at: number): string {
 //
 // 開いたときに持っているログを読み、以後は Wails イベント plc:app-log-added で 1 件ずつ受け取る
 // （消されたときは plc:app-log-cleared）。
-// 閉じている間に届いた警告・エラーは、見出しに件数を出す
-export function AppLogPanel() {
+// 閉じている間に届いた警告・エラーは、見出しに件数を出す。
+// 行き先のあるログ（サーバー・接続先・スクリプトのもの）は、出どころを押すと、その画面に移る
+export function AppLogPanel({ onNavigate }: Props) {
   const [logs, setLogs] = useState<application.AppLogDTO[]>([]);
   const [open, setOpen] = useState(false);
   // 閉じている間に届いた警告・エラーの件数（開くと 0 に戻す）
@@ -153,7 +206,7 @@ export function AppLogPanel() {
                 <span className="app-log-level">
                   {LEVEL_LABELS[log.level] ?? log.level}
                 </span>
-                <span className="app-log-source">[{log.source}]</span>
+                <LogSource log={log} onNavigate={onNavigate} />
                 <span className="app-log-message">{log.message}</span>
               </div>
             ))

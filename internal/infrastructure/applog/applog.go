@@ -28,10 +28,13 @@ const DefaultMaxEntries = 1000
 
 // Entry はログ 1 件
 type Entry struct {
-	ID      int64 // 追加した順の番号（1 から。消しても戻らない）
-	At      time.Time
-	Level   Level
-	Source  string // 出どころ（"Modbus TCP"、"接続先: PLC-A"、"プロジェクト" など）
+	ID     int64 // 追加した順の番号（1 から。消しても戻らない）
+	At     time.Time
+	Level  Level
+	Source string // 出どころ（"Modbus TCP"、"接続先: PLC-A"、"プロジェクト" など）
+	// Target は、このログに関係するものの場所（"server:<プロトコルタイプ>" / "client:<接続先の ID>" / "script:<スクリプトの ID>"）。
+	// 画面は、ログの行からその場所に移れるようにする。なければ空
+	Target  string
 	Message string
 }
 
@@ -62,9 +65,13 @@ func (l *Log) SetOnAdded(fn func(Entry)) {
 
 // Add はログを 1 件追加する
 func (l *Log) Add(level Level, source, message string) {
+	l.add(level, source, "", message)
+}
+
+func (l *Log) add(level Level, source, target, message string) {
 	l.mu.Lock()
 	l.nextID++
-	entry := Entry{ID: l.nextID, At: time.Now(), Level: level, Source: source, Message: message}
+	entry := Entry{ID: l.nextID, At: time.Now(), Level: level, Source: source, Target: target, Message: message}
 	l.entries = append(l.entries, entry)
 	if over := len(l.entries) - l.max; over > 0 {
 		l.entries = append([]Entry(nil), l.entries[over:]...)
@@ -96,6 +103,39 @@ func (l *Log) Result(source, okMessage, failMessage string, err error) {
 		return
 	}
 	l.Add(LevelInfo, source, okMessage)
+}
+
+// Scope は、出どころと行き先を決めたロガー。サーバー・接続先・スクリプトごとに作って使う
+type Scope struct {
+	log    *Log
+	source string
+	target string
+}
+
+// Scope は、出どころと行き先（Entry.Target。なければ空）を決めたロガーを返す
+func (l *Log) Scope(source, target string) Scope {
+	return Scope{log: l, source: source, target: target}
+}
+
+func (s Scope) Infof(format string, args ...interface{}) {
+	s.log.add(LevelInfo, s.source, s.target, fmt.Sprintf(format, args...))
+}
+
+func (s Scope) Warnf(format string, args ...interface{}) {
+	s.log.add(LevelWarn, s.source, s.target, fmt.Sprintf(format, args...))
+}
+
+func (s Scope) Errorf(format string, args ...interface{}) {
+	s.log.add(LevelError, s.source, s.target, fmt.Sprintf(format, args...))
+}
+
+// Result は、操作の結果を 1 件のログにする（Log.Result と同じ）
+func (s Scope) Result(okMessage, failMessage string, err error) {
+	if err != nil {
+		s.Errorf("%s: %v", failMessage, err)
+		return
+	}
+	s.log.add(LevelInfo, s.source, s.target, okMessage)
 }
 
 // Entries は、持っているログを古い順に返す（コピー）

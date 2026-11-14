@@ -205,7 +205,7 @@ func (s *PLCService) AddClient(protocolType, name string, settings map[string]in
 		m.log.Errorf("接続先", "接続先を追加できませんでした: %v", err)
 		return nil, err
 	}
-	m.log.Infof(clientLogSource(dto.Name), "接続先を追加しました（%s）", dto.DisplayName)
+	m.clientLog(dto.ID, dto.Name).Infof("接続先を追加しました（%s）", dto.DisplayName)
 	return dto, nil
 }
 
@@ -345,7 +345,7 @@ func (s *PLCService) RemoveClient(id string) error {
 	// この接続先へのマッピングを、変数から外す
 	s.removeMappingsForKey(clientMappingKey(id))
 	go s.emitVariablesChanged()
-	m.log.Infof(clientLogSource(inst.name), "接続先を削除しました")
+	m.clientLog(inst.id, inst.name).Infof("接続先を削除しました")
 	return nil
 }
 
@@ -445,9 +445,9 @@ func (s *PLCService) sendAndLog(id string, req []byte, label string) (*ClientCom
 	switch result.Status {
 	case protocol.CommandOK:
 	case protocol.CommandException:
-		m.log.Warnf(clientLogSource(name), "コマンドが異常終了しました: %s（%s）", result.Summary, result.Error)
+		m.clientLog(id, name).Warnf("コマンドが異常終了しました: %s（%s）", result.Summary, result.Error)
 	default:
-		m.log.Errorf(clientLogSource(name), "コマンドを送れませんでした: %s（%s）", result.Summary, result.Error)
+		m.clientLog(id, name).Errorf("コマンドを送れませんでした: %s（%s）", result.Summary, result.Error)
 	}
 
 	return &entry, nil

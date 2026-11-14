@@ -43,6 +43,9 @@ export interface ServerPanelHandle {
 }
 interface ServerPanelProps {
   onDirtyChange?: (dirty: boolean) => void;
+  // 選んでほしいサーバー・接続先（ログの行から移ってきたとき）。選んだら onSelectRequestHandled を呼ぶ
+  selectRequest?: { kind: "server" | "client"; id: string } | null;
+  onSelectRequestHandled?: () => void;
 }
 
 // 選んでいるもの。サーバーはプロトコルタイプ、クライアントは接続先の ID で指す
@@ -52,7 +55,10 @@ const sameSelection = (a: Selection, b: Selection) =>
   a?.kind === b?.kind && a?.id === b?.id;
 
 export const ServerPanel = forwardRef<ServerPanelHandle, ServerPanelProps>(
-  function ServerPanel({ onDirtyChange }, ref) {
+  function ServerPanel(
+    { onDirtyChange, selectRequest, onSelectRequestHandled },
+    ref,
+  ) {
     const [serverInstances, setServerInstances] = useState<
       application.ServerInstanceDTO[]
     >([]);
@@ -214,6 +220,18 @@ export const ServerPanel = forwardRef<ServerPanelHandle, ServerPanelProps>(
         "保存してから切り替え",
       );
     };
+
+    // ログの行から移ってきたときは、そのサーバー・接続先を選ぶ（一覧を読み込んでから。
+    // 右側に保存していない変更があれば、ほかの切り替えと同じように確認する）
+    useEffect(() => {
+      if (!selectRequest || !serversLoaded || !clientsLoaded) return;
+      const exists =
+        selectRequest.kind === "server"
+          ? serverInstances.some((i) => i.protocolType === selectRequest.id)
+          : clients.some((c) => c.id === selectRequest.id);
+      if (exists) handleSelect(selectRequest);
+      onSelectRequestHandled?.();
+    }, [selectRequest, serversLoaded, clientsLoaded]);
 
     const handleStart = (protocolType: string) => {
       const isSelected = sameSelection(selected, {

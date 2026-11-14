@@ -46,6 +46,8 @@ type ScriptEngine struct {
 	scripts       map[string]*runningScript
 	consoleLogs   []ConsoleLogEntry
 	onLogAdded    func(ConsoleLogEntry)
+	// onRunStateChanged は、周期実行のスクリプトでエラーが起き始めたとき・解消したときに呼ぶ（SetOnRunStateChanged）
+	onRunStateChanged func(scriptID, scriptName, errMsg string)
 	// statusOf は、外部の機器にマッピングした変数の同期の状態を返す（plc.getVariableStatus 用）。
 	// 変数 ID を受け取り、マッピングしていなければ nil を返す
 	statusOf func(variableID string) map[string]any
@@ -603,12 +605,33 @@ func (e *ScriptEngine) startScript(s *script.Script) error {
 				if errMsg != "" && errMsg != lastErr {
 					e.addLog(id, name, LogLevelError, errMsg)
 				}
+				// エラーが起き始めたときと、解消したときに知らせる（別のエラーに変わっただけなら知らせない）
+				if (errMsg != "") != (lastErr != "") {
+					e.notifyRunState(id, name, errMsg)
+				}
 				lastErr = errMsg
 			}
 		}
 	}()
 
 	return nil
+}
+
+// SetOnRunStateChanged は、周期実行のスクリプトで、エラーが起き始めたとき（errMsg がエラーの内容）と
+// 解消したとき（errMsg が空）に呼ぶ関数を設定する。エラーが続いている間は呼ばない
+func (e *ScriptEngine) SetOnRunStateChanged(cb func(scriptID, scriptName, errMsg string)) {
+	e.mu.Lock()
+	e.onRunStateChanged = cb
+	e.mu.Unlock()
+}
+
+func (e *ScriptEngine) notifyRunState(scriptID, scriptName, errMsg string) {
+	e.mu.Lock()
+	cb := e.onRunStateChanged
+	e.mu.Unlock()
+	if cb != nil {
+		cb(scriptID, scriptName, errMsg)
+	}
 }
 
 // runProgram はプログラムを 1 回実行し、エラーの内容を返す（成功なら空）。panic もエラーとして返す

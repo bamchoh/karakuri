@@ -317,6 +317,23 @@
   flex-shrink: 0;
 }
 
+/* 行き先のあるログの出どころ（押すと、その画面に移る） */
+.app-log-link {
+  padding: 0;
+  border: none;
+  background: transparent;
+  font: inherit;
+  cursor: pointer;
+  text-decoration: underline;
+  text-decoration-style: dotted;
+  text-underline-offset: 3px;
+}
+
+.app-log-link:hover {
+  color: #86efac;
+  text-decoration-style: solid;
+}
+
 .app-log-message {
   color: #d4d4d4;
 }

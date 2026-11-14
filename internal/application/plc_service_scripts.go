@@ -3,6 +3,7 @@ package application
 import (
 	"fmt"
 	"sort"
+	"strings"
 	"time"
 
 	"karakuri/internal/domain/script"
@@ -53,6 +54,9 @@ func (s *PLCService) UpdateScript(id, name, code string, intervalMs int) error {
 	var startErr error
 	if wasRunning {
 		startErr = s.scriptEngine.StartScript(sc)
+		if startErr != nil {
+			s.scriptLog(id, name).Errorf("スクリプトを停止しました（保存した内容で開始できません: %v）", startErr)
+		}
 	}
 
 	go s.emitScriptsChanged()
@@ -65,11 +69,14 @@ func (s *PLCService) DeleteScript(id string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	if _, ok := s.scripts[id]; !ok {
+	sc, ok := s.scripts[id]
+	if !ok {
 		return fmt.Errorf("script not found: %s", id)
 	}
 
-	s.scriptEngine.StopScript(id)
+	if err := s.scriptEngine.StopScript(id); err == nil {
+		s.scriptLog(id, sc.Name).Infof("スクリプトを停止しました（削除したため）")
+	}
 	delete(s.scripts, id)
 	go s.emitScriptsChanged()
 	return nil
@@ -115,20 +122,43 @@ func (s *PLCService) StartScript(id string) error {
 		return fmt.Errorf("script not found: %s", id)
 	}
 
+	// sc は、保存（UpdateScript）で書き換えられることがあるので、ログに使う値は先に取っておく
+	name, intervalMs := sc.Name, sc.Interval.Milliseconds()
 	if err := s.scriptEngine.StartScript(sc); err != nil {
+		s.scriptLog(id, name).Errorf("スクリプトを開始できませんでした: %v", err)
 		return err
 	}
+	s.scriptLog(id, name).Infof("スクリプトを開始しました（周期 %d ms）", intervalMs)
 	go s.emitScriptsChanged()
 	return nil
 }
 
 // StopScript はスクリプトを停止する
 func (s *PLCService) StopScript(id string) error {
+	s.mu.RLock()
+	name := id
+	if sc, ok := s.scripts[id]; ok {
+		name = sc.Name
+	}
+	s.mu.RUnlock()
+
 	if err := s.scriptEngine.StopScript(id); err != nil {
 		return err
 	}
+	s.scriptLog(id, name).Infof("スクリプトを停止しました")
 	go s.emitScriptsChanged()
 	return nil
+}
+
+// logScriptRunState は、周期実行のスクリプトでエラーが起き始めたとき・解消したときに、アプリ全体のログに出す。
+// 詳細（エラーの全文や console.log の出力）は、スクリプトのコンソールに出ている
+func (s *PLCService) logScriptRunState(scriptID, scriptName, errMsg string) {
+	if errMsg == "" {
+		s.scriptLog(scriptID, scriptName).Infof("スクリプトのエラーが解消しました")
+		return
+	}
+	first, _, _ := strings.Cut(errMsg, "\n")
+	s.scriptLog(scriptID, scriptName).Errorf("スクリプトでエラーが起きています: %s", first)
 }
 
 // RunScriptOnce はコードを 1 回だけ実行する（保存も周期実行もしない）。結果とエラーはコンソールにも出る
