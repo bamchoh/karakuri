@@ -14,6 +14,7 @@ import (
 	"karakuri/internal/domain/protocol"
 	"karakuri/internal/domain/variable"
 	"karakuri/internal/infrastructure/adapter"
+	"karakuri/internal/infrastructure/applog"
 )
 
 // === クライアント（外部の機器へつなぐ側） ===
@@ -33,6 +34,7 @@ type clientInstance struct {
 	order        int
 
 	// ポーリング（plc_service_client_polling.go）
+	pollFailing    bool // 直前の周で通信に失敗したか（ログを、失敗し始めたときと戻ったときだけ出すため）
 	pollIntervalMs int
 	pollItems      []*pollItem
 	pollSeq        int
@@ -65,7 +67,9 @@ type clientManager struct {
 	clients      map[string]*clientInstance
 	seq          int
 	logs         []ClientCommandLogDTO // 古い順。最大 maxClientCommandLogs 件
-	logSeq       int64
+	// log は、アプリ全体のログ（作ったあとは変えない。nil にはしない）
+	log    *applog.Log
+	logSeq int64
 }
 
 func newClientManager(varStore *variable.VariableStore) *clientManager {
@@ -73,6 +77,7 @@ func newClientManager(varStore *variable.VariableStore) *clientManager {
 		varStore:  varStore,
 		factories: make(map[protocol.ProtocolType]protocol.ClientFactory),
 		clients:   make(map[string]*clientInstance),
+		log:       applog.New(applog.DefaultMaxEntries),
 	}
 }
 
@@ -195,7 +200,13 @@ func (s *PLCService) AddClient(protocolType, name string, settings map[string]in
 	m := s.clients
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	return m.addLocked("", protocolType, name, settings)
+	dto, err := m.addLocked("", protocolType, name, settings)
+	if err != nil {
+		m.log.Errorf("接続先", "接続先を追加できませんでした: %v", err)
+		return nil, err
+	}
+	m.log.Infof(clientLogSource(dto.Name), "接続先を追加しました（%s）", dto.DisplayName)
+	return dto, nil
 }
 
 // addLocked は接続先を追加する。id が空なら新しい ID を作る（プロジェクトの読み込みでは、保存した ID を使う。
@@ -334,6 +345,7 @@ func (s *PLCService) RemoveClient(id string) error {
 	// この接続先へのマッピングを、変数から外す
 	s.removeMappingsForKey(clientMappingKey(id))
 	go s.emitVariablesChanged()
+	m.log.Infof(clientLogSource(inst.name), "接続先を削除しました")
 	return nil
 }
 
@@ -428,6 +440,15 @@ func (s *PLCService) sendAndLog(id string, req []byte, label string) (*ClientCom
 		m.logs = append([]ClientCommandLogDTO(nil), m.logs[over:]...)
 	}
 	m.mu.Unlock()
+
+	// 失敗したコマンドは、アプリ全体のログにも出す（機器が断ったものは警告、通信の失敗はエラー）
+	switch result.Status {
+	case protocol.CommandOK:
+	case protocol.CommandException:
+		m.log.Warnf(clientLogSource(name), "コマンドが異常終了しました: %s（%s）", result.Summary, result.Error)
+	default:
+		m.log.Errorf(clientLogSource(name), "コマンドを送れませんでした: %s（%s）", result.Summary, result.Error)
+	}
 
 	return &entry, nil
 }

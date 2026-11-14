@@ -1,5 +1,25 @@
 export namespace application {
 	
+	export class AppLogDTO {
+	    id: number;
+	    at: number;
+	    level: string;
+	    source: string;
+	    message: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new AppLogDTO(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.at = source["at"];
+	        this.level = source["level"];
+	        this.source = source["source"];
+	        this.message = source["message"];
+	    }
+	}
 	export class CapabilitiesDTO {
 	    supportsUnitId: boolean;
 	    unitIdMin?: number;

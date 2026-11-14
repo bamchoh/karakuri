@@ -128,7 +128,10 @@ func (s *PLCService) ExportProject() *ProjectDataDTO {
 }
 
 // ImportProject はプロジェクト全体のデータをインポートする
-func (s *PLCService) ImportProject(data *ProjectDataDTO) error {
+func (s *PLCService) ImportProject(data *ProjectDataDTO) (err error) {
+	defer func() {
+		s.appLog.Result(logSourceProject, "プロジェクトを読み込みました", "プロジェクトを読み込めませんでした", err)
+	}()
 	s.mu.Lock()
 	defer s.mu.Unlock()
 

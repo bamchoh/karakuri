@@ -19,6 +19,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **レジスタ操作**: GUIからメモリエリアの値を直接操作可能
 - **モニタリング**: 任意のレジスタをリアルタイム監視・書き込み（ドラッグ&ドロップ並べ替え対応）
 - **プロトコルマッピング**: 変数を複数プロトコルのメモリアドレスにマッピング可能
+- **アプリ全体のログ**: サーバーの起動・停止、クライアントの通信エラーなどを、どのページからも画面の下の欄で見られる
 - **REST HTTP API**: アプリをネットワーク経由で外部から操作可能（デフォルトポート 8765）。サーバー管理・レジスタ読み書き・変数管理・プロジェクトエクスポート/インポートに対応
 - **クライアント機能**: Karakuri から外部の機器（Modbus TCP サーバー・OPC UA サーバー）につないで、コマンドを送る。コマンド（Modbus はファンクションコード、OPC UA は Read / Write / Browse）を選んで組み立てる方式と、16 進（Modbus は PDU、OPC UA はサービスのリクエスト本体）で直接入れる方式がある。送受信のバイト列・応答の解釈・履歴を表示する。読み取り項目を周期的に読むポーリングもできる。OPC UA は、サブスクリプション（値が変わったときに機器の側から知らせが届く）にも対応する。変数を接続先のアドレスにマッピングすると、ポーリング中に変数と同期する（通信エラー・書き込み未反映の状態を表示。Modbus TCP だけ）
 
@@ -83,7 +84,7 @@ go build ./...
 
 `frontend/e2e/` に、ブラウザで画面を操作して確認するテストがある。`task dev` が立てる開発用サーバー（`http://localhost:34115`）に接続するため、Go 側の API とプロトコルの実装を含めた動作を確認できる。手順と注意は `frontend/e2e/README.md` を参照。
 
-- 画面ごとのテスト: FINS（「ワード.ビット」のアドレス・項目の表示条件）`fins.spec.ts`、通信画面（サーバー）`server-panel.spec.ts`、変数画面 `variable-dialogs.spec.ts` / `node-publishing.spec.ts`、サーバーの「レジスタ」「モニタリング」のタブ `register-panel.spec.ts` / `monitoring.spec.ts`、スクリプト画面 `script-panel.spec.ts`、通信画面（クライアント）`client-panel.spec.ts` / `client-polling.spec.ts` / `client-mapping.spec.ts` / `client-saved-commands.spec.ts` / `client-opcua.spec.ts`
+- 画面ごとのテスト: アプリ全体のログ `app-log.spec.ts`、FINS（「ワード.ビット」のアドレス・項目の表示条件）`fins.spec.ts`、通信画面（サーバー）`server-panel.spec.ts`、変数画面 `variable-dialogs.spec.ts` / `node-publishing.spec.ts`、サーバーの「レジスタ」「モニタリング」のタブ `register-panel.spec.ts` / `monitoring.spec.ts`、スクリプト画面 `script-panel.spec.ts`、通信画面（クライアント）`client-panel.spec.ts` / `client-polling.spec.ts` / `client-mapping.spec.ts` / `client-saved-commands.spec.ts` / `client-opcua.spec.ts`
 - 画面を変更したら、該当するテストを実行する（なければ追加する）。`shot()` で撮ったスクリーンショット（`frontend/e2e/.screenshots/`）で見た目も確認する
 - データの準備は `api(page, "メソッド名", ...)` で Go 側の API を直接呼び、確認したい操作だけを画面で行う
 - **テストはアプリのサーバー・変数・モニタリング項目・スクリプトをすべて削除する。** 開発サーバーは `KARAKURI_CONFIG_DIR` を一時フォルダに向けて起動する
@@ -148,6 +149,7 @@ internal/
 │   ├── plc_service_project.go    # プロジェクト Export/Import
 │   ├── plc_service_monitoring.go # モニタリング項目と設定ファイル
 │   ├── plc_service_variables.go  # 変数・マッピング・ノード公開設定・構造体型
+│   ├── plc_service_applog.go     # アプリ全体のログ（取得・消去・画面への通知）
 │   ├── app_events.go             # Wails イベントの送信（WailsAppStateEmitter）と変数変更の間引き
 │   └── dto.go                    # DTO定義（ProtocolSchemaDTO, MonitoringItemDTO等）
 ├── protocols/        # プロトコルの実装（プロトコル固有のコードはすべてここ）
@@ -187,6 +189,7 @@ internal/
     ├── httpapi/      # REST HTTP APIサーバー実装
     │   └── server.go       # HTTPAPIServer（net/http ServeMux使用）
     ├── appconfig/    # 設定フォルダの決定（旧フォルダからの移行を含む）
+    ├── applog/       # アプリ全体のログの入れもの（直近 1000 件）と、標準のログ（log パッケージ）を取り込む Writer
     ├── adapter/      # アダプター層
     │   ├── variable_datastore.go       # VariableBackedDataStore（変数↔DataStore双方向同期）
     │   ├── variable_store_accessor.go  # VariableStoreAccessor 実装（ノード公開型プロトコルが変数を読み書きする）
@@ -302,7 +305,8 @@ frontend/src/
 │   ├── ClientPollingView.tsx   # ポーリング（周期・読み取り項目の追加・最後の結果と値）
 │   ├── ClientBrowseDialog.tsx  # 機器のアドレス（OPC UA ならノード）をツリーでたどって選ぶダイアログ。選んだものを入力欄に入れる `applyBrowsePick()` もここ
 │   ├── ClientSubscriptionView.tsx # サブスクリプション（通知の間隔・監視項目の追加・届いた値）。対応するプロトコルの接続先だけ
-│   └── clientFormat.ts         # クライアント（通信画面の右側）で共通の表示の書式（状態の名前・時刻・かかった時間）
+│   ├── clientFormat.ts         # クライアント（通信画面の右側）で共通の表示の書式（状態の名前・時刻・かかった時間）
+│   └── AppLogPanel.tsx     # アプリ全体のログの欄（どのページでも画面の下に出す。開閉できる）
 └── App.tsx                 # タブベースのメインUI
 ```
 
@@ -820,6 +824,25 @@ JavaScript（goja）でPLC動作を記述。
 - **未実装**: タイマ・カウンタの動作（現在値とアップフラグは、書かれた値を持つだけ。時間で進まない）、EM のカレントバンクの切り替え、運転モードの切り替え、ネットワークをまたぐ中継、シリアル（Host Link）
 - **確認していないこと**: 実機・他社製の FINS クライアントとの接続（テストは、Karakuri のクライアントとサーバーの組み合わせと、フレームのバイト列）
 - **テスト**: `internal/protocols/fins/fins_test.go` / `area_test.go`（全エリアをクライアントから読み書きする）、`integration_test.go` の `TestFINS_*` / `TestFINSClient_VariableMapping`、画面は `fins.spec.ts`
+
+### アプリ全体のログ
+
+サーバーの起動・停止やクライアントの通信エラーなど、アプリの出来事を 1 か所で見られるようにしたもの。スクリプトのコンソール（`console.log` の出力）とは別で、そちらはスクリプトのページに残してある。
+
+- **入れもの**（`internal/infrastructure/applog`）: 直近 1000 件をメモリに持つ（ファイルには残さない）。1 件は、番号（追加した順）・時刻・種類（`info` / `warn` / `error`）・出どころ・メッセージ
+- **出すもの**（`PLCService` と `clientManager` が `appLog` に足す）
+  - サーバー（出どころはプロトコルの表示名）: 追加・削除・起動・停止・設定の変更と、それぞれの失敗。止まっているサーバーを止めたときは出さない
+  - クライアント（出どころは「接続先: 名前」）: 接続先の追加・削除、失敗したコマンド（機器が断ったものは警告、通信の失敗はエラー。成功は出さない）、ポーリングとサブスクリプションの開始・停止
+    - ポーリングの通信エラーとサブスクリプションの切断は、**起き始めたときと戻ったときだけ**出す（毎周・つなぎ直しのたびには出さない）
+  - プロジェクト: 読み込み（`ImportProject`）と保存（`app.go` の `ExportProject`）
+  - HTTP API（`app.go`）: 起動・ポートの変更・失敗
+  - 標準のログ（`log` パッケージ）: `app.go` が `log.SetOutput` で取り込む（`applog.Log.Writer()`。行の先頭の `[名前] ` を出どころにし、日時は取り除く）。OPC UA のライブラリのログ（セッションの作成など）は、出どころ `opcua` で出る
+- **新しくログを出すとき**: 操作の結果なら `s.appLog.Result(出どころ, 成功の文, 失敗の文, err)`。`serverLogSource()` は `s.mu` を取るので、`s.mu` を持ったまま呼ばない（関数の最初の defer に書けば、ロックを外したあとに走る）。周期的に起きることは、状態が変わったときだけ出す
+- **画面への通知**: 追加は Wails イベント `plc:app-log-added`、全部消したときは `plc:app-log-cleared`。ログはロックを持ったまま足されることがあるので、`app.go` がチャネルを通して別のゴルーチンから順番に送る
+- **画面**（`AppLogPanel`）: `App.tsx` がどのページでも画面の下に出す。閉じている間は、件数・最後の 1 件・その間に届いた警告とエラーの件数を見出しに出す。開くと一覧（新しいログで下までスクロール）と、全部消すボタン
+  - 開いたときに `GetAppLogs()` で読み、以後はイベントで受け取る（重なった分は番号で除く）
+- **API**: `GetAppLogs()`、`ClearAppLogs()`
+- **テスト**: `internal/infrastructure/applog/applog_test.go`、`internal/application/plc_service_applog_test.go`、画面は `app-log.spec.ts`。画面テストの `resetApp()` は、最後にログも消す
 
 ### REST HTTP API 実装
 

@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
+	"log"
 	"os"
 	"sort"
 
@@ -17,6 +19,13 @@ import (
 )
 
 const defaultHTTPAPIPort = 8765
+
+// アプリ全体のログの出どころ
+const (
+	logSourceSystem  = "システム"
+	logSourceHTTPAPI = "HTTP API"
+	logSourceProject = "プロジェクト"
+)
 
 // App struct
 type App struct {
@@ -50,6 +59,29 @@ func (a *App) startup(ctx context.Context) {
 		appEmitter.EmitConsoleLogAdded(entry)
 	})
 
+	// アプリ全体のログを、画面に知らせる。標準のログ（プロトコルの実装やライブラリが出すもの）も取り込む
+	// ログは、ロックを持ったまま追加されることがあるので、画面への通知は別のゴルーチンから順番に送る
+	// entry が nil なら「すべて消した」の知らせ
+	logEvents := make(chan *application.AppLogDTO, 1024)
+	go func() {
+		for entry := range logEvents {
+			if entry == nil {
+				appEmitter.EmitAppLogCleared()
+			} else {
+				appEmitter.EmitAppLogAdded(*entry)
+			}
+		}
+	}()
+	a.plcService.SetAppLogCallbacks(func(entry application.AppLogDTO) {
+		select {
+		case logEvents <- &entry:
+		default: // あふれた分は通知しない（ログ自体は残っていて、画面を開き直すと読める）
+		}
+	}, func() {
+		logEvents <- nil
+	})
+	log.SetOutput(io.MultiWriter(os.Stderr, a.plcService.AppLog().Writer(logSourceSystem)))
+
 	// 組み込みのプロトコルを登録する
 	for _, factory := range protocols.Factories() {
 		a.plcService.RegisterFactory(factory)
@@ -60,9 +92,9 @@ func (a *App) startup(ctx context.Context) {
 
 	// REST HTTP API サーバーを起動
 	if err := a.httpAPI.Start(); err != nil {
-		fmt.Printf("HTTP API サーバーの起動に失敗しました: %v\n", err)
+		a.plcService.AppLog().Errorf(logSourceHTTPAPI, "HTTP API サーバーの起動に失敗しました: %v", err)
 	} else {
-		fmt.Printf("HTTP API サーバーを起動しました: http://localhost:%d/api\n", a.httpAPIPort)
+		a.plcService.AppLog().Infof(logSourceHTTPAPI, "HTTP API サーバーを起動しました: http://localhost:%d/api", a.httpAPIPort)
 	}
 }
 
@@ -88,9 +120,12 @@ func (a *App) SetHTTPAPIPort(port int) error {
 		return err
 	}
 	if err := a.httpAPI.Restart(port); err != nil {
-		return fmt.Errorf("ポート %d でHTTP APIサーバーを起動できませんでした: %w", port, err)
+		err = fmt.Errorf("ポート %d でHTTP APIサーバーを起動できませんでした: %w", port, err)
+		a.plcService.AppLog().Errorf(logSourceHTTPAPI, "%v", err)
+		return err
 	}
 	a.httpAPIPort = port
+	a.plcService.AppLog().Infof(logSourceHTTPAPI, "ポートを %d に変更しました: http://localhost:%d/api", port, port)
 	return nil
 }
 
@@ -282,6 +317,16 @@ func (a *App) StopScript(id string) error {
 // RunScriptOnce はコードを 1 回だけ実行する（結果とエラーはコンソールにも出る）
 func (a *App) RunScriptOnce(code string) (interface{}, error) {
 	return a.plcService.RunScriptOnce(code)
+}
+
+// GetAppLogs はアプリ全体のログ（サーバーの起動・停止、クライアントの通信エラーなど）を古い順に返す
+func (a *App) GetAppLogs() []application.AppLogDTO {
+	return a.plcService.GetAppLogs()
+}
+
+// ClearAppLogs はアプリ全体のログをすべて消す
+func (a *App) ClearAppLogs() {
+	a.plcService.ClearAppLogs()
 }
 
 // GetConsoleLogs はスクリプトのコンソールログを返す
@@ -496,7 +541,9 @@ func (a *App) ExportProject() error {
 	}
 
 	// ファイルに書き込み
-	return os.WriteFile(filepath, jsonData, 0644)
+	err = os.WriteFile(filepath, jsonData, 0644)
+	a.plcService.AppLog().Result(logSourceProject, "プロジェクトを保存しました: "+filepath, "プロジェクトを保存できませんでした", err)
+	return err
 }
 
 // ImportProject はファイルからプロジェクトをインポートする

@@ -294,7 +294,9 @@ func (s *PLCService) StartClientPolling(id string) error {
 	p := &poller{cancel: cancel, done: make(chan struct{})}
 	inst.poller = p
 	inst.pollCycles = 0
+	inst.pollFailing = false
 	go m.runPoller(ctx, inst, p)
+	m.log.Infof(clientLogSource(inst.name), "ポーリングを開始しました（周期 %d ms）", inst.pollIntervalMs)
 	return nil
 }
 
@@ -304,11 +306,16 @@ func (s *PLCService) StopClientPolling(id string) error {
 	m.mu.Lock()
 	inst, err := m.instanceLocked(id)
 	var p *poller
+	var name string
 	if err == nil {
 		p = inst.stopPollerLocked()
+		name = inst.name
 	}
 	m.mu.Unlock()
 	p.wait()
+	if p != nil {
+		m.log.Infof(clientLogSource(name), "ポーリングを停止しました")
+	}
 	return err
 }
 
@@ -421,6 +428,24 @@ func (m *clientManager) pollOnce(ctx context.Context, inst *clientInstance, clie
 		if res.Status == protocol.CommandTimeout || res.Status == protocol.CommandError {
 			failed = res.Error
 		}
+	}
+	if len(targets) > 0 {
+		m.logPollState(inst, failed)
+	}
+}
+
+// logPollState は、ポーリングの通信が失敗し始めたときと、戻ったときに、ログを出す（毎周は出さない）
+func (m *clientManager) logPollState(inst *clientInstance, failed string) {
+	m.mu.Lock()
+	was := inst.pollFailing
+	inst.pollFailing = failed != ""
+	name := inst.name
+	m.mu.Unlock()
+	switch {
+	case failed != "" && !was:
+		m.log.Errorf(clientLogSource(name), "ポーリングで通信エラーが起きました: %s", failed)
+	case failed == "" && was:
+		m.log.Infof(clientLogSource(name), "ポーリングの通信が戻りました")
 	}
 }
 

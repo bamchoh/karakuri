@@ -4,6 +4,7 @@ import { ServerPanel, ServerPanelHandle } from "./components/ServerPanel";
 import { UnsavedChangesDialog } from "./components/UnsavedChangesDialog";
 import { VariableView } from "./components/VariableView";
 import { ScriptPanel } from "./components/ScriptPanel";
+import { AppLogPanel } from "./components/AppLogPanel";
 import { KarakuriLogo } from "./components/KarakuriLogo";
 import { GetHTTPAPIPort, SetHTTPAPIPort } from "../wailsjs/go/main/App";
 import { Sidebar } from "./components/Sidebar";
@@ -185,6 +186,9 @@ function App() {
           />
         )}
       </div>
+
+      {/* アプリ全体のログの欄（どのページでも下に出す） */}
+      <AppLogPanel />
     </div>
   );
 }

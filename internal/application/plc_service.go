@@ -9,6 +9,7 @@ import (
 	"karakuri/internal/domain/script"
 	"karakuri/internal/domain/variable"
 	"karakuri/internal/infrastructure/adapter"
+	"karakuri/internal/infrastructure/applog"
 	"karakuri/internal/infrastructure/scripting"
 )
 
@@ -58,6 +59,11 @@ type PLCService struct {
 	// クライアント（外部の機器へつなぐ側）。自分のロックを持つ（plc_service_clients.go）
 	clients *clientManager
 
+	// アプリ全体のログ（plc_service_applog.go）
+	appLog          *applog.Log
+	appLogMu        sync.Mutex // onAppLogCleared を守る
+	onAppLogCleared func()
+
 	// アプリケーション状態イベント
 	appEmitter        AppStateEmitter
 	varChangeListener *variableChangeListener
@@ -76,7 +82,9 @@ func NewPLCService() *PLCService {
 		scripts:         make(map[string]*script.Script),
 		monitoringItems: make(map[string]*MonitoringItemDTO),
 		clients:         newClientManager(varStore),
+		appLog:          applog.New(applog.DefaultMaxEntries),
 	}
+	service.clients.log = service.appLog
 
 	// スクリプトの plc.getVariableStatus() に、外部の機器との同期の状態を渡す
 	service.scriptEngine.SetVariableStatusProvider(func(variableID string) map[string]any {
@@ -143,7 +151,10 @@ func (s *PLCService) GetServerInstances() []ServerInstanceDTO {
 }
 
 // AddServer は新しいサーバーインスタンスを追加する
-func (s *PLCService) AddServer(protocolType string, variantID string) error {
+func (s *PLCService) AddServer(protocolType string, variantID string) (err error) {
+	defer func() {
+		s.appLog.Result(s.serverLogSource(protocolType), "サーバーを追加しました", "サーバーを追加できませんでした", err)
+	}()
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -193,7 +204,10 @@ func (s *PLCService) AddServer(protocolType string, variantID string) error {
 }
 
 // RemoveServer はサーバーインスタンスを削除する
-func (s *PLCService) RemoveServer(protocolType string) error {
+func (s *PLCService) RemoveServer(protocolType string) (err error) {
+	defer func() {
+		s.appLog.Result(s.serverLogSource(protocolType), "サーバーを削除しました", "サーバーを削除できませんでした", err)
+	}()
 	s.mu.Lock()
 	defer s.mu.Unlock()
 

@@ -186,6 +186,7 @@
 
 .main-layout {
   flex: 1;
+  min-height: 0;
   display: flex;
   overflow: hidden;
 }
@@ -194,6 +195,140 @@
 .app-main {
   flex: 1;
   overflow: auto;
+}
+
+/* ----- アプリ全体のログの欄（どのページでも下に出す） ----- */
+.app-log {
+  flex-shrink: 0;
+  border-top: 1px solid var(--border);
+  background: var(--bg-elevated);
+}
+
+.app-log-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0 0.5rem;
+  background: rgba(0, 0, 0, 0.25);
+}
+
+.app-log-toggle {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.3rem 0.25rem;
+  border: none;
+  background: transparent;
+  color: var(--text-main);
+  font-size: 0.8rem;
+  cursor: pointer;
+  text-align: left;
+}
+
+.app-log-title {
+  font-weight: bold;
+}
+
+.app-log-count {
+  color: var(--text-muted);
+}
+
+.app-log-badge {
+  padding: 0 0.4rem;
+  border-radius: 8px;
+  font-size: 0.72rem;
+  font-weight: bold;
+  color: #071510;
+}
+
+.app-log-badge.warn {
+  background: #fbbf24;
+}
+
+.app-log-badge.error {
+  background: #f87171;
+}
+
+.app-log-last {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  color: var(--text-muted);
+  font-family: "Consolas", "Courier New", monospace;
+}
+
+.app-log-last.warn {
+  color: #fbbf24;
+}
+
+.app-log-last.error {
+  color: #f87171;
+}
+
+.app-log-clear {
+  display: flex;
+  align-items: center;
+  padding: 0.25rem;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.app-log-clear:hover {
+  color: var(--text-main);
+}
+
+.app-log-output {
+  height: 200px;
+  overflow-y: auto;
+  padding: 0.5rem 0.75rem;
+  background: #020f06;
+  font-family: "Consolas", "Courier New", monospace;
+  font-size: 0.8rem;
+}
+
+.app-log-entry {
+  display: flex;
+  gap: 0.6em;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  word-break: break-all;
+  text-align: left;
+}
+
+.app-log-time {
+  color: #555;
+  flex-shrink: 0;
+}
+
+.app-log-level {
+  flex-shrink: 0;
+  width: 3.2em;
+  color: var(--text-muted);
+}
+
+.app-log-source {
+  color: #4ade80;
+  flex-shrink: 0;
+}
+
+.app-log-message {
+  color: #d4d4d4;
+}
+
+.app-log-entry.warn .app-log-level,
+.app-log-entry.warn .app-log-message {
+  color: #fbbf24;
+}
+
+.app-log-entry.error .app-log-level,
+.app-log-entry.error .app-log-message {
+  color: #f87171;
 }
 
 /* Panel */

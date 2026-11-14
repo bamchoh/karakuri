@@ -61,6 +61,22 @@ func (e *WailsAppStateEmitter) EmitConsoleLogAdded(entry ConsoleLogDTO) {
 	runtime.EventsEmit(e.ctx, "plc:console-log-added", entry)
 }
 
+// EmitAppLogAdded はアプリ全体のログの追加イベントを発行する
+func (e *WailsAppStateEmitter) EmitAppLogAdded(entry AppLogDTO) {
+	if e.ctx == nil {
+		return
+	}
+	runtime.EventsEmit(e.ctx, "plc:app-log-added", entry)
+}
+
+// EmitAppLogCleared はアプリ全体のログを消したイベントを発行する
+func (e *WailsAppStateEmitter) EmitAppLogCleared() {
+	if e.ctx == nil {
+		return
+	}
+	runtime.EventsEmit(e.ctx, "plc:app-log-cleared")
+}
+
 // variableChangeListener は VariableStore の変更を受け取りスロットルしてイベント発行するリスナー。
 //
 // 動作: leading fire + 定間隔 trailing fire

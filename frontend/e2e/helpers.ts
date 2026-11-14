@@ -48,6 +48,8 @@ export async function resetApp(page: Page) {
   const clients = await api<{ id: string }[]>(page, "GetClients");
   for (const c of clients || []) await api(page, "RemoveClient", c.id);
   await api(page, "ClearClientCommandLogs");
+  // 後片付けで出たログ（サーバーの削除など）も消して、アプリ全体のログを空にする
+  await api(page, "ClearAppLogs");
 }
 
 // ===== サーバー画面・レジスタ画面の操作 =====
