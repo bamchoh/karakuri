@@ -75,19 +75,19 @@ test("レジスタの一覧: エリアの範囲を出し、範囲外の開始ア
   await openRegisters(page, "一覧表示", "FINS");
   const finsStart = group(page, "開始アドレス");
   await expect(finsStart.locator(".address-range-hint")).toHaveText(
-    "範囲: 0〜6143",
+    "範囲: 0〜65535",
   );
   await group(page, "ビット幅").locator("select").selectOption("1");
   await expect(finsStart.locator(".address-range-hint")).toHaveText(
-    "範囲: 0〜6143",
+    "範囲: 0〜65535",
   );
-  await finsStart.locator("input").fill("9999");
+  await finsStart.locator("input").fill("99999");
   await finsStart.locator("input").blur();
-  // 最後のページは、10 ワード分（6134〜6143）
-  await expect(finsStart.locator("input")).toHaveValue("6134");
-  await group(page, "メモリエリア").locator("select").selectOption("WR");
+  // 最後のページは、10 ワード分（65526〜65535）
+  await expect(finsStart.locator("input")).toHaveValue("65526");
+  await group(page, "メモリエリア").locator("select").selectOption("T");
   await expect(finsStart.locator(".address-range-hint")).toHaveText(
-    "範囲: 0〜511",
+    "範囲: 0〜32767",
   );
 });
 
@@ -190,25 +190,25 @@ test("マッピング設定（FINS）: BOOL は「ワード.ビット」の範�
   const address = dialog.locator("input.mapping-col");
   const hint = dialog.locator(".address-range-hint");
   const save = dialog.getByRole("button", { name: "保存" });
-  // 最初のエリアは CIO（6144 ワード）。BOOL は、ビットの範囲
-  await expect(hint).toHaveText("範囲: 0.00〜6143.15");
-  await address.fill("6143.15");
+  // 最初のエリアは CIO（65536 ワード）。BOOL は、ビットの範囲
+  await expect(hint).toHaveText("範囲: 0.00〜65535.15");
+  await address.fill("65535.15");
   await expect(save).toBeEnabled();
-  await address.fill("6144.00");
+  await address.fill("65536.00");
   await expect(hint).toContainText(
-    "アドレスが範囲外です（範囲: 0.00〜6143.15）",
+    "アドレスが範囲外です（範囲: 0.00〜65535.15）",
   );
   await expect(save).toBeDisabled();
   // エリアを WR に変えると、WR の範囲で検査する
   await dialog.locator("select.mapping-col").nth(1).selectOption("WR");
-  await expect(hint).toContainText("範囲: 0.00〜511.15");
+  await expect(hint).toContainText("範囲: 0.00〜65535.15");
   await dialog.getByRole("button", { name: "キャンセル" }).click();
 
   // INT は、ワードの範囲
   dialog = await openMapping(page, "Speed");
   await dialog.getByRole("button", { name: "+ マッピング追加" }).click();
   await expect(dialog.locator(".address-range-hint")).toHaveText(
-    "範囲: 0〜6143",
+    "範囲: 0〜65535",
   );
 });
 

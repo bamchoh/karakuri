@@ -34,6 +34,14 @@ const (
 	emBanks = 0x19
 	// counterBase は、FINS のアドレスでの、カウンタの先頭（タイマと同じエリア種別を使い、アドレスで分ける）
 	counterBase = 0x8000
+
+	// エリアの大きさ。実機の大きさ（CIO は 6144 ワード、DM は 32768 ワードなど。機種で違う）ではなく、
+	// FINS のリクエストで指せる最大にする（どの機種のつもりのクライアントにも、範囲外を返さないようにするため）
+	//
+	// maxWords: アドレスは 2 バイトなので、1 つのエリア種別で 0〜65535
+	// maxTimers: タイマとカウンタは同じエリア種別を半分ずつ使う（タイマ 0x0000〜0x7FFF、カウンタ 0x8000〜0xFFFF）
+	maxWords  = 0x10000
+	maxTimers = 0x8000
 )
 
 // areaDef はメモリエリア 1 つの定義
@@ -51,18 +59,18 @@ type areaDef struct {
 	FlagName string // フラグのエリアの表示名
 }
 
-// areaDefs は対応するエリア（CS / CJ シリーズの種別コードと大きさ）
+// areaDefs は対応するエリア（種別コードは CS / CJ シリーズのもの。大きさは、FINS で指せる最大）
 var areaDefs = buildAreaDefs()
 
 func buildAreaDefs() []areaDef {
 	defs := []areaDef{
-		{ID: AreaCIO, Name: "CIO（チャネル I/O）", Prefix: "CIO ", WordCode: 0xB0, BitCode: 0x30, Words: 6144, BitArea: true},
-		{ID: AreaWR, Name: "WR（内部補助リレー）", Prefix: "W", WordCode: 0xB1, BitCode: 0x31, Words: 512, BitArea: true},
-		{ID: AreaHR, Name: "HR（保持リレー）", Prefix: "H", WordCode: 0xB2, BitCode: 0x32, Words: 1536, BitArea: true},
-		{ID: AreaAR, Name: "AR（特殊補助リレー）", Prefix: "A", WordCode: 0xB3, BitCode: 0x33, Words: 960, BitArea: true},
-		{ID: AreaDM, Name: "DM（データメモリ）", Prefix: "D", WordCode: 0x82, BitCode: 0x02, Words: 32768, BitArea: true},
-		{ID: AreaT, Name: "T（タイマ 現在値）", FlagName: "T（タイマ アップフラグ）", Prefix: "T", WordCode: 0x89, BitCode: 0x09, Words: 4096, Flags: true},
-		{ID: AreaC, Name: "C（カウンタ 現在値）", FlagName: "C（カウンタ アップフラグ）", Prefix: "C", WordCode: 0x89, BitCode: 0x09, Words: 4096, Base: counterBase, Flags: true},
+		{ID: AreaCIO, Name: "CIO（チャネル I/O）", Prefix: "CIO ", WordCode: 0xB0, BitCode: 0x30, Words: maxWords, BitArea: true},
+		{ID: AreaWR, Name: "WR（内部補助リレー）", Prefix: "W", WordCode: 0xB1, BitCode: 0x31, Words: maxWords, BitArea: true},
+		{ID: AreaHR, Name: "HR（保持リレー）", Prefix: "H", WordCode: 0xB2, BitCode: 0x32, Words: maxWords, BitArea: true},
+		{ID: AreaAR, Name: "AR（特殊補助リレー）", Prefix: "A", WordCode: 0xB3, BitCode: 0x33, Words: maxWords, BitArea: true},
+		{ID: AreaDM, Name: "DM（データメモリ）", Prefix: "D", WordCode: 0x82, BitCode: 0x02, Words: maxWords, BitArea: true},
+		{ID: AreaT, Name: "T（タイマ 現在値）", FlagName: "T（タイマ アップフラグ）", Prefix: "T", WordCode: 0x89, BitCode: 0x09, Words: maxTimers, Flags: true},
+		{ID: AreaC, Name: "C（カウンタ 現在値）", FlagName: "C（カウンタ アップフラグ）", Prefix: "C", WordCode: 0x89, BitCode: 0x09, Words: maxTimers, Base: counterBase, Flags: true},
 	}
 	for bank := 0; bank < emBanks; bank++ {
 		// バンク 0〜F は 0xA0〜0xAF / 0x20〜0x2F、バンク 10〜18 は 0x60〜0x68 / 0xE0〜0xE8
@@ -73,7 +81,7 @@ func buildAreaDefs() []areaDef {
 		defs = append(defs, areaDef{
 			ID:   fmt.Sprintf("EM%X", bank),
 			Name: fmt.Sprintf("EM バンク %X（拡張データメモリ）", bank), Prefix: fmt.Sprintf("E%X_", bank),
-			WordCode: wordCode, BitCode: bitCode, Words: 32768, BitArea: true,
+			WordCode: wordCode, BitCode: bitCode, Words: maxWords, BitArea: true,
 		})
 	}
 	return defs

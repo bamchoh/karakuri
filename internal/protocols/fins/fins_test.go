@@ -51,8 +51,8 @@ func TestHandler_Frames(t *testing.T) {
 		{"時計", "07 01", "07 01 00 00 26 11 13 09 08 07 05"},
 		{"知らないコマンド", "23 01", "23 01 04 01"},
 		{"知らないエリア種別", "01 01 77 00 00 00 00 01", "01 01 11 01"},
-		{"先頭アドレスが範囲外", "01 01 B1 02 00 00 00 01", "01 01 11 03"},
-		{"終わりが範囲を超える", "01 01 B1 01 FF 00 00 02", "01 01 11 04"},
+		{"ビットの番号が 15 を超える", "01 01 31 00 0A 10 00 01", "01 01 11 03"},
+		{"終わりが範囲を超える", "01 01 B1 FF FF 00 00 02", "01 01 11 04"},
 		{"個数とデータが合わない", "01 02 82 00 00 00 00 02 00 01", "01 02 10 03"},
 		{"コマンドが短い", "01 01 82 00 00", "01 01 10 02"},
 		{"コマンドが長い", "01 01 82 00 00 00 00 01 00", "01 01 10 01"},
@@ -105,7 +105,7 @@ func TestDataStore_BitAndWordViews(t *testing.T) {
 	if bits, _ := s.ReadBits(AreaCIO+bitSuffix, 101*16, 16); !bits[0] || !bits[15] || bits[1] {
 		t.Errorf("CIO 101 のビット = %v", bits)
 	}
-	if _, err := s.ReadWords(AreaWR, 511, 2); err == nil {
+	if _, err := s.ReadWords(AreaWR, 65535, 2); err == nil {
 		t.Error("範囲外を読めた")
 	}
 	if err := s.WriteBit("XX", 0, true); err == nil {
@@ -189,7 +189,7 @@ func TestClientAndServer(t *testing.T) {
 			}
 
 			// 範囲外は異常終了（接続は閉じない）
-			r = c.Send(context.Background(), unhex(t, "01 01 B1 02 00 00 00 01"))
+			r = c.Send(context.Background(), unhex(t, "01 01 31 00 0A 10 00 01"))
 			if r.Status != protocol.CommandException || !strings.Contains(r.Error, "0x1103") || !c.Connected() {
 				t.Fatalf("範囲外: %+v", r)
 			}
