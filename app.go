@@ -7,6 +7,7 @@ import (
 	"io"
 	"log"
 	"os"
+	"path/filepath"
 	"sort"
 
 	"karakuri/internal/application"
@@ -33,6 +34,8 @@ type App struct {
 	plcService  *application.PLCService
 	httpAPI     *httpapi.Server
 	httpAPIPort int
+	// 最後に開いた（保存した）プロジェクトのファイル。保存のダイアログの最初の場所と名前に使う
+	projectPath string
 }
 
 // NewApp creates a new App application struct
@@ -514,21 +517,28 @@ func (a *App) GetVariableDeviceStatuses() []application.VariableDeviceStatusDTO 
 // === プロジェクト管理 ===
 
 // ExportProject はプロジェクトをファイルにエクスポートする
-func (a *App) ExportProject() error {
-	// ファイル保存ダイアログを表示
-	filepath, err := runtime.SaveFileDialog(a.ctx, runtime.SaveDialogOptions{
-		Title:           "プロジェクトをエクスポート",
-		DefaultFilename: "project.json",
+//
+// 保存したファイルのパスを返す（ダイアログでやめたときは空）。画面はこれをタイトルバーに出す。
+func (a *App) ExportProject() (string, error) {
+	// ファイル保存ダイアログを表示（前に開いた・保存したファイルがあれば、そこから始める）
+	defaultName, defaultDir := "project.json", ""
+	if a.projectPath != "" {
+		defaultName, defaultDir = filepath.Base(a.projectPath), filepath.Dir(a.projectPath)
+	}
+	path, err := runtime.SaveFileDialog(a.ctx, runtime.SaveDialogOptions{
+		Title:            "プロジェクトをエクスポート",
+		DefaultFilename:  defaultName,
+		DefaultDirectory: defaultDir,
 		Filters: []runtime.FileFilter{
 			{DisplayName: "JSON Files (*.json)", Pattern: "*.json"},
 			{DisplayName: "All Files (*.*)", Pattern: "*.*"},
 		},
 	})
 	if err != nil {
-		return err
+		return "", err
 	}
-	if filepath == "" {
-		return nil // キャンセルされた
+	if path == "" {
+		return "", nil // キャンセルされた
 	}
 
 	// プロジェクトデータを取得
@@ -537,19 +547,25 @@ func (a *App) ExportProject() error {
 	// JSONに変換
 	jsonData, err := json.MarshalIndent(data, "", "  ")
 	if err != nil {
-		return err
+		return "", err
 	}
 
 	// ファイルに書き込み
-	err = os.WriteFile(filepath, jsonData, 0644)
-	a.plcService.AppLog().Result(logSourceProject, "プロジェクトを保存しました: "+filepath, "プロジェクトを保存できませんでした", err)
-	return err
+	err = os.WriteFile(path, jsonData, 0644)
+	a.plcService.AppLog().Result(logSourceProject, "プロジェクトを保存しました: "+path, "プロジェクトを保存できませんでした", err)
+	if err != nil {
+		return "", err
+	}
+	a.projectPath = path
+	return path, nil
 }
 
 // ImportProject はファイルからプロジェクトをインポートする
-func (a *App) ImportProject() error {
+//
+// 読み込んだファイルのパスを返す（ダイアログでやめたときは空）。
+func (a *App) ImportProject() (string, error) {
 	// ファイル選択ダイアログを表示
-	filepath, err := runtime.OpenFileDialog(a.ctx, runtime.OpenDialogOptions{
+	path, err := runtime.OpenFileDialog(a.ctx, runtime.OpenDialogOptions{
 		Title: "プロジェクトをインポート",
 		Filters: []runtime.FileFilter{
 			{DisplayName: "JSON Files (*.json)", Pattern: "*.json"},
@@ -557,32 +573,33 @@ func (a *App) ImportProject() error {
 		},
 	})
 	if err != nil {
-		return err
+		return "", err
 	}
-	if filepath == "" {
-		return nil // キャンセルされた
+	if path == "" {
+		return "", nil // キャンセルされた
 	}
 
 	// ファイルを読み込み
-	jsonData, err := os.ReadFile(filepath)
+	jsonData, err := os.ReadFile(path)
 	if err != nil {
-		return err
+		return "", err
 	}
 
 	// JSONをパース
 	var data application.ProjectDataDTO
 	if err := json.Unmarshal(jsonData, &data); err != nil {
-		return err
+		return "", err
 	}
 
 	// プロジェクトをインポート
 	if err := a.plcService.ImportProject(&data); err != nil {
-		return err
+		return "", err
 	}
+	a.projectPath = path
 
 	runtime.EventsEmit(a.ctx, "project:imported") // インポート完了イベントをフロントエンドに通知
 
-	return nil
+	return path, nil
 }
 
 // === モニタリング管理 ===

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { ReactNode, useEffect, useRef, useState } from "react";
 import { ChevronDown, ChevronUp, Eraser } from "lucide-react";
 import { ClearAppLogs, GetAppLogs } from "../../wailsjs/go/main/App";
 import { EventsOn } from "../../wailsjs/runtime/runtime";
@@ -40,6 +40,8 @@ const TARGET_TITLES: Record<LogTargetKind, string> = {
 interface Props {
   // ログの行の出どころを押したときに呼ぶ（該当のサーバー・接続先・スクリプトの画面に移る）
   onNavigate?: (target: LogTarget) => void;
+  // 見出しの行の右端に出すもの（HTTP API の URL など）。この行を、画面の下の帯として使う
+  status?: ReactNode;
 }
 
 function formatTime(at: number): string {
@@ -79,7 +81,7 @@ function LogSource({
 // （消されたときは plc:app-log-cleared）。
 // 閉じている間に届いた警告・エラーは、見出しに件数を出す。
 // 行き先のあるログ（サーバー・接続先・スクリプトのもの）は、出どころを押すと、その画面に移る
-export function AppLogPanel({ onNavigate }: Props) {
+export function AppLogPanel({ onNavigate, status }: Props) {
   const [logs, setLogs] = useState<application.AppLogDTO[]>([]);
   const [open, setOpen] = useState(false);
   // 閉じている間に届いた警告・エラーの件数（開くと 0 に戻す）
@@ -194,6 +196,7 @@ export function AppLogPanel({ onNavigate }: Props) {
             <Eraser size={14} />
           </button>
         )}
+        {status}
       </div>
       {open && (
         <div className="app-log-output" ref={outputRef}>
