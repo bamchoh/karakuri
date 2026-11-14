@@ -9,6 +9,7 @@ import {
   escapeRegExp,
   MODBUS_PORT,
   openClient,
+  addClientFromDialog,
 } from "./helpers";
 
 // クライアント画面のポーリング（周期的な読み取り）を確認する。
@@ -180,7 +181,7 @@ test("読み取り項目を削除できる。タブを切り替えても選ん�
   await expect(items(page).first()).toContainText("FC04");
 
   // 別の接続先を選んでも、ポーリングのタブのまま
-  await page.getByTitle("接続先を追加").click();
+  await addClientFromDialog(page);
   await expect(page.locator(".client-tab-item")).toHaveCount(2);
   await expect(pollingView(page)).toBeVisible();
 });
