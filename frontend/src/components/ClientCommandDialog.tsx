@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { BuildClientRequest } from "../../wailsjs/go/main/App";
 import { application } from "../../wailsjs/go/models";
 import { Save, Send } from "lucide-react";
-import { DynamicField } from "./DynamicField";
+import { DynamicField, visibleFields } from "./DynamicField";
 import { FocusTrap } from "./FocusTrap";
 import { useEscapeKey } from "./useEscapeKey";
 import { clientStatusLabel, formatClientElapsed } from "./clientFormat";
@@ -221,9 +221,9 @@ export function ClientCommandDialog({
                     </select>
                   </div>
                 </div>
-                {command?.fields.map((field) => (
+                {visibleFields(command?.fields ?? [], params).map((field) => (
                   <DynamicField
-                    key={`${command.id}:${field.name}`}
+                    key={`${command?.id}:${field.name}`}
                     field={field}
                     value={params[field.name]}
                     onChange={(v) => handleParamChange(field.name, v)}

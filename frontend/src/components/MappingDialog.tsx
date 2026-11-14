@@ -5,6 +5,7 @@ import {
   UpdateVariableNodePublishing,
 } from "../../wailsjs/go/main/App";
 import { application } from "../../wailsjs/go/models";
+import { AddressInput } from "./AddressInput";
 import { useEscapeKey } from "./useEscapeKey";
 import { useNodeAddresses } from "./useNodeAddresses";
 
@@ -49,9 +50,8 @@ export const MappingDialog = forwardRef<MappingDialogHandle, Props>(
     >([]);
     const { nodeAddresses, loadNodeAddresses } = useNodeAddresses();
 
-    const isOneOriginArea = (protocolType: string, areaId: string): boolean =>
-      (memoryAreasByProtocol[protocolType] || []).find((a) => a.id === areaId)
-        ?.oneOrigin ?? false;
+    const areaOf = (protocolType: string, areaId: string) =>
+      (memoryAreasByProtocol[protocolType] || []).find((a) => a.id === areaId);
 
     // マッピングダイアログを開く
     const open = async (v: application.VariableDTO) => {
@@ -217,28 +217,15 @@ export const MappingDialog = forwardRef<MappingDialogHandle, Props>(
                     ))}
                   </select>
 
-                  <input
+                  <AddressInput
                     className="mapping-col"
-                    type="number"
-                    value={
-                      isOneOriginArea(m.protocolType, m.memoryArea)
-                        ? m.address + 1
-                        : m.address
-                    }
-                    onChange={(e) => {
-                      const oneOrigin = isOneOriginArea(
-                        m.protocolType,
-                        m.memoryArea,
-                      );
-                      const v = parseInt(e.target.value) || (oneOrigin ? 1 : 0);
+                    area={areaOf(m.protocolType, m.memoryArea)}
+                    value={m.address}
+                    onChange={(address) => {
                       const updated = [...editMappings];
-                      updated[index] = {
-                        ...updated[index],
-                        address: oneOrigin ? Math.max(0, v - 1) : v,
-                      };
+                      updated[index] = { ...updated[index], address };
                       setEditMappings(updated);
                     }}
-                    min={isOneOriginArea(m.protocolType, m.memoryArea) ? 1 : 0}
                   />
 
                   <select

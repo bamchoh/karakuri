@@ -1,6 +1,7 @@
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { application } from "../../wailsjs/go/models";
+import { formatAddress } from "../utils/address";
 import {
   BIT_WIDTHS,
   DISPLAY_FORMATS,
@@ -64,7 +65,7 @@ export function MonitoringRow({
         </td>
       )}
       <td>{area?.displayName || item.memoryArea}</td>
-      <td>{area?.oneOrigin ? item.address + 1 : item.address}</td>
+      <td>{formatAddress(area, item.address)}</td>
       <td>
         {!itemWithValue.isBit ? (
           <select

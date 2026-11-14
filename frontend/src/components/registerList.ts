@@ -11,6 +11,10 @@ import type { BitWidth, DisplayFormat, Endianness } from "../types/register";
 export const COLUMNS = 10;
 export const PAGE_SIZE = 100;
 
+// 「ワード.ビット」のエリア（MemoryAreaDTO.bitsOf）は、1 行に 1 ワード分のビットを並べる
+export const WORD_BIT_COLUMNS = 16;
+export const WORD_BIT_PAGE_SIZE = WORD_BIT_COLUMNS * 10;
+
 // レジスタの値（ビットのエリアは boolean、ワードのエリアは number）
 export type RegisterValue = boolean | number;
 
@@ -22,8 +26,8 @@ export interface RegisterRow {
 }
 
 // 1 行に並べるセルの数（32bit / 64bit では、複数ワードを 1 つのセルにまとめる）
-export function columnsPerRow(wordCount: number): number {
-  return Math.max(1, Math.floor(COLUMNS / wordCount));
+export function columnsPerRow(wordCount: number, columns = COLUMNS): number {
+  return Math.max(1, Math.floor(columns / wordCount));
 }
 
 // 表示中の値を、表の行に分ける
@@ -31,8 +35,9 @@ export function buildRows(
   values: RegisterValue[],
   startAddress: number,
   wordCount: number,
+  columnCount = COLUMNS,
 ): RegisterRow[] {
-  const columns = columnsPerRow(wordCount);
+  const columns = columnsPerRow(wordCount, columnCount);
   const step = columns * wordCount;
   const rows: RegisterRow[] = [];
 
@@ -54,12 +59,13 @@ export function moveSelection(
   key: string,
   selectedIndex: number,
   maxIndex: number,
+  columns = COLUMNS,
 ): number | null {
   switch (key) {
     case "ArrowUp":
-      return Math.max(0, selectedIndex - COLUMNS);
+      return Math.max(0, selectedIndex - columns);
     case "ArrowDown":
-      return Math.min(maxIndex, selectedIndex + COLUMNS);
+      return Math.min(maxIndex, selectedIndex + columns);
     case "ArrowLeft":
       return Math.max(0, selectedIndex - 1);
     case "ArrowRight":
@@ -69,9 +75,9 @@ export function moveSelection(
     case "End":
       return maxIndex;
     case "PageUp":
-      return Math.max(0, selectedIndex - COLUMNS * 5);
+      return Math.max(0, selectedIndex - columns * 5);
     case "PageDown":
-      return Math.min(maxIndex, selectedIndex + COLUMNS * 5);
+      return Math.min(maxIndex, selectedIndex + columns * 5);
     default:
       return null;
   }

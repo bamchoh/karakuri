@@ -132,7 +132,7 @@ func TestFactories(t *testing.T) {
 		}
 	}
 	sort.Strings(types)
-	if want := []string{"modbus-ascii", "modbus-rtu", "modbus-tcp", "opcua"}; !reflect.DeepEqual(types, want) {
+	if want := []string{"fins", "modbus-ascii", "modbus-rtu", "modbus-tcp", "opcua"}; !reflect.DeepEqual(types, want) {
 		t.Errorf("プロトコル = %v, want %v", types, want)
 	}
 
@@ -144,7 +144,8 @@ func TestFactories(t *testing.T) {
 			t.Errorf("%s: クライアントの定義が足りない: %+v", p.ProtocolType, p)
 		}
 	}
-	if want := []string{"modbus-tcp", "opcua"}; !reflect.DeepEqual(clientTypes, want) {
+	// 並びは、登録した順（最初のものが、接続先を追加するときの既定になる）
+	if want := []string{"modbus-tcp", "opcua", "fins"}; !reflect.DeepEqual(clientTypes, want) {
 		t.Errorf("クライアントのプロトコル = %v, want %v", clientTypes, want)
 	}
 
@@ -180,6 +181,221 @@ func TestAddServer_DefaultVariant(t *testing.T) {
 	if !found {
 		t.Errorf("スキーマにバリアント %q がない: %+v", wantVariant, schema.Variants)
 	}
+}
+
+// ===== FINS =====
+
+const finsType = "fins"
+
+// addFINS は FINS サーバーを追加し、127.0.0.1 の空きポートを設定する（起動はしない）
+func addFINS(t *testing.T, svc *application.PLCService) int {
+	t.Helper()
+	must(t, svc.AddServer(finsType, ""))
+	port := freePort(t)
+	cfg := svc.GetServerConfig(finsType)
+	cfg.Settings["host"] = "127.0.0.1"
+	cfg.Settings["port"] = port
+	must(t, svc.UpdateServerConfig(cfg))
+	return port
+}
+
+type finsSend func(cmd string, params map[string]interface{}) *application.ClientCommandLogDTO
+
+// finsSender は、Karakuri の FINS クライアントの接続先を作り、その ID と、コマンドを送る関数を返す
+func finsSender(t *testing.T, svc *application.PLCService, port int, transport string) (string, finsSend) {
+	t.Helper()
+	c, err := svc.AddClient(finsType, "自分", map[string]interface{}{"host": "127.0.0.1", "port": port, "transport": transport, "timeoutMs": 300})
+	must(t, err)
+	return c.ID, func(cmd string, params map[string]interface{}) *application.ClientCommandLogDTO {
+		t.Helper()
+		req, err := svc.BuildClientRequest(finsType, cmd, params)
+		must(t, err)
+		log, err := svc.SendClientRequest(c.ID, req)
+		must(t, err)
+		return log
+	}
+}
+
+// サーバーのメモリは起動前から読み書きでき、変数と同期する。FINS/UDP と FINS/TCP のどちらでも同じメモリを読む
+func TestFINS_ServerAndVariableSync(t *testing.T) {
+	svc := newService(t)
+	port := addFINS(t, svc)
+	if areas := svc.GetMemoryAreas(finsType); len(areas) != 10 {
+		t.Fatalf("エリア数 = %d, want 10（ワード 6 + ビット 4）", len(areas))
+	}
+
+	speed, err := svc.CreateVariable("Speed", "INT", 12)
+	must(t, err)
+	run, err := svc.CreateVariable("Run", "BOOL", true)
+	must(t, err)
+	big, err := svc.CreateVariable("Big", "DINT", 0x12345678)
+	must(t, err)
+	mapTo := func(id, area string, addr int) {
+		must(t, svc.UpdateVariableMappings(id, []application.ProtocolMappingDTO{
+			{ProtocolType: finsType, MemoryArea: area, Address: addr, Endianness: "big"},
+		}))
+	}
+	mapTo(speed.ID, "DM", 100)
+	mapTo(run.ID, "CIO_BIT", 100*16+5) // CIO 100.05
+	mapTo(big.ID, "DM", 200)
+
+	// 起動前でも、変数の値がメモリに入っている。ビットのエリアとワードのエリアは同じメモリ
+	if got, _ := svc.ReadWords(finsType, "CIO", 100, 1); !reflect.DeepEqual(got, []int{0x0020}) {
+		t.Errorf("起動前: CIO 100 = %v, want [32]", got)
+	}
+
+	must(t, svc.StartServer(finsType))
+	_, udp := finsSender(t, svc, port, "udp")
+	_, tcp := finsSender(t, svc, port, "tcp")
+
+	// 変数 → メモリ: クライアントから読める（UDP でも TCP でも）
+	must(t, svc.UpdateVariableValue(speed.ID, 345))
+	for name, send := range map[string]finsSend{"udp": udp, "tcp": tcp} {
+		log := send("read", map[string]interface{}{"area": "DM", "unit": "word", "address": float64(100), "count": float64(1)})
+		if log.Status != "ok" || len(log.Values) != 1 || log.Values[0].Value != "345 (0x0159)" {
+			t.Errorf("%s: 変数を変えたあとクライアントが読んだ値: %+v", name, log)
+		}
+	}
+	if log := udp("read", map[string]interface{}{"area": "DM", "unit": "word", "address": float64(200), "count": float64(2)}); log.Status != "ok" || log.Values[0].Value != "4660 (0x1234)" || log.Values[1].Value != "22136 (0x5678)" {
+		t.Errorf("2 ワードの変数: %+v", log)
+	}
+
+	// クライアントの書き込み → 変数（応答が返った時点で反映されている）
+	if log := tcp("write", map[string]interface{}{"area": "DM", "unit": "word", "address": float64(100), "values": "56"}); log.Status != "ok" {
+		t.Fatalf("書き込み: %+v", log)
+	}
+	if got := variableValue(t, svc, speed.ID); got != "56" {
+		t.Errorf("クライアントが書いたあとの変数 = %s, want 56", got)
+	}
+	if log := udp("write", map[string]interface{}{"area": "CIO", "unit": "bit", "address": float64(100), "bit": float64(5), "values": "0"}); log.Status != "ok" {
+		t.Fatalf("ビットの書き込み: %+v", log)
+	}
+	if got := variableValue(t, svc, run.ID); got != "false" {
+		t.Errorf("クライアントがビットを書いたあとの変数 = %s, want false", got)
+	}
+	if log := udp("write", map[string]interface{}{"area": "DM", "unit": "word", "address": float64(201), "values": "0x9ABC"}); log.Status != "ok" {
+		t.Fatalf("書き込み: %+v", log)
+	}
+	if got := variableValue(t, svc, big.ID); got != fmt.Sprint(0x12349ABC) {
+		t.Errorf("下位ワードを書いたあとの DINT = %s, want %d", got, 0x12349ABC)
+	}
+
+	// 起動し直しても、メモリと同期は残る
+	must(t, svc.StopServer(finsType))
+	must(t, svc.UpdateVariableValue(speed.ID, 90))
+	must(t, svc.StartServer(finsType))
+	if log := udp("read", map[string]interface{}{"area": "DM", "unit": "word", "address": float64(100), "count": float64(1)}); log.Status != "ok" || log.Values[0].Value != "90 (0x005A)" {
+		t.Errorf("起動し直したあと: %+v", log)
+	}
+}
+
+// ビットのエリアとワードのエリアは同じメモリを指す（MemoryArea.BitsOf）。
+// 片方に書くと、同じ場所のもう片方にマッピングした変数にも反映される
+func TestFINS_BitAndWordAreasShareVariables(t *testing.T) {
+	svc := newService(t)
+	addFINS(t, svc)
+	run, err := svc.CreateVariable("Run", "BOOL", false)
+	must(t, err)
+	word, err := svc.CreateVariable("Word", "INT", 0)
+	must(t, err)
+	must(t, svc.UpdateVariableMappings(run.ID, []application.ProtocolMappingDTO{{ProtocolType: finsType, MemoryArea: "CIO_BIT", Address: 100*16 + 5, Endianness: "big"}}))
+	must(t, svc.UpdateVariableMappings(word.ID, []application.ProtocolMappingDTO{{ProtocolType: finsType, MemoryArea: "CIO", Address: 200, Endianness: "big"}}))
+
+	must(t, svc.WriteWord(finsType, "CIO", 100, 0x0020))       // CIO 100.05 を、ワードで ON にする
+	must(t, svc.WriteBit(finsType, "CIO_BIT", 200*16+3, true)) // CIO 200.03 を、ビットで ON にする
+	gotRun, gotWord := variableValue(t, svc, run.ID), variableValue(t, svc, word.ID)
+	if gotRun != "true" || gotWord != "8" {
+		t.Errorf("ワードで書いたあとの BOOL = %s（want true）、ビットで書いたあとの INT = %s（want 8）", gotRun, gotWord)
+	}
+
+	// 変数を変えたときも、同じ場所のもう片方の変数に反映される
+	both, err := svc.CreateVariable("Both", "INT", 0)
+	must(t, err)
+	must(t, svc.UpdateVariableMappings(both.ID, []application.ProtocolMappingDTO{{ProtocolType: finsType, MemoryArea: "CIO", Address: 100, Endianness: "big"}}))
+	if got := variableValue(t, svc, both.ID); got != "0" {
+		// マッピングした時点では、変数の値（0）をメモリに書く。CIO 100.05 も OFF になる
+		t.Errorf("マッピングした直後の INT = %s, want 0", got)
+	}
+	if got := variableValue(t, svc, run.ID); got != "false" {
+		t.Errorf("INT をマッピングしたあとの BOOL = %s, want false", got)
+	}
+	must(t, svc.UpdateVariableValue(run.ID, true))
+	if got := variableValue(t, svc, both.ID); got != "32" {
+		t.Errorf("BOOL を ON にしたあとの INT = %s, want 32", got)
+	}
+	must(t, svc.UpdateVariableValue(both.ID, 0))
+	if got := variableValue(t, svc, run.ID); got != "false" {
+		t.Errorf("INT を 0 にしたあとの BOOL = %s, want false", got)
+	}
+	// 重ならない場所への書き込みでは変わらない
+	must(t, svc.UpdateVariableValue(run.ID, true))
+	must(t, svc.WriteWord(finsType, "CIO", 101, 0xFFFF))
+	if got := variableValue(t, svc, both.ID); got != "32" {
+		t.Errorf("隣のワードを書いたあとの INT = %s, want 32", got)
+	}
+
+	// FINS のクライアントからワードで書いても、BOOL の変数に反映される
+	port := freePort(t)
+	cfg := svc.GetServerConfig(finsType)
+	cfg.Settings["host"] = "127.0.0.1"
+	cfg.Settings["port"] = port
+	must(t, svc.UpdateServerConfig(cfg))
+	must(t, svc.StartServer(finsType))
+	_, send := finsSender(t, svc, port, "tcp")
+	if log := send("write", map[string]interface{}{"area": "CIO", "unit": "word", "address": float64(100), "values": "0"}); log.Status != "ok" {
+		t.Fatalf("書き込み: %+v", log)
+	}
+	if got := variableValue(t, svc, run.ID); got != "false" {
+		t.Errorf("クライアントがワードで書いたあとの BOOL = %s, want false", got)
+	}
+}
+
+// 変数を FINS の接続先のアドレスにマッピングして、Karakuri 自身の FINS サーバーと同期する
+func TestFINSClient_VariableMapping(t *testing.T) {
+	svc := newService(t)
+	port := addFINS(t, svc)
+	must(t, svc.StartServer(finsType))
+	id, _ := finsSender(t, svc, port, "udp")
+	must(t, svc.SetClientPollInterval(id, 50))
+	key := "client:" + id
+	if n := len(svc.GetMemoryAreas(key)); n != 10 {
+		t.Fatalf("接続先のエリア数 = %d, want 10", n)
+	}
+
+	must(t, svc.WriteWord(finsType, "DM", 51, 321)) // DINT（ビッグエンディアン）= 321
+	must(t, svc.WriteBit(finsType, "WR_BIT", 10*16+15, true))
+	num, err := svc.CreateVariable("remote", "DINT", 0)
+	must(t, err)
+	flag, err := svc.CreateVariable("remoteFlag", "BOOL", false)
+	must(t, err)
+	must(t, svc.UpdateVariableMappings(num.ID, []application.ProtocolMappingDTO{{ProtocolType: key, MemoryArea: "DM", Address: 50, Endianness: "big"}}))
+	must(t, svc.UpdateVariableMappings(flag.ID, []application.ProtocolMappingDTO{{ProtocolType: key, MemoryArea: "WR_BIT", Address: 10*16 + 15, Endianness: "big"}}))
+	must(t, svc.StartClientPolling(id))
+	t.Cleanup(func() { _ = svc.StopClientPolling(id) })
+
+	waitUntil := func(what string, cond func() bool) {
+		t.Helper()
+		deadline := time.Now().Add(3 * time.Second)
+		for !cond() {
+			if time.Now().After(deadline) {
+				t.Fatalf("待っても %s にならない（remote = %s、remoteFlag = %s、状態 %+v）", what,
+					variableValue(t, svc, num.ID), variableValue(t, svc, flag.ID), svc.VariableDeviceStatus(num.ID))
+			}
+			time.Sleep(10 * time.Millisecond)
+		}
+	}
+	waitUntil("機器の値を読む", func() bool {
+		return variableValue(t, svc, num.ID) == "321" && variableValue(t, svc, flag.ID) == "true"
+	})
+
+	// 変数を変えると、サーバーのメモリに書く
+	must(t, svc.UpdateVariableValue(num.ID, 70000))
+	must(t, svc.UpdateVariableValue(flag.ID, false))
+	waitUntil("書く", func() bool {
+		w, _ := svc.ReadWords(finsType, "DM", 50, 2)
+		b, _ := svc.ReadBits(finsType, "WR_BIT", 10*16+15, 1)
+		return reflect.DeepEqual(w, []int{1, 70000 - 65536}) && len(b) == 1 && !b[0]
+	})
 }
 
 // ===== Modbus: レジスタの寿命（#44） =====

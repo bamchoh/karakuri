@@ -30,6 +30,7 @@ import {
   ReorderMonitoringItem,
 } from "../../wailsjs/go/main/App";
 import { application } from "../../wailsjs/go/models";
+import { formatAddress } from "../utils/address";
 
 import { getWordCount } from "../utils/register";
 
@@ -279,11 +280,7 @@ export function MonitoringView({ serverInstances }: Props) {
           protocolType={writingItem.item.protocolType}
           area={writingItem.item.memoryArea}
           address={writingItem.item.address}
-          displayAddress={
-            writingArea?.oneOrigin
-              ? writingItem.item.address + 1
-              : writingItem.item.address
-          }
+          displayAddress={formatAddress(writingArea, writingItem.item.address)}
           currentValueText={writingItem.currentValue}
           isBit={writingArea?.isBit ?? false}
           bitInput="text"

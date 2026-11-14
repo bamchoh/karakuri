@@ -1,6 +1,7 @@
 package application
 
 import (
+	"reflect"
 	"testing"
 	"time"
 
@@ -109,24 +110,31 @@ func TestPLCService_RemoveServer_NotFound(t *testing.T) {
 	}
 }
 
-func TestPLCService_GetServerInstances_SortedAlphabetically(t *testing.T) {
+// サーバーとプロトコルの一覧は、追加した順や名前順ではなく、プロトコルを登録した順に並ぶ
+func TestPLCService_ServersAndProtocols_InRegistrationOrder(t *testing.T) {
 	svc := newTestService(t)
 
+	// 登録の順は modbus-tcp → modbus-rtu → modbus-ascii。追加は逆の順にする
+	if err := svc.AddServer("modbus-ascii", "ascii"); err != nil {
+		t.Fatalf("AddServer modbus-ascii failed: %v", err)
+	}
 	if err := svc.AddServer("modbus-rtu", "rtu"); err != nil {
 		t.Fatalf("AddServer modbus-rtu failed: %v", err)
 	}
 
-	instances := svc.GetServerInstances()
-	// プロトコルタイプ順（アルファベット昇順）にソートされていることを確認
-	for i := 1; i < len(instances); i++ {
-		if instances[i-1].ProtocolType > instances[i].ProtocolType {
-			t.Errorf("instances not sorted: %s > %s",
-				instances[i-1].ProtocolType, instances[i].ProtocolType)
-		}
+	want := []string{"modbus-tcp", "modbus-rtu", "modbus-ascii"}
+	var instances, available []string
+	for _, inst := range svc.GetServerInstances() {
+		instances = append(instances, inst.ProtocolType)
 	}
-	// modbus-rtu < modbus-tcp なので modbus-rtu が先
-	if instances[0].ProtocolType != "modbus-rtu" {
-		t.Errorf("expected 'modbus-rtu' first, got '%s'", instances[0].ProtocolType)
+	for _, p := range svc.GetAvailableProtocols() {
+		available = append(available, p.Type)
+	}
+	if !reflect.DeepEqual(instances, want) {
+		t.Errorf("サーバーの並び = %v, want %v", instances, want)
+	}
+	if !reflect.DeepEqual(available, want) {
+		t.Errorf("プロトコルの並び = %v, want %v", available, want)
 	}
 }
 

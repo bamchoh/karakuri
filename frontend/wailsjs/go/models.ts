@@ -727,6 +727,7 @@ export namespace application {
 	    byteAddressing: boolean;
 	    oneOrigin: boolean;
 	    shortName: string;
+	    bitsOf?: string;
 	
 	    static createFrom(source: any = {}) {
 	        return new MemoryAreaDTO(source);
@@ -742,6 +743,7 @@ export namespace application {
 	        this.byteAddressing = source["byteAddressing"];
 	        this.oneOrigin = source["oneOrigin"];
 	        this.shortName = source["shortName"];
+	        this.bitsOf = source["bitsOf"];
 	    }
 	}
 	export class MonitoringItemDTO {

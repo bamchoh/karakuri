@@ -1,6 +1,8 @@
 package adapter
 
 import (
+	"slices"
+
 	"karakuri/internal/domain/protocol"
 	"karakuri/internal/domain/variable"
 )
@@ -19,10 +21,17 @@ import (
 //
 // 別々の書き込み元（クライアントとスクリプトなど）が同じ変数を同時に書いた場合、
 // どちらが残るかは決まらない（後から書いた方が残る）。
+//
+// 同じメモリを指すエリア（MemoryArea.BitsOf: ワードのエリアと、それをビットごとに見たエリア）があるプロトコルでは、
+// 片方に書かれたら、もう片方にマッピングした変数にも反映する（syncSharedAreas）。
 type VariableBackedDataStore struct {
 	inner        protocol.DataStore
 	varStore     *variable.VariableStore
 	protocolType string
+
+	// 同じメモリを指すエリア。作ったあとは変えない
+	wordAreaOf map[string]string   // ビットのエリア → 同じメモリのワードのエリア
+	bitAreasOf map[string][]string // ワードのエリア → 同じメモリのビットのエリア
 }
 
 // NewVariableBackedDataStore は新しいVariableBackedDataStoreを作成する
@@ -31,6 +40,14 @@ func NewVariableBackedDataStore(inner protocol.DataStore, varStore *variable.Var
 		inner:        inner,
 		varStore:     varStore,
 		protocolType: protocolType,
+		wordAreaOf:   make(map[string]string),
+		bitAreasOf:   make(map[string][]string),
+	}
+	for _, area := range inner.GetAreas() {
+		if area.BitsOf != "" {
+			adapter.wordAreaOf[area.ID] = area.BitsOf
+			adapter.bitAreasOf[area.BitsOf] = append(adapter.bitAreasOf[area.BitsOf], area.ID)
+		}
 	}
 
 	// VariableStoreの変更リスナーとして登録
@@ -58,6 +75,73 @@ func (a *VariableBackedDataStore) OnVariableChanged(v *variable.Variable, mappin
 			continue
 		}
 		a.writeVariableToInner(v, &m)
+		start, end := a.mappingBitRange(v, &m)
+		a.syncSharedAreas(m.MemoryArea, start, end, v.ID)
+	}
+}
+
+// ============================================================
+// 同じメモリを指すエリア
+// ============================================================
+
+// sharedAreas は、area と同じメモリを指す、ほかのエリアを返す（なければ nil）
+func (a *VariableBackedDataStore) sharedAreas(area string) []string {
+	if word, ok := a.wordAreaOf[area]; ok {
+		others := []string{word}
+		for _, bit := range a.bitAreasOf[word] {
+			if bit != area {
+				others = append(others, bit)
+			}
+		}
+		return others
+	}
+	return a.bitAreasOf[area]
+}
+
+// mappingBitRange は、変数がマッピング先で占める範囲を、ビットの番号（ワード × 16 + ビット）で返す
+func (a *VariableBackedDataStore) mappingBitRange(v *variable.Variable, m *variable.ProtocolMapping) (start, end uint64) {
+	if v.DataType.IsBitType() {
+		// BOOL は、ワードのエリアでもビットの番号で読み書きする（writeVariableToInner）
+		return uint64(m.Address), uint64(m.Address) + 1
+	}
+	return a.wordsBitRange(m.MemoryArea, m.Address, v.DataType.WordCountWithResolver(a.varStore.TypeResolver()))
+}
+
+// wordsBitRange は、area の address から count ワードの範囲を、ビットの番号で返す
+func (a *VariableBackedDataStore) wordsBitRange(area string, address uint32, count int) (start, end uint64) {
+	if _, isBitArea := a.wordAreaOf[area]; isBitArea {
+		return uint64(address), uint64(address) + uint64(count)*16
+	}
+	return uint64(address) * 16, (uint64(address) + uint64(count)) * 16
+}
+
+// syncSharedAreas は、area のビットの範囲 [start, end) が書かれたときに、
+// 同じメモリを指すほかのエリアにマッピングした変数を、メモリの値で更新する。
+// except は、書き込みのもとになった変数の ID（その変数は更新しない）
+func (a *VariableBackedDataStore) syncSharedAreas(area string, start, end uint64, except string) {
+	others := a.sharedAreas(area)
+	if len(others) == 0 {
+		return
+	}
+	for varID, mappings := range a.varStore.GetAllMappingsForProtocol(a.protocolType) {
+		if varID == except {
+			continue
+		}
+		for i := range mappings {
+			m := &mappings[i]
+			if !slices.Contains(others, m.MemoryArea) {
+				continue
+			}
+			v, err := a.varStore.GetVariable(varID)
+			if err != nil {
+				break
+			}
+			if s, e := a.mappingBitRange(v, m); s < end && start < e {
+				if value, ok := a.readVariableFromInner(v, m); ok {
+					a.varStore.UpdateValueFrom(v.ID, value, a)
+				}
+			}
+		}
 	}
 }
 
@@ -173,6 +257,7 @@ func (a *VariableBackedDataStore) WriteBit(area string, address uint32, value bo
 		return err
 	}
 	a.syncBitsToVariables(area, address, 1)
+	a.syncSharedAreas(area, uint64(address), uint64(address)+1, "")
 	return nil
 }
 
@@ -181,6 +266,7 @@ func (a *VariableBackedDataStore) WriteBits(area string, address uint32, values 
 		return err
 	}
 	a.syncBitsToVariables(area, address, len(values))
+	a.syncSharedAreas(area, uint64(address), uint64(address)+uint64(len(values)), "")
 	return nil
 }
 
@@ -189,6 +275,8 @@ func (a *VariableBackedDataStore) WriteWord(area string, address uint32, value u
 		return err
 	}
 	a.syncWordsToVariables(area, address, 1)
+	start, end := a.wordsBitRange(area, address, 1)
+	a.syncSharedAreas(area, start, end, "")
 	return nil
 }
 
@@ -197,5 +285,7 @@ func (a *VariableBackedDataStore) WriteWords(area string, address uint32, values
 		return err
 	}
 	a.syncWordsToVariables(area, address, len(values))
+	start, end := a.wordsBitRange(area, address, len(values))
+	a.syncSharedAreas(area, start, end, "")
 	return nil
 }

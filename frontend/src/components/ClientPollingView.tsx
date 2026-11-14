@@ -11,7 +11,7 @@ import {
 } from "../../wailsjs/go/main/App";
 import { application } from "../../wailsjs/go/models";
 import { Play, Square, Trash2, SquarePlus } from "lucide-react";
-import { DynamicField } from "./DynamicField";
+import { DynamicField, visibleFields } from "./DynamicField";
 import { DISPLAY_FORMATS } from "../constants/register";
 import { formatSingleWord } from "../utils/register";
 import type { DisplayFormat } from "../types/register";
@@ -318,25 +318,26 @@ export function ClientPollingView({
         </div>
       </div>
       <div className="client-polling-add-fields">
-        {addCommand?.fields.map((field) => (
-          <DynamicField
-            key={`${addCommand.id}:${field.name}`}
-            field={field}
-            value={params[field.name]}
-            onChange={(v) =>
-              setAddParams((prev) => ({
-                ...prev,
-                [addCommand.id]: { ...params, [field.name]: v },
-              }))
-            }
-            disabled={false}
-            serialPorts={noPorts}
-            onRefreshPorts={noop}
-            onBrowse={async () => {
-              if (await beforeStart()) setBrowseField(field);
-            }}
-          />
-        ))}
+        {addCommand &&
+          visibleFields(addCommand.fields, params).map((field) => (
+            <DynamicField
+              key={`${addCommand.id}:${field.name}`}
+              field={field}
+              value={params[field.name]}
+              onChange={(v) =>
+                setAddParams((prev) => ({
+                  ...prev,
+                  [addCommand.id]: { ...params, [field.name]: v },
+                }))
+              }
+              disabled={false}
+              serialPorts={noPorts}
+              onRefreshPorts={noop}
+              onBrowse={async () => {
+                if (await beforeStart()) setBrowseField(field);
+              }}
+            />
+          ))}
       </div>
       {browseField && addCommand && (
         <ClientBrowseDialog

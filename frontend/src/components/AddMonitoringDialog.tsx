@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { FocusTrap } from "./FocusTrap";
 import { application } from "../../wailsjs/go/models";
+import { AddressInput } from "./AddressInput";
 
 import {
   BIT_WIDTHS,
@@ -64,8 +65,6 @@ export function AddMonitoringDialog({
   // 選択されたエリアがビットタイプかどうか
   const selectedAreaIsBit =
     formAreas.find((a) => a.id === formArea)?.isBit ?? false;
-  const isOneOriginFormArea =
-    formAreas.find((a) => a.id === formArea)?.oneOrigin ?? false;
 
   return (
     <FocusTrap
@@ -117,16 +116,10 @@ export function AddMonitoringDialog({
 
           <div className="dialog-row">
             <label>開始アドレス:</label>
-            <input
-              type="number"
-              min={isOneOriginFormArea ? "1" : "0"}
-              max="65535"
-              value={isOneOriginFormArea ? formAddress + 1 : formAddress}
-              onChange={(e) => {
-                const v =
-                  parseInt(e.target.value) || (isOneOriginFormArea ? 1 : 0);
-                setFormAddress(isOneOriginFormArea ? Math.max(0, v - 1) : v);
-              }}
+            <AddressInput
+              area={formAreas.find((a) => a.id === formArea)}
+              value={formAddress}
+              onChange={setFormAddress}
             />
           </div>
 

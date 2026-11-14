@@ -17,7 +17,7 @@ import {
 } from "../../wailsjs/go/main/App";
 import { application } from "../../wailsjs/go/models";
 import { ChevronDown, ChevronRight, Trash2, Unplug } from "lucide-react";
-import { DynamicField } from "./DynamicField";
+import { DynamicField, visibleFields } from "./DynamicField";
 import { ClientCommandDialog, CommandSaveInput } from "./ClientCommandDialog";
 import { ClientSavedCommands } from "./ClientSavedCommands";
 import { ClientCommandLog } from "./ClientCommandLog";
@@ -55,7 +55,7 @@ function settingsSummary(
   protocol: application.ClientProtocolDTO,
   settings: Record<string, any>,
 ): string {
-  return protocol.connectionFields
+  return visibleFields(protocol.connectionFields, settings)
     .filter((f) => f.type !== "password")
     .map((f) => ({ label: f.label, value: settings[f.name] ?? f.default }))
     .filter((x) => x.value !== undefined && x.value !== "")
@@ -308,7 +308,7 @@ export const ClientDetailPane = forwardRef<
                 />
               </div>
             </div>
-            {protocol.connectionFields.map((field) => (
+            {visibleFields(protocol.connectionFields, settings).map((field) => (
               <DynamicField
                 key={field.name}
                 field={field}

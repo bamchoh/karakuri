@@ -16,7 +16,10 @@ import {
   moveSelection,
   PAGE_SIZE,
   RegisterValue,
+  WORD_BIT_COLUMNS,
+  WORD_BIT_PAGE_SIZE,
 } from "./registerList";
+import { BITS_PER_WORD, formatAddress, isWordBitArea } from "../utils/address";
 
 interface Props {
   serverInstances: application.ServerInstanceDTO[];
@@ -33,7 +36,8 @@ interface EditingCell {
   format: DisplayFormat;
 }
 
-// レジスタの一覧表示: メモリエリアの値を 10 列の表で表示し、セルを選んで書き込む
+// レジスタの一覧表示: メモリエリアの値を 10 列の表で表示し、セルを選んで書き込む。
+// 「ワード.ビット」のエリア（area.bitsOf）は、1 行に 1 ワード分の 16 ビットを並べ、行の見出しをワードの番号にする
 export function RegisterListView({ serverInstances, active }: Props) {
   const [selectedProtocol, setSelectedProtocol] = useState<string>("");
 
@@ -104,22 +108,39 @@ export function RegisterListView({ serverInstances, active }: Props) {
   const isBitType = currentArea?.isBit ?? false;
   const isByteAddr = currentArea?.byteAddressing ?? false;
   const isOneOriginArea = currentArea?.oneOrigin ?? false;
+  const isWordBit = isWordBitArea(currentArea);
+  const columns = isWordBit ? WORD_BIT_COLUMNS : undefined;
+  const pageSize = isWordBit ? WORD_BIT_PAGE_SIZE : PAGE_SIZE;
   const maxStartAddress = currentArea
-    ? Math.max(0, currentArea.size - PAGE_SIZE)
+    ? Math.max(0, currentArea.size - pageSize)
     : 0;
 
   const remaining = currentArea
     ? Math.max(0, currentArea.size - startAddress)
     : 0;
 
-  const readCount = Math.min(PAGE_SIZE, remaining);
+  const readCount = Math.min(pageSize, remaining);
 
-  // 開始アドレスの入力欄は、表示用のアドレス（1 始まりのエリアは +1）で出す
-  useEffect(() => {
-    setStartAddressText(
-      String(isOneOriginArea ? startAddress + 1 : startAddress),
+  // 開始アドレスを、入力欄に出す番号にする（1 始まりのエリアは +1、「ワード.ビット」のエリアはワードの番号）
+  const startAddressDisplay = (address: number) =>
+    String(
+      isWordBit
+        ? Math.floor(address / BITS_PER_WORD)
+        : isOneOriginArea
+          ? address + 1
+          : address,
     );
-  }, [startAddress, isOneOriginArea]);
+
+  useEffect(() => {
+    setStartAddressText(startAddressDisplay(startAddress));
+  }, [startAddress, isOneOriginArea, isWordBit]);
+
+  // 「ワード.ビット」のエリアでは、開始アドレスをワードの境目にそろえる（行の先頭を .00 にするため）
+  useEffect(() => {
+    if (isWordBit && startAddress % BITS_PER_WORD !== 0) {
+      setStartAddress(startAddress - (startAddress % BITS_PER_WORD));
+    }
+  }, [isWordBit, startAddress]);
 
   // ワードアドレスを表示用アドレスに変換する（バイトアドレスは*2、oneOrigin のエリアは+1）
   const toDisplayAddr = (wordAddr: number) => {
@@ -230,7 +251,12 @@ export function RegisterListView({ serverInstances, active }: Props) {
       handleCellClick(selectedIndex);
       return;
     }
-    const newIndex = moveSelection(e.key, selectedIndex, values.length - 1);
+    const newIndex = moveSelection(
+      e.key,
+      selectedIndex,
+      values.length - 1,
+      columns,
+    );
     if (newIndex === null) return;
     e.preventDefault();
     setSelectedIndex(newIndex);
@@ -246,7 +272,7 @@ export function RegisterListView({ serverInstances, active }: Props) {
   const wordCount = isBitType ? 1 : getWordCount(bitWidth);
 
   // 実効的な列数（32bit/64bitの場合は列をまとめる）
-  const effectiveColumns = columnsPerRow(wordCount);
+  const effectiveColumns = columnsPerRow(wordCount, columns);
 
   if (!active) return null;
 
@@ -301,13 +327,15 @@ export function RegisterListView({ serverInstances, active }: Props) {
 
               if (!isNaN(v)) {
                 setStartAddress(
-                  isOneOriginArea ? Math.max(0, v - 1) : Math.max(0, v),
+                  isWordBit
+                    ? Math.max(0, v) * BITS_PER_WORD
+                    : isOneOriginArea
+                      ? Math.max(0, v - 1)
+                      : Math.max(0, v),
                 );
               }
 
-              setStartAddressText(
-                String(isOneOriginArea ? startAddress + 1 : startAddress),
-              );
+              setStartAddressText(startAddressDisplay(startAddress));
             }}
             onFocus={(e) => e.target.select()}
           />
@@ -376,18 +404,28 @@ export function RegisterListView({ serverInstances, active }: Props) {
               <th className="row-header"></th>
               {Array.from({ length: effectiveColumns }, (_, i) => (
                 <th key={i} className="col-header" colSpan={wordCount}>
-                  +{toDisplayAddr(i * wordCount)}
-                  {wordCount > 1
-                    ? `~+${toDisplayAddr(i * wordCount + wordCount - 1)}`
-                    : ""}
+                  {isWordBit ? (
+                    `.${String(i).padStart(2, "0")}`
+                  ) : (
+                    <>
+                      +{toDisplayAddr(i * wordCount)}
+                      {wordCount > 1
+                        ? `~+${toDisplayAddr(i * wordCount + wordCount - 1)}`
+                        : ""}
+                    </>
+                  )}
                 </th>
               ))}
             </tr>
           </thead>
           <tbody>
-            {buildRows(values, startAddress, wordCount).map((row) => (
+            {buildRows(values, startAddress, wordCount, columns).map((row) => (
               <tr key={row.rowStart}>
-                <td className="row-header">{toDisplayAddr(row.rowStart)}</td>
+                <td className="row-header">
+                  {isWordBit
+                    ? Math.floor(row.rowStart / BITS_PER_WORD)
+                    : toDisplayAddr(row.rowStart)}
+                </td>
                 {row.cells.map((cell) => (
                   <td
                     key={cell.index}
@@ -408,18 +446,19 @@ export function RegisterListView({ serverInstances, active }: Props) {
 
       <div className="register-navigation">
         <button
-          onClick={() => setStartAddress(Math.max(0, startAddress - PAGE_SIZE))}
+          onClick={() => setStartAddress(Math.max(0, startAddress - pageSize))}
           disabled={startAddress === 0}
           className="btn-secondary"
         >
           前へ
         </button>
         <span>
-          {toDisplayAddr(startAddress)} -{" "}
-          {toDisplayAddr(startAddress + PAGE_SIZE - 1)}
+          {isWordBit
+            ? `${startAddressDisplay(startAddress)} - ${startAddressDisplay(startAddress + pageSize - 1)}`
+            : `${toDisplayAddr(startAddress)} - ${toDisplayAddr(startAddress + PAGE_SIZE - 1)}`}
         </span>
         <button
-          onClick={() => setStartAddress(startAddress + PAGE_SIZE)}
+          onClick={() => setStartAddress(startAddress + pageSize)}
           className="btn-secondary"
           disabled={startAddress >= maxStartAddress}
         >
@@ -434,7 +473,11 @@ export function RegisterListView({ serverInstances, active }: Props) {
           protocolType={selectedProtocol}
           area={selectedArea}
           address={editing.address}
-          displayAddress={toDisplayAddr(editing.address)}
+          displayAddress={
+            isWordBit
+              ? formatAddress(currentArea, editing.address)
+              : toDisplayAddr(editing.address)
+          }
           currentValueText={formatValue(
             editing.originalValue,
             editing.address - startAddress,

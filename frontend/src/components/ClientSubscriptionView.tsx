@@ -9,7 +9,7 @@ import {
 } from "../../wailsjs/go/main/App";
 import { application } from "../../wailsjs/go/models";
 import { Play, Square, Trash2, SquarePlus } from "lucide-react";
-import { DynamicField } from "./DynamicField";
+import { DynamicField, visibleFields } from "./DynamicField";
 import { clientStatusLabel, formatClientTime } from "./clientFormat";
 import { ClientBrowseDialog, applyBrowsePick } from "./ClientBrowseDialog";
 
@@ -188,7 +188,7 @@ export function ClientSubscriptionView({
 
       <div className="vscode-setting-category">監視項目の追加</div>
       <div className="client-polling-add-fields">
-        {fields.map((field) => (
+        {visibleFields(fields, params).map((field) => (
           <DynamicField
             key={field.name}
             field={field}

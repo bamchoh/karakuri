@@ -9,6 +9,7 @@ import (
 	"sync"
 
 	"karakuri/internal/domain/protocol"
+	"karakuri/internal/domain/protocol/fields"
 )
 
 // Modbus のプロトコルタイプ
@@ -80,7 +81,7 @@ func (f *TCPFactory) GetConfigFields(_ string) []protocol.ConfigField {
 	def := DefaultTCPConfig()
 	return []protocol.ConfigField{
 		{Name: "tcpAddress", Label: "アドレス", Description: "待ち受けるネットワークアドレス。0.0.0.0 で全インターフェースに対応します。", Type: "text", Required: true, Default: def.TCPAddress},
-		{Name: "tcpPort", Label: "ポート", Description: "Modbus TCP の待ち受けポート番号。標準ポートは 502 です。", Type: "number", Required: true, Default: def.TCPPort, Min: intPtr(1), Max: intPtr(65535)},
+		{Name: "tcpPort", Label: "ポート", Description: "Modbus TCP の待ち受けポート番号。標準ポートは 502 です。", Type: "number", Required: true, Default: def.TCPPort, Min: fields.IntPtr(1), Max: fields.IntPtr(65535)},
 	}
 }
 
@@ -99,8 +100,8 @@ func (f *TCPFactory) ConfigToMap(config protocol.ProtocolConfig) map[string]inte
 // MapToConfig はmapから設定を作成する（map にない項目は既定値のまま）
 func (f *TCPFactory) MapToConfig(_ string, settings map[string]interface{}) (protocol.ProtocolConfig, error) {
 	config := DefaultTCPConfig()
-	setString(settings, "tcpAddress", &config.TCPAddress)
-	setInt(settings, "tcpPort", &config.TCPPort)
+	fields.SetString(settings, "tcpAddress", &config.TCPAddress)
+	fields.SetInt(settings, "tcpPort", &config.TCPPort)
 	return config, nil
 }
 
@@ -237,33 +238,12 @@ func serialConfigToMap(config protocol.ProtocolConfig) map[string]interface{} {
 
 // applySerialSettings は、map にあるシリアル通信の設定を config に入れて返す
 func applySerialSettings(config *ModbusConfig, settings map[string]interface{}) *ModbusConfig {
-	setString(settings, "serialPort", &config.SerialPort)
-	setInt(settings, "baudRate", &config.BaudRate)
-	setInt(settings, "dataBits", &config.DataBits)
-	setInt(settings, "stopBits", &config.StopBits)
-	setString(settings, "parity", &config.Parity)
+	fields.SetString(settings, "serialPort", &config.SerialPort)
+	fields.SetInt(settings, "baudRate", &config.BaudRate)
+	fields.SetInt(settings, "dataBits", &config.DataBits)
+	fields.SetInt(settings, "stopBits", &config.StopBits)
+	fields.SetString(settings, "parity", &config.Parity)
 	return config
-}
-
-// setString は、settings[key] が文字列なら dst に入れる
-func setString(settings map[string]interface{}, key string, dst *string) {
-	if v, ok := settings[key].(string); ok {
-		*dst = v
-	}
-}
-
-// setInt は、settings[key] が数値なら dst に入れる（JSON から来た値は float64、Go から来た値は int）
-func setInt(settings map[string]interface{}, key string, dst *int) {
-	switch v := settings[key].(type) {
-	case float64:
-		*dst = int(v)
-	case int:
-		*dst = v
-	}
-}
-
-func intPtr(i int) *int {
-	return &i
 }
 
 // ModbusVariant はModbusのバリアント

@@ -89,6 +89,7 @@ type MemoryAreaDTO struct {
 	ByteAddressing bool   `json:"byteAddressing"`
 	OneOrigin      bool   `json:"oneOrigin"`
 	ShortName      string `json:"shortName"`
+	BitsOf         string `json:"bitsOf,omitempty"` // 同じメモリを指すワードのエリアの ID（アドレスは「ワード.ビット」で表示する）
 }
 
 // === UnitID設定DTO ===

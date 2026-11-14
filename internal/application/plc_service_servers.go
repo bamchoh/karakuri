@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"sort"
 
 	"karakuri/internal/domain/protocol"
 )
@@ -125,13 +124,14 @@ func (s *PLCService) checkNodePublishable(protocolType, variableID, name string)
 
 // === プロトコル管理API ===
 
-// GetAvailableProtocols は利用可能なプロトコル一覧を返す
+// GetAvailableProtocols は利用可能なプロトコル一覧を、登録した順に返す
 func (s *PLCService) GetAvailableProtocols() []ProtocolInfoDTO {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
 	result := make([]ProtocolInfoDTO, 0, len(s.factories))
-	for _, factory := range s.factories {
+	for _, pt := range s.factoryOrder {
+		factory := s.factories[pt]
 		variants := factory.ConfigVariants()
 		variantDTOs := make([]ConfigVariantDTO, len(variants))
 		for j, v := range variants {
@@ -146,9 +146,6 @@ func (s *PLCService) GetAvailableProtocols() []ProtocolInfoDTO {
 			Variants:    variantDTOs,
 		})
 	}
-	sort.Slice(result, func(i, j int) bool {
-		return result[i].Type < result[j].Type
-	})
 	return result
 }
 
