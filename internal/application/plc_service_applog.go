@@ -19,11 +19,12 @@ type AppLogDTO struct {
 	At      int64  `json:"at"`      // Unix ミリ秒
 	Level   string `json:"level"`   // "info" | "warn" | "error"
 	Source  string `json:"source"`  // 出どころ（"Modbus TCP"、"接続先: PLC-A"、"プロジェクト" など）
+	Target  string `json:"target"`  // 関係するものの場所（"server:<プロトコルタイプ>" / "client:<ID>" / "script:<ID>"）。なければ空
 	Message string `json:"message"` // 内容
 }
 
 func appLogToDTO(e applog.Entry) AppLogDTO {
-	return AppLogDTO{ID: e.ID, At: e.At.UnixMilli(), Level: string(e.Level), Source: e.Source, Message: e.Message}
+	return AppLogDTO{ID: e.ID, At: e.At.UnixMilli(), Level: string(e.Level), Source: e.Source, Target: e.Target, Message: e.Message}
 }
 
 // AppLog は、アプリ全体のログを返す（ホストのほかの部分（app.go の HTTP API など）がログを足すのに使う）
@@ -76,7 +77,23 @@ func (s *PLCService) serverLogSource(protocolType string) string {
 	return protocolType
 }
 
+// serverLog は、サーバーのログを出すロガーを返す（行き先は、通信画面のそのサーバー）。
+// serverLogSource と同じく、s.mu を持ったまま呼ばない
+func (s *PLCService) serverLog(protocolType string) applog.Scope {
+	return s.appLog.Scope(s.serverLogSource(protocolType), "server:"+protocolType)
+}
+
 // clientLogSource は、クライアント（接続先）のログの出どころを返す
 func clientLogSource(name string) string {
 	return "接続先: " + name
+}
+
+// clientLog は、接続先のログを出すロガーを返す（行き先は、通信画面のその接続先）
+func (m *clientManager) clientLog(id, name string) applog.Scope {
+	return m.log.Scope(clientLogSource(name), "client:"+id)
+}
+
+// scriptLog は、スクリプトのログを出すロガーを返す（行き先は、スクリプトのページのそのスクリプト）
+func (s *PLCService) scriptLog(id, name string) applog.Scope {
+	return s.appLog.Scope("スクリプト: "+name, "script:"+id)
 }

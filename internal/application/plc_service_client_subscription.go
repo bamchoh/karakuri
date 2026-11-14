@@ -143,12 +143,12 @@ func (m *clientManager) recordSubscriptionEvent(inst *clientInstance, p *poller,
 		if ev.Status == protocol.CommandOK {
 			inst.subState, inst.subError = subscriptionStateOK, ""
 			if before != subscriptionStateOK {
-				m.log.Infof(clientLogSource(inst.name), "サブスクリプションで監視しています")
+				m.clientLog(inst.id, inst.name).Infof("サブスクリプションで監視しています")
 			}
 		} else {
 			inst.subState, inst.subError = subscriptionStateError, ev.Error
 			if before != subscriptionStateError {
-				m.log.Errorf(clientLogSource(inst.name), "サブスクリプションがつながっていません: %s", ev.Error)
+				m.clientLog(inst.id, inst.name).Errorf("サブスクリプションがつながっていません: %s", ev.Error)
 			}
 		}
 		return
@@ -305,11 +305,11 @@ func (s *PLCService) StartClientSubscription(id string) error {
 	}
 	wasRunning := inst.subscriber != nil
 	if err := m.startSubscriberLocked(inst); err != nil {
-		m.log.Errorf(clientLogSource(inst.name), "サブスクリプションを開始できませんでした: %v", err)
+		m.clientLog(inst.id, inst.name).Errorf("サブスクリプションを開始できませんでした: %v", err)
 		return err
 	}
 	if !wasRunning && inst.subscriber != nil {
-		m.log.Infof(clientLogSource(inst.name), "サブスクリプションを開始しました")
+		m.clientLog(inst.id, inst.name).Infof("サブスクリプションを開始しました")
 	}
 	return nil
 }
@@ -328,7 +328,7 @@ func (s *PLCService) StopClientSubscription(id string) error {
 	m.mu.Unlock()
 	p.wait()
 	if p != nil {
-		m.log.Infof(clientLogSource(name), "サブスクリプションを停止しました")
+		m.clientLog(id, name).Infof("サブスクリプションを停止しました")
 	}
 	return err
 }

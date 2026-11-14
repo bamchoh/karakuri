@@ -5,6 +5,7 @@ export namespace application {
 	    at: number;
 	    level: string;
 	    source: string;
+	    target: string;
 	    message: string;
 	
 	    static createFrom(source: any = {}) {
@@ -17,6 +18,7 @@ export namespace application {
 	        this.at = source["at"];
 	        this.level = source["level"];
 	        this.source = source["source"];
+	        this.target = source["target"];
 	        this.message = source["message"];
 	    }
 	}

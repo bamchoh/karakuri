@@ -150,7 +150,16 @@ function ScriptEditPanel({
   );
 }
 
-export function ScriptPanel() {
+interface ScriptPanelProps {
+  // 選んでほしいスクリプトの ID（ログの行から移ってきたとき）。選んだら onSelectRequestHandled を呼ぶ
+  selectRequest?: string | null;
+  onSelectRequestHandled?: () => void;
+}
+
+export function ScriptPanel({
+  selectRequest,
+  onSelectRequestHandled,
+}: ScriptPanelProps = {}) {
   const [scripts, setScripts] = useState<application.ScriptDTO[]>([]);
   const [presets, setPresets] = useState<application.IntervalPresetDTO[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -163,6 +172,13 @@ export function ScriptPanel() {
   const consoleRef = useRef<HTMLDivElement>(null);
 
   const selectedScript = scripts.find((s) => s.id === selectedId) ?? null;
+
+  // ログの行から移ってきたときは、そのスクリプトを選ぶ（一覧を読み込んでから）
+  useEffect(() => {
+    if (!selectRequest || !scripts.some((s) => s.id === selectRequest)) return;
+    setSelectedId(selectRequest);
+    onSelectRequestHandled?.();
+  }, [selectRequest, scripts, onSelectRequestHandled]);
 
   useEffect(() => {
     loadData();

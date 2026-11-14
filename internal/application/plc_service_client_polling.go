@@ -296,7 +296,7 @@ func (s *PLCService) StartClientPolling(id string) error {
 	inst.pollCycles = 0
 	inst.pollFailing = false
 	go m.runPoller(ctx, inst, p)
-	m.log.Infof(clientLogSource(inst.name), "ポーリングを開始しました（周期 %d ms）", inst.pollIntervalMs)
+	m.clientLog(inst.id, inst.name).Infof("ポーリングを開始しました（周期 %d ms）", inst.pollIntervalMs)
 	return nil
 }
 
@@ -314,7 +314,7 @@ func (s *PLCService) StopClientPolling(id string) error {
 	m.mu.Unlock()
 	p.wait()
 	if p != nil {
-		m.log.Infof(clientLogSource(name), "ポーリングを停止しました")
+		m.clientLog(id, name).Infof("ポーリングを停止しました")
 	}
 	return err
 }
@@ -443,9 +443,9 @@ func (m *clientManager) logPollState(inst *clientInstance, failed string) {
 	m.mu.Unlock()
 	switch {
 	case failed != "" && !was:
-		m.log.Errorf(clientLogSource(name), "ポーリングで通信エラーが起きました: %s", failed)
+		m.clientLog(inst.id, name).Errorf("ポーリングで通信エラーが起きました: %s", failed)
 	case failed == "" && was:
-		m.log.Infof(clientLogSource(name), "ポーリングの通信が戻りました")
+		m.clientLog(inst.id, name).Infof("ポーリングの通信が戻りました")
 	}
 }
 

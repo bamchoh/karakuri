@@ -15,9 +15,9 @@ func (s *PLCService) StartServer(protocolType string) (err error) {
 	defer func() {
 		// 失敗の理由は「サーバーの起動に失敗しました: ...」の形で返るので、そのまま出す
 		if err != nil {
-			s.appLog.Errorf(s.serverLogSource(protocolType), "%v", err)
+			s.serverLog(protocolType).Errorf("%v", err)
 		} else {
-			s.appLog.Infof(s.serverLogSource(protocolType), "サーバーを起動しました")
+			s.serverLog(protocolType).Infof("サーバーを起動しました")
 		}
 	}()
 	s.mu.Lock()
@@ -44,9 +44,9 @@ func (s *PLCService) StopServer(protocolType string) (err error) {
 	wasRunning := false
 	defer func() {
 		if err != nil {
-			s.appLog.Errorf(s.serverLogSource(protocolType), "サーバーを停止できませんでした: %v", err)
+			s.serverLog(protocolType).Errorf("サーバーを停止できませんでした: %v", err)
 		} else if wasRunning {
-			s.appLog.Infof(s.serverLogSource(protocolType), "サーバーを停止しました")
+			s.serverLog(protocolType).Infof("サーバーを停止しました")
 		}
 	}()
 	s.mu.Lock()
@@ -223,7 +223,7 @@ func (s *PLCService) GetServerConfig(protocolType string) *ServerConfigDTO {
 // UpdateServerConfig はサーバーの設定を更新する
 func (s *PLCService) UpdateServerConfig(dto *ServerConfigDTO) (err error) {
 	defer func() {
-		s.appLog.Result(s.serverLogSource(dto.ProtocolType), "設定を変更しました", "設定を変更できませんでした", err)
+		s.serverLog(dto.ProtocolType).Result("設定を変更しました", "設定を変更できませんでした", err)
 	}()
 	s.mu.Lock()
 	defer s.mu.Unlock()

@@ -85,6 +85,7 @@ func NewPLCService() *PLCService {
 		appLog:          applog.New(applog.DefaultMaxEntries),
 	}
 	service.clients.log = service.appLog
+	service.scriptEngine.SetOnRunStateChanged(service.logScriptRunState)
 
 	// スクリプトの plc.getVariableStatus() に、外部の機器との同期の状態を渡す
 	service.scriptEngine.SetVariableStatusProvider(func(variableID string) map[string]any {
@@ -153,7 +154,7 @@ func (s *PLCService) GetServerInstances() []ServerInstanceDTO {
 // AddServer は新しいサーバーインスタンスを追加する
 func (s *PLCService) AddServer(protocolType string, variantID string) (err error) {
 	defer func() {
-		s.appLog.Result(s.serverLogSource(protocolType), "サーバーを追加しました", "サーバーを追加できませんでした", err)
+		s.serverLog(protocolType).Result("サーバーを追加しました", "サーバーを追加できませんでした", err)
 	}()
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -206,7 +207,7 @@ func (s *PLCService) AddServer(protocolType string, variantID string) (err error
 // RemoveServer はサーバーインスタンスを削除する
 func (s *PLCService) RemoveServer(protocolType string) (err error) {
 	defer func() {
-		s.appLog.Result(s.serverLogSource(protocolType), "サーバーを削除しました", "サーバーを削除できませんでした", err)
+		s.serverLog(protocolType).Result("サーバーを削除しました", "サーバーを削除できませんでした", err)
 	}()
 	s.mu.Lock()
 	defer s.mu.Unlock()

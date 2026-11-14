@@ -137,6 +137,11 @@ func (s *PLCService) ImportProject(data *ProjectDataDTO) (err error) {
 
 	// 実行中のスクリプトを全て停止
 	if s.scriptEngine != nil {
+		for _, id := range s.scriptEngine.GetRunningScripts() {
+			if sc, ok := s.scripts[id]; ok {
+				s.scriptLog(id, sc.Name).Infof("スクリプトを停止しました（プロジェクトを読み込むため）")
+			}
+		}
 		s.scriptEngine.StopAll()
 	}
 
