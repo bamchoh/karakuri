@@ -2456,10 +2456,6 @@ button:disabled {
 }
 
 /* ----- クライアント画面: ポーリング ----- */
-.sub-tab-nav.client-sub-tabs {
-  margin: 0.75rem 1rem 0.25rem;
-}
-
 .client-polling-badge {
   font-size: 0.7rem;
   padding: 0 4px;
@@ -2636,24 +2632,14 @@ button:disabled {
   text-align: left;
 }
 
-/* 接続先の設定の欄を開閉する見出し */
-.vscode-setting-category.client-settings-toggle {
-  display: flex;
-  align-items: center;
-  gap: 0.35rem;
-  width: 100%;
-  border: none;
-  border-bottom: 1px solid #1a3d22;
-  border-radius: 0;
-  cursor: pointer;
-  font-family: inherit;
-}
-
-.vscode-setting-category.client-settings-toggle:hover {
-  background: rgba(34, 197, 94, 0.05);
+/* 見出しに出す、接続先の設定の 1 行の要約（どこへ送るのかが、どのタブでも見えるようにする） */
+.server-config-pane-title {
+  min-width: 0;
 }
 
 .client-settings-summary {
+  flex: 1;
+  min-width: 0;
   margin-left: 0.75rem;
   font-size: 0.8rem;
   font-weight: 400;

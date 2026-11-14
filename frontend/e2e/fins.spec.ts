@@ -351,7 +351,6 @@ test.describe("FINS", () => {
       timeoutMs: 500,
     });
     await openClient(page, "PLC");
-    await page.getByText("接続先の設定").click();
 
     await page.getByRole("button", { name: "新しいコマンド" }).click();
     const dialog = page.locator(".dialog").last();

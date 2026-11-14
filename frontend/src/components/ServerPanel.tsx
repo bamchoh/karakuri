@@ -80,9 +80,8 @@ export const ServerPanel = forwardRef<ServerPanelHandle, ServerPanelProps>(
     const [selected, setSelected] = useState<Selection>(null);
     // サーバーの右側のタブ（設定 / レジスタ / モニタリング）。選び直しても保つ
     const [serverSubTab, setServerSubTab] = useState<ServerSubTab>("settings");
-    // クライアントの右側で、選び直しても保つもの
+    // クライアントの右側のタブ（設定 / コマンド / ポーリング / サブスクリプション）。選び直しても保つ
     const [clientSubTab, setClientSubTab] = useState<ClientSubTab>("command");
-    const [clientSettingsOpen, setClientSettingsOpen] = useState(true);
 
     const [selectedPaneDirty, setSelectedPaneDirty] = useState(false);
     const [pendingAction, setPendingAction] = useState<{
@@ -317,6 +316,8 @@ export const ServerPanel = forwardRef<ServerPanelHandle, ServerPanelProps>(
             const added = await AddClient(protocolType, name);
             await loadClients();
             setSelected({ kind: "client", id: added.id });
+            // 追加した直後は、接続先（ホスト・ポートなど）を入れられるよう、設定のタブを開く
+            setClientSubTab("settings");
           } catch (e) {
             setError(String(e));
           }
@@ -536,8 +537,6 @@ export const ServerPanel = forwardRef<ServerPanelHandle, ServerPanelProps>(
                 )}
                 subTab={clientSubTab}
                 onSubTabChange={setClientSubTab}
-                settingsOpen={clientSettingsOpen}
-                onSettingsOpenChange={setClientSettingsOpen}
                 onDirtyChange={handlePaneDirtyChange}
                 onClientsChanged={loadClients}
                 onLogsChanged={loadLogs}

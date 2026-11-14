@@ -144,8 +144,7 @@ test("プロトコルを選んで接続先を追加し、設定を保存でき�
   expect(clients[0].settings.endpointUrl).toBe(ENDPOINT);
   expect(clients[0].settings.password).toBe("secret-pass");
 
-  // 設定の欄を閉じたときの要約に、パスワードは出さない
-  await page.locator(".client-settings-toggle").click();
+  // 見出しに出す接続先の要約に、パスワードは出さない
   const summary = page.locator(".client-settings-summary");
   await expect(summary).toContainText(ENDPOINT);
   await expect(summary).toContainText("ユーザー名: operator");
@@ -153,7 +152,6 @@ test("プロトコルを選んで接続先を追加し、設定を保存でき�
   await expect(summary).not.toContainText("パスワード");
 
   // 形の違う URL は保存できない
-  await page.locator(".client-settings-toggle").click();
   await setting(page, "エンドポイント URL").fill("127.0.0.1:4840");
   await page.getByRole("button", { name: "保存", exact: true }).click();
   await expect(page.locator(".config-error")).toContainText("opc.tcp://");
