@@ -14,6 +14,8 @@ import {
   columnsPerRow,
   formatRegisterValue,
   moveSelection,
+  HEX_COLUMNS,
+  HEX_PAGE_SIZE,
   PAGE_SIZE,
   RegisterValue,
   WORD_BIT_COLUMNS,
@@ -111,8 +113,18 @@ export function RegisterListView({ protocolType, active }: Props) {
   const isByteAddr = currentArea?.byteAddressing ?? false;
   const isOneOriginArea = currentArea?.oneOrigin ?? false;
   const isWordBit = isWordBitArea(currentArea);
-  const columns = isWordBit ? WORD_BIT_COLUMNS : undefined;
-  const pageSize = isWordBit ? WORD_BIT_PAGE_SIZE : PAGE_SIZE;
+  // アドレスを 16 進で書くエリア（三菱の X・Y・B・W など）
+  const isHex = !isWordBit && (currentArea?.hexAddress ?? false);
+  const columns = isWordBit
+    ? WORD_BIT_COLUMNS
+    : isHex
+      ? HEX_COLUMNS
+      : undefined;
+  const pageSize = isWordBit
+    ? WORD_BIT_PAGE_SIZE
+    : isHex
+      ? HEX_PAGE_SIZE
+      : PAGE_SIZE;
   const maxStartAddress = currentArea
     ? Math.max(0, currentArea.size - pageSize)
     : 0;
@@ -123,19 +135,21 @@ export function RegisterListView({ protocolType, active }: Props) {
 
   const readCount = Math.min(pageSize, remaining);
 
-  // 開始アドレスを、入力欄に出す番号にする（1 始まりのエリアは +1、「ワード.ビット」のエリアはワードの番号）
+  // 開始アドレスを、入力欄に出す番号にする（1 始まりのエリアは +1、「ワード.ビット」のエリアはワードの番号、16 進のエリアは 16 進）
   const startAddressDisplay = (address: number) =>
-    String(
-      isWordBit
-        ? Math.floor(address / BITS_PER_WORD)
-        : isOneOriginArea
-          ? address + 1
-          : address,
-    );
+    isHex
+      ? address.toString(16).toUpperCase()
+      : String(
+          isWordBit
+            ? Math.floor(address / BITS_PER_WORD)
+            : isOneOriginArea
+              ? address + 1
+              : address,
+        );
 
   useEffect(() => {
     setStartAddressText(startAddressDisplay(startAddress));
-  }, [startAddress, isOneOriginArea, isWordBit]);
+  }, [startAddress, isOneOriginArea, isWordBit, isHex]);
 
   // 「ワード.ビット」のエリアでは、開始アドレスをワードの境目にそろえる（行の先頭を .00 にするため）
   useEffect(() => {
@@ -144,8 +158,9 @@ export function RegisterListView({ protocolType, active }: Props) {
     }
   }, [isWordBit, startAddress]);
 
-  // ワードアドレスを表示用アドレスに変換する（バイトアドレスは*2、oneOrigin のエリアは+1）
-  const toDisplayAddr = (wordAddr: number) => {
+  // ワードアドレスを表示用アドレスに変換する（バイトアドレスは*2、oneOrigin のエリアは+1、16 進のエリアは 16 進）
+  const toDisplayAddr = (wordAddr: number): number | string => {
+    if (isHex) return wordAddr.toString(16).toUpperCase();
     if (isByteAddr) return wordAddr * 2;
     if (isOneOriginArea) return wordAddr + 1;
     return wordAddr;
@@ -330,7 +345,12 @@ export function RegisterListView({ protocolType, active }: Props) {
               setStartAddressText(e.target.value);
             }}
             onBlur={() => {
-              const v = parseInt(startAddressText);
+              // 16 進のエリアは、16 進で読む（0x は付けても付けなくてもよい）
+              const v = isHex
+                ? /^(0[xX])?[0-9a-fA-F]+$/.test(startAddressText.trim())
+                  ? parseInt(startAddressText.trim(), 16)
+                  : NaN
+                : parseInt(startAddressText);
 
               if (!isNaN(v)) {
                 const wanted = isWordBit
@@ -415,7 +435,7 @@ export function RegisterListView({ protocolType, active }: Props) {
         tabIndex={0}
         onKeyDown={handleTableKeyDown}
       >
-        <table className="register-matrix">
+        <table className={`register-matrix${columns ? " matrix-wide" : ""}`}>
           <thead>
             <tr>
               <th className="row-header"></th>
@@ -472,7 +492,7 @@ export function RegisterListView({ protocolType, active }: Props) {
         <span>
           {isWordBit
             ? `${startAddressDisplay(startAddress)} - ${startAddressDisplay(startAddress + pageSize - 1)}`
-            : `${toDisplayAddr(startAddress)} - ${toDisplayAddr(startAddress + PAGE_SIZE - 1)}`}
+            : `${toDisplayAddr(startAddress)} - ${toDisplayAddr(startAddress + pageSize - 1)}`}
         </span>
         <button
           onClick={() => setStartAddress(startAddress + pageSize)}

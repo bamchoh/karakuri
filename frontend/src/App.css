@@ -561,6 +561,18 @@ button:disabled {
   transition: background-color 0.15s;
 }
 
+/* 16 列の表（1bit の表示・16 進のデバイス）は、横に収まるようにセルを狭くする */
+.register-matrix.matrix-wide .matrix-cell,
+.register-matrix.matrix-wide .col-header {
+  min-width: 52px;
+}
+
+.register-matrix.matrix-wide td,
+.register-matrix.matrix-wide th {
+  padding-left: 0.25rem;
+  padding-right: 0.25rem;
+}
+
 .matrix-cell:hover {
   background: rgba(76, 154, 255, 0.2);
 }

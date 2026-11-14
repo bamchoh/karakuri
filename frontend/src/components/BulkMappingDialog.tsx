@@ -12,7 +12,7 @@ import {
   formatAddress,
   mappingRange,
   isBitDataType,
-  isWordBitArea,
+  isTextAddressArea,
   mappingAreaFor,
   mappingWidthLabel,
   parseAddress,
@@ -455,7 +455,7 @@ export const BulkMappingDialog = forwardRef<BulkMappingDialogHandle, Props>(
                           const areas =
                             memoryAreasByProtocol[bulkProtocol] || [];
                           const rowArea = areaOf(bulkProtocol, row.memoryArea);
-                          const wordBit = isWordBitArea(rowArea);
+                          const wordBit = isTextAddressArea(rowArea);
                           const hasConflict = conflictIds.has(row.variableId);
                           const range = rowRange(row, bulkProtocol);
                           return (

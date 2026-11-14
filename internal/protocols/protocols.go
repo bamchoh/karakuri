@@ -10,6 +10,7 @@ import (
 	"karakuri/internal/protocols/fins"
 	"karakuri/internal/protocols/modbus"
 	"karakuri/internal/protocols/opcua"
+	"karakuri/internal/protocols/slmp"
 )
 
 // Factories は組み込みのプロトコルのファクトリーを返す。呼ぶたびに新しいものを作る
@@ -20,6 +21,7 @@ func Factories() []protocol.ServerFactory {
 		&modbus.ASCIIFactory{},
 		&opcua.Factory{},
 		&fins.Factory{},
+		&slmp.Factory{},
 	}
 }
 
@@ -29,5 +31,6 @@ func ClientFactories() []protocol.ClientFactory {
 		&modbus.TCPClientFactory{},
 		&opcua.ClientFactory{},
 		&fins.ClientFactory{},
+		&slmp.ClientFactory{},
 	}
 }
