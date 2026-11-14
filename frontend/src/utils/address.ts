@@ -4,12 +4,14 @@
 //   - oneOrigin: 1 始まりで表示する（Modbus）
 //   - bitsOf: ワードのエリアと同じメモリをビットごとに見たエリア。内部のアドレスは「ワード × 16 + ビット」で、
 //     「ワード.ビット」（100.05）の形で表示する（FINS の CIO など）
+//   - hexAddress: 16 進で表示する（三菱の X・Y・B・W など。X1F は "1F"）
 // 画面ごとに変換を書かず、ここの関数を使う。
 
 // 変換に使うエリアの属性（MemoryAreaDTO の一部）
 export interface AddressArea {
   oneOrigin?: boolean;
   bitsOf?: string;
+  hexAddress?: boolean;
 }
 
 export const BITS_PER_WORD = 16;
@@ -17,6 +19,18 @@ export const BITS_PER_WORD = 16;
 // 「ワード.ビット」の形でアドレスを表示するエリアかどうか
 export function isWordBitArea(area: AddressArea | undefined | null): boolean {
   return !!area?.bitsOf;
+}
+
+// アドレスを 16 進で表示するエリアかどうか
+export function isHexArea(area: AddressArea | undefined | null): boolean {
+  return !!area?.hexAddress;
+}
+
+// アドレスを、数値ではなく文字として入れるエリアかどうか（「ワード.ビット」・16 進）
+export function isTextAddressArea(
+  area: AddressArea | undefined | null,
+): boolean {
+  return isWordBitArea(area) || isHexArea(area);
 }
 
 // 0 始まりのアドレスを、表示用の文字列にする
@@ -28,6 +42,9 @@ export function formatAddress(
     const word = Math.floor(address / BITS_PER_WORD);
     const bit = address % BITS_PER_WORD;
     return `${word}.${String(bit).padStart(2, "0")}`;
+  }
+  if (isHexArea(area)) {
+    return address.toString(16).toUpperCase();
   }
   return String(area?.oneOrigin ? address + 1 : address);
 }
@@ -46,6 +63,11 @@ export function parseAddress(
     const bit = m[2] === undefined ? 0 : parseInt(m[2], 10);
     if (bit >= BITS_PER_WORD) return null;
     return word * BITS_PER_WORD + bit;
+  }
+  if (isHexArea(area)) {
+    // 16 進のエリアは、0x を付けても付けなくても同じ（"1F"・"0x1f"）
+    const m = /^(?:0[xX])?([0-9a-fA-F]+)$/.exec(s);
+    return m ? parseInt(m[1], 16) : null;
   }
   if (!/^\d+$/.test(s)) return null;
   const n = parseInt(s, 10);
@@ -177,5 +199,6 @@ export function mappingRange(
 export function addressPlaceholder(
   area: AddressArea | undefined | null,
 ): string {
+  if (isHexArea(area)) return "1F";
   return isWordBitArea(area) ? "100.05" : "";
 }

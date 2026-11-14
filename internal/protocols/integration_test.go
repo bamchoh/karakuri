@@ -132,7 +132,7 @@ func TestFactories(t *testing.T) {
 		}
 	}
 	sort.Strings(types)
-	if want := []string{"fins", "modbus-ascii", "modbus-rtu", "modbus-tcp", "opcua"}; !reflect.DeepEqual(types, want) {
+	if want := []string{"fins", "modbus-ascii", "modbus-rtu", "modbus-tcp", "opcua", "slmp"}; !reflect.DeepEqual(types, want) {
 		t.Errorf("プロトコル = %v, want %v", types, want)
 	}
 
@@ -145,7 +145,7 @@ func TestFactories(t *testing.T) {
 		}
 	}
 	// 並びは、登録した順（最初のものが、接続先を追加するときの既定になる）
-	if want := []string{"modbus-tcp", "opcua", "fins"}; !reflect.DeepEqual(clientTypes, want) {
+	if want := []string{"modbus-tcp", "opcua", "fins", "slmp"}; !reflect.DeepEqual(clientTypes, want) {
 		t.Errorf("クライアントのプロトコル = %v, want %v", clientTypes, want)
 	}
 
@@ -395,6 +395,187 @@ func TestFINSClient_VariableMapping(t *testing.T) {
 		w, _ := svc.ReadWords(finsType, "DM", 50, 2)
 		b, _ := svc.ReadBits(finsType, "WR_BIT", 10*16+15, 1)
 		return reflect.DeepEqual(w, []int{1, 70000 - 65536}) && len(b) == 1 && !b[0]
+	})
+}
+
+// ===== SLMP =====
+
+const slmpType = "slmp"
+
+// addSLMP は SLMP サーバーを追加し、127.0.0.1 の空きポートを設定する（起動はしない）
+func addSLMP(t *testing.T, svc *application.PLCService) int {
+	t.Helper()
+	must(t, svc.AddServer(slmpType, ""))
+	port := freePort(t)
+	cfg := svc.GetServerConfig(slmpType)
+	cfg.Settings["host"] = "127.0.0.1"
+	cfg.Settings["port"] = port
+	must(t, svc.UpdateServerConfig(cfg))
+	return port
+}
+
+type slmpSend func(cmd string, params map[string]interface{}) *application.ClientCommandLogDTO
+
+// slmpSender は、Karakuri の SLMP クライアントの接続先を作り、その ID と、コマンドを送る関数を返す
+func slmpSender(t *testing.T, svc *application.PLCService, port int, transport, frame string) (string, slmpSend) {
+	t.Helper()
+	c, err := svc.AddClient(slmpType, "自分", map[string]interface{}{"host": "127.0.0.1", "port": port, "transport": transport, "frame": frame, "timeoutMs": 300})
+	must(t, err)
+	return c.ID, func(cmd string, params map[string]interface{}) *application.ClientCommandLogDTO {
+		t.Helper()
+		req, err := svc.BuildClientRequest(slmpType, cmd, params)
+		must(t, err)
+		log, err := svc.SendClientRequest(c.ID, req)
+		must(t, err)
+		return log
+	}
+}
+
+// サーバーのメモリは起動前から読み書きでき、変数と同期する。TCP と UDP、3E と 4E のどれでも同じメモリを読む
+func TestSLMP_ServerAndVariableSync(t *testing.T) {
+	svc := newService(t)
+	port := addSLMP(t, svc)
+	areas := svc.GetMemoryAreas(slmpType)
+	if len(areas) != 28 {
+		t.Fatalf("エリア数 = %d, want 28", len(areas))
+	}
+	// デバイスの大きさは、SLMP で指せる最大（番号が 3 バイト）
+	for _, a := range areas {
+		if a.Size != 1<<24 {
+			t.Errorf("%s の大きさ = %d, want 16777216", a.ID, a.Size)
+		}
+	}
+
+	speed, err := svc.CreateVariable("Speed", "INT", 12)
+	must(t, err)
+	run, err := svc.CreateVariable("Run", "BOOL", true)
+	must(t, err)
+	big, err := svc.CreateVariable("Big", "DINT", 0x12345678)
+	must(t, err)
+	mapTo := func(id, area string, addr int) {
+		must(t, svc.UpdateVariableMappings(id, []application.ProtocolMappingDTO{
+			{ProtocolType: slmpType, MemoryArea: area, Address: addr, Endianness: "little"},
+		}))
+	}
+	mapTo(speed.ID, "D", 100)
+	mapTo(run.ID, "M", 105)
+	mapTo(big.ID, "D", 200) // 三菱の並び: 下位のワードが先
+
+	// 起動前でも、変数の値がメモリに入っている
+	if got, _ := svc.ReadWords(slmpType, "D", 200, 2); !reflect.DeepEqual(got, []int{0x5678, 0x1234}) {
+		t.Errorf("起動前: D200 = %v, want [22136 4660]", got)
+	}
+	if got, _ := svc.ReadBits(slmpType, "M", 105, 1); len(got) != 1 || !got[0] {
+		t.Errorf("起動前: M105 = %v, want [true]", got)
+	}
+
+	must(t, svc.StartServer(slmpType))
+	senders := map[string]slmpSend{}
+	for _, transport := range []string{"tcp", "udp"} {
+		for _, frame := range []string{"3e", "4e"} {
+			_, senders[transport+"/"+frame] = slmpSender(t, svc, port, transport, frame)
+		}
+	}
+	tcp, udp := senders["tcp/3e"], senders["udp/4e"]
+
+	// 変数 → メモリ: クライアントから読める（どの組み合わせでも）
+	must(t, svc.UpdateVariableValue(speed.ID, 345))
+	for name, send := range senders {
+		log := send("read", map[string]interface{}{"device": "D", "address": "100", "count": float64(1)})
+		if log.Status != "ok" || len(log.Values) != 1 || log.Values[0].Value != "345 (0x0159)" {
+			t.Errorf("%s: 変数を変えたあとクライアントが読んだ値: %+v", name, log)
+		}
+	}
+	if log := udp("read", map[string]interface{}{"device": "M", "address": "104", "count": float64(3)}); log.Status != "ok" || log.Values[0].Value != "OFF" || log.Values[1].Value != "ON" || log.Values[2].Value != "OFF" {
+		t.Errorf("ビットの変数: %+v", log)
+	}
+
+	// クライアントの書き込み → 変数（応答が返った時点で反映されている）
+	if log := tcp("write", map[string]interface{}{"device": "D", "address": "100", "values": "56"}); log.Status != "ok" {
+		t.Fatalf("書き込み: %+v", log)
+	}
+	if got := variableValue(t, svc, speed.ID); got != "56" {
+		t.Errorf("クライアントが書いたあとの変数 = %s, want 56", got)
+	}
+	if log := udp("write", map[string]interface{}{"device": "M", "address": "105", "values": "0"}); log.Status != "ok" {
+		t.Fatalf("ビットの書き込み: %+v", log)
+	}
+	if got := variableValue(t, svc, run.ID); got != "false" {
+		t.Errorf("クライアントがビットを書いたあとの変数 = %s, want false", got)
+	}
+	if log := udp("write", map[string]interface{}{"device": "D", "address": "200", "values": "0x9ABC"}); log.Status != "ok" {
+		t.Fatalf("書き込み: %+v", log)
+	}
+	if got := variableValue(t, svc, big.ID); got != fmt.Sprint(0x12349ABC) {
+		t.Errorf("下位ワードを書いたあとの DINT = %s, want %d", got, 0x12349ABC)
+	}
+
+	// ビットデバイスにワード単位で書いても（16 進で入れたリクエスト）、ビットの変数に反映される: M96 から 16 点、M105 はビット 9
+	id, _ := slmpSender(t, svc, port, "tcp", "3e")
+	log, err := svc.SendClientRequest(id, "01 14 00 00 60 00 00 90 01 00 00 02")
+	must(t, err)
+	if log.Status != "ok" {
+		t.Fatalf("ビットデバイスへのワード単位の書き込み: %+v", log)
+	}
+	if got := variableValue(t, svc, run.ID); got != "true" {
+		t.Errorf("ワード単位で書いたあとの BOOL = %s, want true", got)
+	}
+
+	// 起動し直しても、メモリと同期は残る
+	must(t, svc.StopServer(slmpType))
+	must(t, svc.UpdateVariableValue(speed.ID, 90))
+	must(t, svc.StartServer(slmpType))
+	if log := udp("read", map[string]interface{}{"device": "D", "address": "100", "count": float64(1)}); log.Status != "ok" || log.Values[0].Value != "90 (0x005A)" {
+		t.Errorf("起動し直したあと: %+v", log)
+	}
+}
+
+// クライアントの接続先にマッピングした変数は、ポーリング中に機器（Karakuri 自身の SLMP サーバー）と同期する
+func TestSLMPClient_VariableMapping(t *testing.T) {
+	svc := newService(t)
+	port := addSLMP(t, svc)
+	must(t, svc.StartServer(slmpType))
+	id, _ := slmpSender(t, svc, port, "udp", "4e")
+	must(t, svc.SetClientPollInterval(id, 50))
+	key := "client:" + id
+	if n := len(svc.GetMemoryAreas(key)); n != 28 {
+		t.Fatalf("接続先のエリア数 = %d, want 28", n)
+	}
+
+	const far = 1<<24 - 2 // デバイスの終わり（D16777214・D16777215）
+	must(t, svc.WriteWord(slmpType, "D", far, 321))
+	must(t, svc.WriteBit(slmpType, "X", 0x1F, true))
+	num, err := svc.CreateVariable("remote", "DINT", 0)
+	must(t, err)
+	flag, err := svc.CreateVariable("remoteFlag", "BOOL", false)
+	must(t, err)
+	must(t, svc.UpdateVariableMappings(num.ID, []application.ProtocolMappingDTO{{ProtocolType: key, MemoryArea: "D", Address: far, Endianness: "little"}}))
+	must(t, svc.UpdateVariableMappings(flag.ID, []application.ProtocolMappingDTO{{ProtocolType: key, MemoryArea: "X", Address: 0x1F, Endianness: "little"}}))
+	must(t, svc.StartClientPolling(id))
+	t.Cleanup(func() { _ = svc.StopClientPolling(id) })
+
+	waitUntil := func(what string, cond func() bool) {
+		t.Helper()
+		deadline := time.Now().Add(3 * time.Second)
+		for !cond() {
+			if time.Now().After(deadline) {
+				t.Fatalf("待っても %s にならない（remote = %s、remoteFlag = %s、状態 %+v）", what,
+					variableValue(t, svc, num.ID), variableValue(t, svc, flag.ID), svc.VariableDeviceStatus(num.ID))
+			}
+			time.Sleep(10 * time.Millisecond)
+		}
+	}
+	waitUntil("機器の値を読む", func() bool {
+		return variableValue(t, svc, num.ID) == "321" && variableValue(t, svc, flag.ID) == "true"
+	})
+
+	// 変数を変えると、サーバーのメモリに書く
+	must(t, svc.UpdateVariableValue(num.ID, 70000))
+	must(t, svc.UpdateVariableValue(flag.ID, false))
+	waitUntil("書く", func() bool {
+		w, _ := svc.ReadWords(slmpType, "D", far, 2)
+		b, _ := svc.ReadBits(slmpType, "X", 0x1F, 1)
+		return reflect.DeepEqual(w, []int{70000 - 65536, 1}) && len(b) == 1 && !b[0]
 	})
 }
 

@@ -15,6 +15,10 @@ export const PAGE_SIZE = 100;
 export const WORD_BIT_COLUMNS = 16;
 export const WORD_BIT_PAGE_SIZE = WORD_BIT_COLUMNS * 10;
 
+// アドレスを 16 進で書くエリア（MemoryAreaDTO.hexAddress）は、1 行に 16 個を並べる（行の先頭が 0・10・20 になる）
+export const HEX_COLUMNS = 16;
+export const HEX_PAGE_SIZE = HEX_COLUMNS * 10;
+
 // レジスタの値（ビットのエリアは boolean、ワードのエリアは number）
 export type RegisterValue = boolean | number;
 

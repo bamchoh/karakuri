@@ -8,11 +8,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-このプロジェクトは PLC シミュレーター です。Modbus（TCP/RTU/ASCII）・OPC UA・FINS（オムロン）をサポートしています。
+このプロジェクトは PLC シミュレーター です。Modbus（TCP/RTU/ASCII）・OPC UA・FINS（オムロン）・SLMP（三菱電機）をサポートしています。
 
 ### 主な機能
 
-- **マルチプロトコル対応**: Modbus TCP / Modbus RTU / Modbus ASCII / OPC UA / FINS を個別のサーバーとして起動可能
+- **マルチプロトコル対応**: Modbus TCP / Modbus RTU / Modbus ASCII / OPC UA / FINS / SLMP を個別のサーバーとして起動可能
 - **複数サーバー同時実行**: 異なるプロトコル（例: Modbus TCP + OPC UA）を同時に起動可能。各サーバーは独立したメモリ空間を持つ
 - **変数管理**: IEC 61131-3準拠のデータ型（スカラー、配列、構造体、STRING[n]）をサポート。OPC UA でノードとして公開可能
 - **スクリプト機能**: JavaScriptで周期処理を記述。const/let対応（IIFE wrapping）、結果とエラーはコンソールに表示
@@ -21,7 +21,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **プロトコルマッピング**: 変数を複数プロトコルのメモリアドレスにマッピング可能
 - **アプリ全体のログ**: サーバーの起動・停止、クライアントの通信エラーなどを、どのページからも画面の下の欄で見られる
 - **REST HTTP API**: アプリをネットワーク経由で外部から操作可能（デフォルトポート 8765）。サーバー管理・レジスタ読み書き・変数管理・プロジェクトエクスポート/インポートに対応
-- **クライアント機能**: Karakuri から外部の機器（Modbus TCP サーバー・OPC UA サーバー）につないで、コマンドを送る。コマンド（Modbus はファンクションコード、OPC UA は Read / Write / Browse）を選んで組み立てる方式と、16 進（Modbus は PDU、OPC UA はサービスのリクエスト本体）で直接入れる方式がある。送受信のバイト列・応答の解釈・履歴を表示する。読み取り項目を周期的に読むポーリングもできる。OPC UA は、サブスクリプション（値が変わったときに機器の側から知らせが届く）にも対応する。変数を接続先のアドレスにマッピングすると、ポーリング中に変数と同期する（通信エラー・書き込み未反映の状態を表示。Modbus TCP だけ）
+- **クライアント機能**: Karakuri から外部の機器（Modbus TCP・OPC UA・FINS・SLMP のサーバー）につないで、コマンドを送る。コマンド（Modbus はファンクションコード、OPC UA は Read / Write / Browse）を選んで組み立てる方式と、16 進（Modbus は PDU、OPC UA はサービスのリクエスト本体）で直接入れる方式がある。送受信のバイト列・応答の解釈・履歴を表示する。読み取り項目を周期的に読むポーリングもできる。OPC UA は、サブスクリプション（値が変わったときに機器の側から知らせが届く）にも対応する。変数を接続先のアドレスにマッピングすると、ポーリング中に変数と同期する（通信エラー・書き込み未反映の状態を表示。Modbus TCP・FINS・SLMP）
 
 ## Build and Development Commands
 
@@ -97,7 +97,7 @@ go build ./...
 
 `frontend/e2e/` に、ブラウザで画面を操作して確認するテストがある。`task dev` が立てる開発用サーバー（`http://localhost:34115`）に接続するため、Go 側の API とプロトコルの実装を含めた動作を確認できる。手順と注意は `frontend/e2e/README.md` を参照。
 
-- 画面ごとのテスト: 画面の外枠（タイトル・左の帯・HTTP API の表示）`app-shell.spec.ts`、通信画面の右側の配置 `pane-layout.spec.ts`、アプリ全体のログ `app-log.spec.ts`、アドレスの範囲 `register-range.spec.ts`、FINS（「ワード.ビット」のアドレス・項目の表示条件）`fins.spec.ts`、通信画面（サーバー）`server-panel.spec.ts`、変数画面 `variable-dialogs.spec.ts` / `node-publishing.spec.ts`、サーバーの「レジスタ」「モニタリング」のタブ `register-panel.spec.ts` / `monitoring.spec.ts`、スクリプト画面 `script-panel.spec.ts`、通信画面（クライアント）`client-panel.spec.ts` / `client-polling.spec.ts` / `client-mapping.spec.ts` / `client-saved-commands.spec.ts` / `client-opcua.spec.ts`
+- 画面ごとのテスト: 画面の外枠（タイトル・左の帯・HTTP API の表示）`app-shell.spec.ts`、通信画面の右側の配置 `pane-layout.spec.ts`、アプリ全体のログ `app-log.spec.ts`、アドレスの範囲 `register-range.spec.ts`、FINS（「ワード.ビット」のアドレス・項目の表示条件）`fins.spec.ts`、SLMP（16 進のアドレス）`slmp.spec.ts`、通信画面（サーバー）`server-panel.spec.ts`、変数画面 `variable-dialogs.spec.ts` / `node-publishing.spec.ts`、サーバーの「レジスタ」「モニタリング」のタブ `register-panel.spec.ts` / `monitoring.spec.ts`、スクリプト画面 `script-panel.spec.ts`、通信画面（クライアント）`client-panel.spec.ts` / `client-polling.spec.ts` / `client-mapping.spec.ts` / `client-saved-commands.spec.ts` / `client-opcua.spec.ts`
 - 画面を変更したら、該当するテストを実行する（なければ追加する）。`shot()` で撮ったスクリーンショット（`frontend/e2e/.screenshots/`）で見た目も確認する
 - データの準備は `api(page, "メソッド名", ...)` で Go 側の API を直接呼び、確認したい操作だけを画面で行う
 - **テストはアプリのサーバー・変数・モニタリング項目・スクリプトをすべて削除する。** 開発サーバーは `KARAKURI_CONFIG_DIR` を一時フォルダに向けて起動する
@@ -151,6 +151,7 @@ internal/
 ├── domain/           # ドメイン層
 │   ├── protocol/     # プロトコル共通インターフェース（ServerFactory, DataStore, ConfigField等）
 │   │   ├── fields/        # 設定・コマンドの項目の値を読む関数（数値・ワードの並びなど）。プロトコルの実装で共通に使う
+│   │   ├── sparse/        # 大きいメモリエリアを、書かれたところだけ確保して持つ入れもの（遅延確保）。プロトコルの DataStore で共通に使う
 │   │   └── protocoltest/  # テスト用のフェイク（Factory / Server / DataStore）。ホスト側のテストで共通に使う
 │   ├── script/       # スクリプトエンティティ
 │   └── variable/     # 変数・構造体型・NodePublishing
@@ -187,6 +188,16 @@ internal/
 │   │   ├── datastore.go    # DataStore（ワードのエリアと、同じメモリをビットで見るエリア）
 │   │   ├── client.go       # ClientFactory（接続先の設定・コマンドの定義・リクエストの組み立てと応答の解釈）
 │   │   ├── client_conn.go  # Client（UDP / TCP の送受信）
+│   │   └── client_mapping.go # 変数マッピング用のリクエスト（MappableClientFactory）
+│   ├── slmp/             # SLMP（三菱電機。3E / 4E フレーム、TCP と UDP）
+│   │   ├── slmp.go         # フレーム（サブヘッダー・要求先の指定・データ長）・コマンド・終了コード
+│   │   ├── device.go       # デバイスの定義（デバイスコード・ビットかワードか・番号を 16 進で書くか）
+│   │   ├── factory.go      # Factory / Config（アドレス・ポート・通信方式）
+│   │   ├── server.go       # Server（TCP と UDP の待ち受け）
+│   │   ├── handler.go      # 要求の処理（一括読み出し・一括書き込み・ランダム読み出し・ランダム書き込み・形名・折り返しテスト）
+│   │   ├── datastore.go    # DataStore（デバイスごとのメモリ。sparse を使う）
+│   │   ├── client.go       # ClientFactory（接続先の設定・コマンドの定義・リクエストの組み立てと応答の解釈）
+│   │   ├── client_conn.go  # Client（TCP / UDP の送受信）
 │   │   └── client_mapping.go # 変数マッピング用のリクエスト（MappableClientFactory）
 │   └── opcua/            # OPC UA（bamchoh/uastack 使用）
 │       ├── factory.go      # Factory（VariableStoreInjector 実装）
@@ -256,6 +267,7 @@ internal/
   - `ReadBits()`, `WriteBit()`, `ReadWords()`, `WriteWord()`: 汎用メモリ操作
   - `GetAreas()`: `MemoryArea` スライスを返す。`MemoryArea.OneOrigin` が true のエリアはUIで1オリジンアドレスを表示する（内部は常に0ベース）。Modbusの全4エリアは `OneOrigin: true`
   - `MemoryArea.ShortName`: マッピング列などに表示する短い名前（Modbus は `0` / `1` / `3` / `4`）。空ならエリア ID を表示する
+  - `MemoryArea.HexAddress`: true のエリアは、画面でアドレスを 16 進で表示・入力する（SLMP の X・Y・B・W など、番号を 16 進で書くデバイス。X1F は `1F`）。内部のアドレスは、ほかと同じ 0 始まりの番号
   - `MemoryArea.BitsOf`: ビットのエリアが、ワードのエリアと同じメモリをビットごとに見たものであるとき、そのワードのエリアの ID（FINS の `CIO_BIT` は `CIO`）。アドレスは「ワード × 16 + ビット」。ホストは変数を両方に反映し、画面はアドレスを「ワード.ビット」（`100.05`）で表示する
 - **VariableStoreAccessor** (`internal/domain/protocol/server.go`): プロトコルが VariableStore にアクセスするための汎用インターフェース
   - `GetEnabledNodePublishings(protocolType)`: 指定プロトコルで公開設定された変数一覧を返す
@@ -381,6 +393,9 @@ frontend/src/
   - 変数一覧のマッピングの列などでは、アドレスを `100.05` の形で表示する
   - ワードのエリアと対になっていないビットのエリア（Modbus のコイル、FINS のアップフラグ）は、これまでどおり別のエリアとして出す
 - **アドレスの変換**: 表示と入力の変換は `frontend/src/utils/address.ts`（`formatAddress()` / `parseAddress()`）、入力欄は `AddressInput`。画面ごとに `oneOrigin` や `bitsOf` を見て変換を書かない
+- **16 進のエリア**（`area.hexAddress` があるエリア。SLMP の X・Y・B・W など）: アドレスを 16 進で表示・入力する（`1F`。入力は小文字・`0x` 付きでもよい）。範囲も 16 進で出す（「範囲: 0〜FFFFFF」）
+  - 一覧表示は 16 列にする（`HEX_COLUMNS`。行の先頭が `0`・`10`・`20`、列の見出しが `+0`〜`+F`）。16 列の表（1bit の表示も）は、横に収まるようセルを狭くする（`.matrix-wide`）
+  - アドレスを文字で入れる欄にするかどうかは `isTextAddressArea()`（「ワード.ビット」と 16 進）
 - **アドレスの範囲**: アドレスを入れる場所には、エリアの範囲（`MemoryAreaDTO.size` から。「範囲: 1〜65536」「範囲: 0.00〜65535.15」のように、画面のアドレスの書き方で）を出す。範囲外なら、入力欄を赤くして理由を出し、保存・追加を止める。関数は `addressRangeText()` / `addressRangeError()`、表示は `AddressRangeHint`
   - レジスタの一覧表示: 開始アドレスの下に範囲を出す。範囲外を入れたら、最後のページに合わせる。範囲の表示は、入力欄の下に重ねて出す（高さを取らせると、その欄だけほかの欄とずれる）
   - モニタリング項目の追加: まとめて追加する最後の項目まで収まるかを見る
@@ -611,6 +626,7 @@ JavaScript（goja）でPLC動作を記述。
   - 同じメモリを指すエリア（`MemoryArea.BitsOf`）の間の反映は `variable_datastore_shared_test.go`（ワードのエリアと、それをビットごとに見るエリアを持つフェイクの DataStore を使う）
 - **組み込みの構成での確認**（`internal/protocols/integration_test.go`）: アプリと同じように `protocols.Factories()` を登録した `PLCService` に、実際の Modbus TCP / OPC UA のクライアントからつなぐ。サーバーの起動・停止をまたいだ状態（レジスタ、UnitID の設定）、変数との同期、プロジェクトの読み込みを確認する。**プロトコルを足したら、ここにそのプロトコルの確認を足す**
 - **FINS**（`internal/protocols/fins/`）: `fins_test.go` / `area_test.go` はフレームのバイト列と、自分のサーバーへの接続で確認する。`client_test.go` は、応答を決められるフェイクの相手（UDP のソケット・TCP の待ち受け）で、遅れて届いた応答・壊れた応答・FINS/TCP のエラー・タイムアウト後のつなぎ直しを確認する
+- **SLMP**（`internal/protocols/slmp/slmp_test.go`）: 要求のフレームのバイト列と応答（マニュアルの例を含む）、自分のサーバーへの接続（TCP / UDP × 3E / 4E）、全デバイスの最後の番号の読み書き、フェイクの相手（遅れた応答・壊れた応答・タイムアウト）
 - **Modbus**（`internal/protocols/modbus/`）: `tcp_transport_test.go` は実際に TCP でつないで確認する。`rtu/rtu_test.go` は仕様書の既知のフレームで CRC / LRC を確認し、同じリクエストを RTU と ASCII の両方で処理して結果が一致することを確認する
 - **OPC UA**（`internal/protocols/opcua/`）: 実際の OPC UA クライアントでつなぐ。`host_integration_test.go` は実際の変数ストアを使う（他のテストはフェイクの変数ストアを使うため、変数ストアが持つ値の型や型変換を通らない）
 - 設定フォルダに書き込むパッケージのテストは、`TestMain` で `KARAKURI_CONFIG_DIR` を一時フォルダに向ける
@@ -647,7 +663,9 @@ JavaScript（goja）でPLC動作を記述。
   - 大きさは、リクエストのアドレスの欄の幅から決める（FINS はアドレスが 2 バイトなので、1 つのエリアで 65536 ワード）。同じ種別コードをアドレスで分け合うエリアは、分けた分が上限（FINS のタイマとカウンタは、それぞれ 32768）
   - サーバーのエリアだけでなく、クライアントのコマンドの項目の範囲と、変数のマッピングのエリアも同じ大きさにする
   - 各エリアの最後のアドレスの読み書きと、終わりを超える読み書きのテストを足す
-  - エリアが大きく数も多いときは、最初に全部を確保せず、書かれたところだけを確保する（FINS の `region` を参照）
+  - エリアが大きく数も多いときは、最初に全部を確保せず、書かれたところだけを確保する（`sparse.Words` を使う。FINS と SLMP の `datastore.go` を参照）
+  - ビットのエリアにワード単位で読み書きする要求は、DataStore にはビットとして渡す（ビットのエリアにワードで書くと、変数と同期する包みが、書かれた範囲を取り違える）
+  - 番号を 16 進で書くデバイスがあるプロトコルは、`MemoryArea.HexAddress` を付ける（画面が 16 進で表示・入力する）
 
 ## 重要な実装ポイント
 
@@ -862,7 +880,7 @@ JavaScript（goja）でPLC動作を記述。
 
 - **運び方**: FINS/UDP（FINS フレームをそのまま送る）と FINS/TCP（16 バイトのヘッダーを付け、つないだ直後にノードアドレスを決めるやりとりをする）。サーバーは同じポート（既定 9600）で両方を待ち受ける（設定で片方だけにもできる）
 - **エリアの大きさ**: 実機の大きさ（機種で違う）ではなく、FINS のリクエストで指せる最大にしている。CIO・WR・HR・AR・DM・EM の各バンクは 65536 ワード（アドレスが 2 バイト。ビットは `65535.15` まで）、タイマ・カウンタはそれぞれ 32768（同じ種別を半分ずつ使うため）
-  - **メモリは、書かれたときに確保する**（遅延確保。`datastore.go` の `region`）: エリアを 1024 ワードのページに分け、0 以外の値が書かれたページだけを確保する。確保していないページは 0 として読める。読み出しと 0 の書き込みでは確保しない（全部を最初に確保すると、ワードのエリア 30 個で約 3.5 MB になる）
+  - **メモリは、書かれたときに確保する**（遅延確保。`internal/domain/protocol/sparse` の `sparse.Words`）: エリアを 1024 ワードのページに分け、0 以外の値が書かれたページだけを確保する。確保していないページは 0 として読める。読み出しと 0 の書き込みでは確保しない（全部を最初に確保すると、ワードのエリア 30 個で約 3.5 MB になる）
 - **エリア**（`area.go`。CS / CJ の種別コード）: CIO・WR・HR・AR・DM・T（タイマ）・C（カウンタ）・EM0〜EM18（EM のバンク。番号は 16 進で、25 個）
   - CIO・WR・HR・AR・DM・EM の各バンクは、ビットのエリア（`CIO_BIT`・`DM_BIT`・`EM0_BIT` など、`BitsOf` 付き）も持つ。画面では、ワードのエリアの「1bit」として出る
   - T・C は、ワードが現在値、ビットの種別がアップフラグ（`T_FLAG` / `C_FLAG`。現在値とは別のメモリで、アドレスは番号。「ワード.ビット」ではない）。FINS ではタイマとカウンタが同じ種別（0x89 / 0x09）で、アドレスが 0x8000 以上ならカウンタ
@@ -875,6 +893,25 @@ JavaScript（goja）でPLC動作を記述。
 - **未実装**: タイマ・カウンタの動作（現在値とアップフラグは、書かれた値を持つだけ。時間で進まない）、EM のカレントバンクの切り替え、運転モードの切り替え、ネットワークをまたぐ中継、シリアル（Host Link）
 - **確認していないこと**: 実機・他社製の FINS クライアントとの接続（テストは、Karakuri のクライアントとサーバーの組み合わせと、フレームのバイト列）
 - **テスト**: `internal/protocols/fins/fins_test.go` / `area_test.go`（全エリアをクライアントから読み書きする）、`integration_test.go` の `TestFINS_*` / `TestFINSClient_VariableMapping`、画面は `fins.spec.ts`
+
+### SLMP 実装
+
+- **フレーム**（`slmp.go`）: バイナリコードの 3E フレームと 4E フレーム。サーバーは、TCP と UDP を同じポート（既定 5007）で待ち受け、どちらのフレームも受け付ける（応答は、要求と同じ種類のフレーム）。ASCII コードのフレームには応答しない（TCP は接続を閉じる）
+  - 数値はリトルエンディアン。データ長は、そのあと（要求は監視タイマから、応答は終了コードから）のバイト数
+  - 異常終了の応答は、終了コードのあとに、要求先の指定 5 バイト・コマンド・サブコマンドを付ける
+- **デバイス**（`device.go`。MELSEC-Q / L のデバイスコード）: D・W・R・ZR・M・X・Y・B・L・F・V・S・TS・TC・TN・SS・SC・SN・CS・CC・CN・SM・SD・SB・SW・DX・DY・Z の 28 個。デバイス 1 つが、エリア 1 つ
+  - **大きさは、どれも 16,777,216 点**（デバイス番号が 3 バイトなので、SLMP で指せる最大）。メモリは `sparse.Words` で、書かれたところだけ確保する
+  - X・Y・B・W・SB・SW・DX・DY・ZR は、番号を 16 進で書く（`HexAddress`）。画面のアドレス・クライアントのコマンドの「デバイス番号」・結果のラベル（`X1F`）は、どれもデバイスの書き方に合わせる
+  - ビットデバイスとワードデバイスは別のメモリ（FINS の「ワード.ビット」のような、同じメモリを 2 通りに見るエリアはない）。ビットデバイスをワード単位で読み書きすると、16 点が 1 ワード（最初の点がビット 0）
+- **サーバーのコマンド**: 0401 一括読み出し・1401 一括書き込み（ワード単位は 960 点まで、ビット単位は 7168 点まで）・0403 ランダム読み出し・1402 ランダム書き込み・0101 形名の読み出し（`Q03UDECPU`）・0619 折り返しテスト。ほかは終了コード 0xC059
+  - サブコマンドは 0000（ワード単位）・0001（ビット単位）と、デバイスの指定が長い形（番号 4 バイト・コード 2 バイト）の 0002・0003。長い形でも、番号は 16,777,215 まで（超えると 0xC056）
+  - 要求先の指定（ネットワーク番号・局番など）と監視タイマは確かめない（どこ宛てでも応答する）
+- **クライアント**: リクエストは「コマンド 2 バイト + サブコマンド 2 バイト + データ」。その前の部分（サブヘッダー・シリアル番号・要求先の指定・データ長・監視タイマ）はクライアントが付ける
+  - 組み立てられるコマンドは、一括読み出し・一括書き込み（ビットデバイスはビット単位、ワードデバイスはワード単位）・形名の読み出し・折り返しテスト。16 進で入れれば、ほかも送れる
+  - 終了コードが 0 以外なら `exception`（接続は閉じない）。4E フレームは、シリアル番号が違う応答（遅れて届いたもの）を読み捨てる。3E フレームにはシリアル番号がないので、タイムアウトしたら接続を閉じて見分ける（UDP も、つなぎ直すと自分のポートが変わる）
+- **未実装**: ASCII コードのフレーム、1E フレーム、複数ブロックの一括読み書き（0406 / 1406）、モニタの登録、リモート RUN / STOP、タイマ・カウンタの動作（値を持つだけ）、MELSEC iQ-R で増えたデバイス（長いタイマなど）
+- **確認していないこと**: 実機・他社製の SLMP クライアントとの接続（テストは、Karakuri のクライアントとサーバーの組み合わせと、フレームのバイト列）。形名コード（0x0268）は、資料と突き合わせていない
+- **テスト**: `internal/protocols/slmp/slmp_test.go`、`integration_test.go` の `TestSLMP_ServerAndVariableSync` / `TestSLMPClient_VariableMapping`、画面は `slmp.spec.ts`
 
 ### アプリ全体のログ
 

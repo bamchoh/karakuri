@@ -1,6 +1,10 @@
 package fins
 
-import "testing"
+import (
+	"testing"
+
+	"karakuri/internal/domain/protocol/sparse"
+)
 
 // メモリは、0 以外の値が書かれたページだけを確保する
 func TestDataStore_AllocatesOnWrite(t *testing.T) {
@@ -41,27 +45,27 @@ func TestDataStore_AllocatesOnWrite(t *testing.T) {
 	if err := s.WriteWord(AreaDM, 100, 0x1234); err != nil {
 		t.Fatal(err)
 	}
-	if n := s.allocatedWords(); n != pageWords {
-		t.Errorf("1 ワード書いたあと = %d ワード, want %d", n, pageWords)
+	if n := s.allocatedWords(); n != sparse.PageWords {
+		t.Errorf("1 ワード書いたあと = %d ワード, want %d", n, sparse.PageWords)
 	}
 	// 同じページへの書き込みでは増えない。ビットの書き込みも同じメモリ
 	_ = s.WriteWord(AreaDM, 101, 0xFFFF)
 	_ = s.WriteBit(AreaDM+bitSuffix, 102*16+3, true)
-	if n := s.allocatedWords(); n != pageWords {
-		t.Errorf("同じページに書いたあと = %d ワード, want %d", n, pageWords)
+	if n := s.allocatedWords(); n != sparse.PageWords {
+		t.Errorf("同じページに書いたあと = %d ワード, want %d", n, sparse.PageWords)
 	}
 	if w, _ := s.ReadWord(AreaDM, 102); w != 0x0008 {
 		t.Errorf("D102 = %04X, want 0008", w)
 	}
 
 	// ページの境目をまたぐ書き込みは、両方のページを確保し、値は続けて読める
-	if err := s.WriteWords("EM18", pageWords-1, []uint16{0xAAAA, 0xBBBB}); err != nil {
+	if err := s.WriteWords("EM18", sparse.PageWords-1, []uint16{0xAAAA, 0xBBBB}); err != nil {
 		t.Fatal(err)
 	}
-	if n := s.allocatedWords(); n != pageWords*3 {
-		t.Errorf("境目をまたいで書いたあと = %d ワード, want %d", n, pageWords*3)
+	if n := s.allocatedWords(); n != sparse.PageWords*3 {
+		t.Errorf("境目をまたいで書いたあと = %d ワード, want %d", n, sparse.PageWords*3)
 	}
-	if words, _ := s.ReadWords("EM18", pageWords-2, 4); words[0] != 0 || words[1] != 0xAAAA || words[2] != 0xBBBB || words[3] != 0 {
+	if words, _ := s.ReadWords("EM18", sparse.PageWords-2, 4); words[0] != 0 || words[1] != 0xAAAA || words[2] != 0xBBBB || words[3] != 0 {
 		t.Errorf("境目の前後 = %04X", words)
 	}
 

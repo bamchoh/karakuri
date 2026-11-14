@@ -3,7 +3,7 @@ import {
   AddressArea,
   addressPlaceholder,
   formatAddress,
-  isWordBitArea,
+  isTextAddressArea,
   parseAddress,
 } from "../utils/address";
 
@@ -20,7 +20,7 @@ interface Props {
 }
 
 // メモリエリアのアドレスの入力欄。
-// ふつうのエリアは数値の欄（1 始まりのエリアは +1 して表示）、「ワード.ビット」のエリアは文字の欄（100.05）にする
+// ふつうのエリアは数値の欄（1 始まりのエリアは +1 して表示）、「ワード.ビット」のエリア（100.05）と 16 進のエリア（1F）は文字の欄にする
 export function AddressInput({
   area,
   value,
@@ -32,7 +32,9 @@ export function AddressInput({
   const inputClass =
     [className, invalid ? "address-invalid" : ""].filter(Boolean).join(" ") ||
     undefined;
-  const wordBit = isWordBitArea(area);
+  // アドレスの書き方（"wordBit"・"hex"・""）。文字の欄にするかどうかと、出し直すきっかけに使う
+  const notation = area?.bitsOf ? "wordBit" : area?.hexAddress ? "hex" : "";
+  const wordBit = isTextAddressArea(area);
   const oneOrigin = area?.oneOrigin ?? false;
 
   // 「ワード.ビット」の欄は、入力の途中（"100." など）を保つため、文字列を自分で持つ
@@ -42,11 +44,11 @@ export function AddressInput({
       parseAddress(area, prev) === value ? prev : formatAddress(area, value),
     );
     // area は描画のたびに別のオブジェクトになることがあるので、中身で比べる
-  }, [value, wordBit, oneOrigin]);
+  }, [value, notation, oneOrigin]);
   // アドレスの書き方が変わったら（エリアを変えた・ビット幅を 1bit にした）、その書き方で出し直す
   useEffect(() => {
     setText(formatAddress(area, value));
-  }, [wordBit, oneOrigin]);
+  }, [notation, oneOrigin]);
 
   if (wordBit) {
     return (

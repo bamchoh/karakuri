@@ -116,6 +116,9 @@ type MemoryArea struct {
 	// ホストは、片方に書かれたら、もう片方にマッピングした変数にも反映する。
 	// 画面は、アドレスを「ワード.ビット」（100.05）の形で表示する
 	BitsOf string `json:"bitsOf,omitempty"`
+	// HexAddress が true なら、画面でアドレスを 16 進で表示・入力する（三菱の X・Y・B・W など、番号を 16 進で書くデバイス）。
+	// 内部のアドレスは、ほかのエリアと同じ 0 始まりの番号
+	HexAddress bool `json:"hexAddress,omitempty"`
 }
 
 // ConfigField は設定フィールドの定義

@@ -7,6 +7,7 @@ import {
   convertAddress,
   formatAddress,
   isBitDataType,
+  isTextAddressArea,
   isWordBitArea,
   mappingAreaFor,
   mappingRange,
@@ -263,5 +264,56 @@ describe("mappingRange（マッピングの範囲の検査の対象）", () => {
       area: undefined,
       count: 1,
     });
+  });
+});
+
+// 三菱の X・Y・B・W など、アドレスを 16 進で書くエリア
+describe("16 進のエリア（hexAddress）", () => {
+  const x: TestArea = { id: "X", isBit: true, size: 1 << 24, hexAddress: true };
+
+  it("アドレスを 16 進（大文字）で表示する", () => {
+    expect(formatAddress(x, 0)).toBe("0");
+    expect(formatAddress(x, 31)).toBe("1F");
+    expect(formatAddress(x, 255)).toBe("FF");
+    expect(formatAddress(x, (1 << 24) - 1)).toBe("FFFFFF");
+  });
+
+  it("16 進として読む（小文字・0x 付きも同じ）", () => {
+    expect(parseAddress(x, "1F")).toBe(31);
+    expect(parseAddress(x, "1f")).toBe(31);
+    expect(parseAddress(x, "0x1F")).toBe(31);
+    expect(parseAddress(x, " 10 ")).toBe(16);
+    expect(parseAddress(x, "FFFFFF")).toBe((1 << 24) - 1);
+  });
+
+  it("16 進として読めないものは null", () => {
+    for (const text of ["", "G", "1.5", "-1", "0x", "1 F"]) {
+      expect(parseAddress(x, text)).toBeNull();
+    }
+  });
+
+  it("表示して読むと、もとのアドレスに戻る", () => {
+    for (const address of [0, 9, 10, 15, 16, 255, 4096, 65535, 1048576]) {
+      expect(parseAddress(x, formatAddress(x, address))).toBe(address);
+    }
+  });
+
+  it("範囲と、範囲外の理由も 16 進で出す", () => {
+    expect(addressRangeText(x)).toBe("0〜FFFFFF");
+    expect(addressRangeError(x, (1 << 24) - 1)).toBeNull();
+    expect(addressRangeError(x, 1 << 24)).toBe(
+      "アドレスが範囲外です（範囲: 0〜FFFFFF）",
+    );
+    expect(addressRangeError(x, (1 << 24) - 1, 2)).toBe(
+      "末尾が範囲を超えます（FFFFFF から 2 個。範囲: 0〜FFFFFF）",
+    );
+  });
+
+  it("文字として入れる欄にする（「ワード.ビット」のエリアも同じ）", () => {
+    expect(isTextAddressArea(x)).toBe(true);
+    expect(isTextAddressArea({ bitsOf: "CIO" })).toBe(true);
+    expect(isTextAddressArea({ oneOrigin: true })).toBe(false);
+    expect(isTextAddressArea(undefined)).toBe(false);
+    expect(addressPlaceholder(x)).toBe("1F");
   });
 });
