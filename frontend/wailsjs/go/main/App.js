@@ -34,6 +34,10 @@ export function BuildClientRequest(arg1, arg2, arg3) {
   return window['go']['main']['App']['BuildClientRequest'](arg1, arg2, arg3);
 }
 
+export function ClearAppLogs() {
+  return window['go']['main']['App']['ClearAppLogs']();
+}
+
 export function ClearClientCommandLogs() {
   return window['go']['main']['App']['ClearClientCommandLogs']();
 }
@@ -76,6 +80,10 @@ export function DisconnectClient(arg1) {
 
 export function ExportProject() {
   return window['go']['main']['App']['ExportProject']();
+}
+
+export function GetAppLogs() {
+  return window['go']['main']['App']['GetAppLogs']();
 }
 
 export function GetAvailableProtocols() {

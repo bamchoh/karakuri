@@ -138,10 +138,18 @@ func (m *clientManager) recordSubscriptionEvent(inst *clientInstance, p *poller,
 		return
 	}
 	if ev.ItemID == "" {
+		// 状態が変わったときだけ、ログを出す（つなぎ直しのたびに同じ知らせが来る）
+		before := inst.subState
 		if ev.Status == protocol.CommandOK {
 			inst.subState, inst.subError = subscriptionStateOK, ""
+			if before != subscriptionStateOK {
+				m.log.Infof(clientLogSource(inst.name), "サブスクリプションで監視しています")
+			}
 		} else {
 			inst.subState, inst.subError = subscriptionStateError, ev.Error
+			if before != subscriptionStateError {
+				m.log.Errorf(clientLogSource(inst.name), "サブスクリプションがつながっていません: %s", ev.Error)
+			}
 		}
 		return
 	}
@@ -295,7 +303,15 @@ func (s *PLCService) StartClientSubscription(id string) error {
 	if err != nil {
 		return err
 	}
-	return m.startSubscriberLocked(inst)
+	wasRunning := inst.subscriber != nil
+	if err := m.startSubscriberLocked(inst); err != nil {
+		m.log.Errorf(clientLogSource(inst.name), "サブスクリプションを開始できませんでした: %v", err)
+		return err
+	}
+	if !wasRunning && inst.subscriber != nil {
+		m.log.Infof(clientLogSource(inst.name), "サブスクリプションを開始しました")
+	}
+	return nil
 }
 
 // StopClientSubscription は監視を止め、接続を閉じ終わるまで待つ
@@ -304,11 +320,16 @@ func (s *PLCService) StopClientSubscription(id string) error {
 	m.mu.Lock()
 	inst, err := m.instanceLocked(id)
 	var p *poller
+	var name string
 	if err == nil {
 		p = inst.stopSubscriberLocked()
+		name = inst.name
 	}
 	m.mu.Unlock()
 	p.wait()
+	if p != nil {
+		m.log.Infof(clientLogSource(name), "サブスクリプションを停止しました")
+	}
 	return err
 }
 

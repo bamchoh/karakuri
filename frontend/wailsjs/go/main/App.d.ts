@@ -18,6 +18,8 @@ export function BrowseClient(arg1:string,arg2:string):Promise<Array<application.
 
 export function BuildClientRequest(arg1:string,arg2:string,arg3:Record<string, any>):Promise<string>;
 
+export function ClearAppLogs():Promise<void>;
+
 export function ClearClientCommandLogs():Promise<void>;
 
 export function ClearConsoleLogs():Promise<void>;
@@ -39,6 +41,8 @@ export function DeleteVariable(arg1:string):Promise<void>;
 export function DisconnectClient(arg1:string):Promise<void>;
 
 export function ExportProject():Promise<void>;
+
+export function GetAppLogs():Promise<Array<application.AppLogDTO>>;
 
 export function GetAvailableProtocols():Promise<Array<application.ProtocolInfoDTO>>;
 

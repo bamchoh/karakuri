@@ -38,8 +38,9 @@ func NewServer(config *Config, accessor protocol.VariableStoreAccessor) *Server 
 	return &Server{
 		config:   config,
 		accessor: accessor,
-		logger:   log.New(os.Stderr, "[opcua] ", log.LstdFlags),
-		status:   protocol.StatusStopped,
+		// 標準のログの出力先に出す（アプリは log.SetOutput でこれを取り込み、画面のログの欄に出す）
+		logger: log.New(log.Writer(), "[opcua] ", log.LstdFlags),
+		status: protocol.StatusStopped,
 	}
 }
 
