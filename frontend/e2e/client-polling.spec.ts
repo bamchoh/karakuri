@@ -181,7 +181,19 @@ test("読み取り項目を削除できる。タブを切り替えても選ん�
   await expect(items(page).first()).toContainText("FC04");
 
   // 別の接続先を選んでも、ポーリングのタブのまま
-  await addClientFromDialog(page);
+  await api(page, "AddClient", "modbus-tcp", "もう 1 つ");
   await expect(page.locator(".client-tab-item")).toHaveCount(2);
+  await page.locator(".client-tab-item", { hasText: "もう 1 つ" }).click();
+  await expect(page.locator(".server-config-pane-name")).toHaveText(
+    "もう 1 つ",
+  );
   await expect(pollingView(page)).toBeVisible();
+
+  // 画面から追加した直後だけは、設定のタブが開く
+  await addClientFromDialog(page);
+  await expect(page.locator(".client-tab-item")).toHaveCount(3);
+  await expect(pollingView(page)).toHaveCount(0);
+  await expect(
+    page.locator(".client-sub-tabs .sub-tab-button.active"),
+  ).toHaveText("設定");
 });

@@ -11,6 +11,7 @@ import {
   MODBUS_PORT,
   openClient,
   addClientFromDialog,
+  selectClientTab,
   dialogByTitle,
 } from "./helpers";
 
@@ -272,6 +273,7 @@ test("サーバーとクライアントが 1 つの一覧に並び、保存し�
   await expect(page.getByText("CLIENTS", { exact: true })).toBeVisible();
 
   // 接続先の設定を変えたまま、サーバーへ切り替えようとすると確認する
+  await selectClientTab(page, "設定");
   await setting(page, "ポート").fill("1502");
   await page
     .locator(".server-tab-item", { hasText: "Modbus TCP" })
@@ -297,28 +299,66 @@ test("サーバーとクライアントが 1 つの一覧に並び、保存し�
   expect(clients.find((x) => x.id === c.id).settings.port).toBe(1502);
 });
 
-test("接続先の設定の欄は折りたためて、閉じると設定を 1 行で表示する", async ({
+test("右側はタブ（設定 / コマンド / ポーリング）で切り替え、接続先は見出しに 1 行で出る", async ({
   page,
 }) => {
   await addClient(page);
-  const toggle = page.getByRole("button", { name: /接続先の設定/ });
-  await expect(toggle).toHaveAttribute("aria-expanded", "true");
-  await expect(setting(page, "ホスト")).toBeVisible();
+  const tabs = page.locator(".client-sub-tabs .sub-tab-button");
+  // サブスクリプションは、対応するプロトコル（OPC UA）の接続先にだけ出る
+  await expect(tabs).toHaveText(["設定", "コマンド", "ポーリング"]);
 
-  await toggle.click();
-  await expect(toggle).toHaveAttribute("aria-expanded", "false");
-  await expect(page.locator(".client-settings-summary")).toContainText(
-    `ホスト: 127.0.0.1 / ポート: ${MODBUS_PORT}`,
-  );
+  // 既にある接続先を選んだときは、コマンドのタブ。設定の入力欄は出ていない
+  await expect(tabs.nth(1)).toHaveClass(/active/);
+  await expect(
+    page.getByRole("button", { name: "新しいコマンド" }),
+  ).toBeVisible();
   await expect(
     page.locator(".vscode-setting-label", { hasText: "ホスト" }),
   ).toHaveCount(0);
-  await shot(page, "client-settings-collapsed");
 
-  // 別の画面に移って戻ると、開いた状態に戻る（通信画面を作り直すため）
+  // どのタブでも、見出しに接続先が 1 行で出る
+  const summary = page.locator(".client-settings-summary");
+  await expect(summary).toContainText(
+    `ホスト: 127.0.0.1 / ポート: ${MODBUS_PORT}`,
+  );
+  await shot(page, "client-tab-command");
+
+  // 設定のタブ: 入力欄が出て、コマンドの一覧は出ない
+  await selectClientTab(page, "設定");
+  await expect(setting(page, "ホスト")).toHaveValue("127.0.0.1");
+  await expect(
+    page.getByRole("button", { name: "新しいコマンド" }),
+  ).toHaveCount(0);
+  await shot(page, "client-tab-settings");
+
+  // 設定を変えたままほかのタブに移っても、変更は消えない。設定のタブに印が付き、要約も入力中の内容になる
+  await setting(page, "ポート").fill("1502");
+  await selectClientTab(page, "ポーリング");
+  await expect(tabs.nth(0)).toHaveText("設定 *");
+  await expect(summary).toContainText("ポート: 1502");
+  await selectClientTab(page, "設定");
+  await expect(setting(page, "ポート")).toHaveValue("1502");
+  await page.getByRole("button", { name: "元に戻す" }).click();
+  await expect(tabs.nth(0)).toHaveText("設定");
+  await expect(setting(page, "ポート")).toHaveValue(String(MODBUS_PORT));
+
+  // 選んでいるタブは、別の画面に移って戻ると、コマンドに戻る（通信画面を作り直すため）
   await page.getByTitle("Variables").click();
   await openClient(page, "自分");
+  await expect(tabs.nth(1)).toHaveClass(/active/);
+});
+
+test("接続先を追加した直後は、設定のタブが開く", async ({ page }) => {
+  await addClient(page);
   await expect(
-    page.getByRole("button", { name: /接続先の設定/ }),
-  ).toHaveAttribute("aria-expanded", "true");
+    page.locator(".client-sub-tabs .sub-tab-button.active"),
+  ).toHaveText("コマンド");
+  await addClientFromDialog(page, { name: "新しい接続先" });
+  await expect(page.locator(".server-config-pane-name")).toHaveText(
+    "新しい接続先",
+  );
+  await expect(
+    page.locator(".client-sub-tabs .sub-tab-button.active"),
+  ).toHaveText("設定");
+  await expect(setting(page, "ホスト")).toBeVisible();
 });

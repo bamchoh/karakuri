@@ -66,6 +66,18 @@ export async function openClient(page: Page, name: string) {
   await expect(page.locator(".server-config-pane-name")).toHaveText(name);
 }
 
+// クライアントの右側のタブ（設定 / コマンド / ポーリング / サブスクリプション）を選ぶ
+export async function selectClientTab(
+  page: Page,
+  tab: "設定" | "コマンド" | "ポーリング" | "サブスクリプション",
+) {
+  await page
+    .locator(".client-sub-tabs .sub-tab-button", {
+      hasText: new RegExp("^" + tab),
+    })
+    .click();
+}
+
 // 通信画面の「接続先を追加」を押して、ダイアログで接続先（クライアント）を追加する。
 // protocol を渡さなければ、最初から選ばれているプロトコル（最初に登録したもの）のまま追加する
 export async function addClientFromDialog(

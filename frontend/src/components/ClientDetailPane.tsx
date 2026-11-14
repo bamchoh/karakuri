@@ -16,7 +16,7 @@ import {
   SendClientSavedCommand,
 } from "../../wailsjs/go/main/App";
 import { application } from "../../wailsjs/go/models";
-import { ChevronDown, ChevronRight, Trash2, Unplug } from "lucide-react";
+import { Trash2, Unplug } from "lucide-react";
 import { DynamicField, visibleFields } from "./DynamicField";
 import { ClientCommandDialog, CommandSaveInput } from "./ClientCommandDialog";
 import { ClientSavedCommands } from "./ClientSavedCommands";
@@ -24,7 +24,8 @@ import { ClientCommandLog } from "./ClientCommandLog";
 import { ClientPollingView } from "./ClientPollingView";
 import { ClientSubscriptionView } from "./ClientSubscriptionView";
 
-export type ClientSubTab = "command" | "polling" | "subscription";
+// クライアントの右側のタブ（サーバーの「設定 / レジスタ / モニタリング」と同じ形）
+export type ClientSubTab = "settings" | "command" | "polling" | "subscription";
 
 // 親（通信画面）から、保存していない接続先の設定を保存・破棄するための操作
 export interface ClientDetailPaneHandle {
@@ -36,11 +37,9 @@ interface ClientDetailPaneProps {
   client: application.ClientDTO;
   protocol: application.ClientProtocolDTO;
   logs: application.ClientCommandLogDTO[]; // この接続先の履歴（新しい順）
-  // 以下の 2 つは、接続先を選び直しても保つよう、親が持つ
+  // 選んでいるタブ。接続先を選び直しても保つよう、親が持つ
   subTab: ClientSubTab;
   onSubTabChange: (tab: ClientSubTab) => void;
-  settingsOpen: boolean; // 接続先の設定の欄を開いているか
-  onSettingsOpenChange: (open: boolean) => void;
   onDirtyChange: (dirty: boolean) => void;
   onClientsChanged: () => Promise<unknown>;
   onLogsChanged: () => Promise<void>;
@@ -50,7 +49,8 @@ interface ClientDetailPaneProps {
 const noPorts: string[] = [];
 const noop = () => {};
 
-// 設定の欄を閉じているときに出す 1 行の要約（例: "ホスト: 127.0.0.1 / ポート: 502"）。パスワードと、空の項目は出さない
+// 見出しに出す、接続先の設定の 1 行の要約（例: "ホスト: 127.0.0.1 / ポート: 502"）。パスワードと、空の項目は出さない。
+// 設定のタブを開いていなくても、どこへ送るのかが見えるようにする
 function settingsSummary(
   protocol: application.ClientProtocolDTO,
   settings: Record<string, any>,
@@ -63,7 +63,9 @@ function settingsSummary(
     .join(" / ");
 }
 
-// 通信画面の右側（クライアントを選んだとき）: 接続先の設定・コマンドの組み立て・結果と履歴・ポーリング。
+// 通信画面の右側（クライアントを選んだとき）: 見出し（名前・状態・接続先の要約）と、タブ
+// （設定 / コマンド / ポーリング / サブスクリプション）。
+// 接続先の設定の入力中の内容は、このコンポーネントが持つので、ほかのタブを見ている間も消えない。
 // 親が key に接続先の ID を渡すので、選び直すたびに作り直す
 export const ClientDetailPane = forwardRef<
   ClientDetailPaneHandle,
@@ -75,8 +77,6 @@ export const ClientDetailPane = forwardRef<
     logs,
     subTab,
     onSubTabChange,
-    settingsOpen,
-    onSettingsOpenChange,
     onDirtyChange,
     onClientsChanged,
     onLogsChanged,
@@ -250,6 +250,12 @@ export const ClientDetailPane = forwardRef<
           >
             {client.connected ? "接続中" : "未接続"}
           </span>
+          <span
+            className="client-settings-summary"
+            title={settingsSummary(protocol, settings)}
+          >
+            {settingsSummary(protocol, settings)}
+          </span>
         </div>
         <div className="server-config-pane-actions">
           <button
@@ -272,27 +278,40 @@ export const ClientDetailPane = forwardRef<
         </div>
       </div>
 
+      <div className="sub-tab-nav server-sub-tabs client-sub-tabs">
+        <button
+          className={`sub-tab-button ${shownTab === "settings" ? "active" : ""}`}
+          onClick={() => onSubTabChange("settings")}
+          title={dirty ? "保存していない変更があります" : undefined}
+        >
+          設定{dirty ? " *" : ""}
+        </button>
+        <button
+          className={`sub-tab-button ${shownTab === "command" ? "active" : ""}`}
+          onClick={() => onSubTabChange("command")}
+        >
+          コマンド
+        </button>
+        <button
+          className={`sub-tab-button ${shownTab === "polling" ? "active" : ""}`}
+          onClick={() => onSubTabChange("polling")}
+        >
+          ポーリング{client.polling ? "（実行中）" : ""}
+        </button>
+        {protocol.supportsSubscription && (
+          <button
+            className={`sub-tab-button ${shownTab === "subscription" ? "active" : ""}`}
+            onClick={() => onSubTabChange("subscription")}
+          >
+            サブスクリプション{client.subscribing ? "（監視中）" : ""}
+          </button>
+        )}
+      </div>
+
       {error && <div className="error-message config-error">{error}</div>}
 
       <div className="vscode-settings-list">
-        <button
-          className="vscode-setting-category client-settings-toggle"
-          onClick={() => onSettingsOpenChange(!settingsOpen)}
-          aria-expanded={settingsOpen}
-        >
-          {settingsOpen ? (
-            <ChevronDown size={16} />
-          ) : (
-            <ChevronRight size={16} />
-          )}
-          接続先の設定
-          {!settingsOpen && (
-            <span className="client-settings-summary">
-              {settingsSummary(protocol, settings)}
-            </span>
-          )}
-        </button>
-        {settingsOpen && (
+        {shownTab === "settings" ? (
           <>
             <div className="vscode-setting-item">
               <div className="vscode-setting-label">名前</div>
@@ -319,46 +338,21 @@ export const ClientDetailPane = forwardRef<
                 onRefreshPorts={noop}
               />
             ))}
+            {dirty && (
+              <div className="client-settings-actions">
+                <span className="client-note">
+                  保存していない変更があります（送信・ポーリングの開始で保存します）
+                </span>
+                <button className="btn-secondary" onClick={revertSettings}>
+                  元に戻す
+                </button>
+                <button className="btn-primary" onClick={saveSettings}>
+                  保存
+                </button>
+              </div>
+            )}
           </>
-        )}
-        {dirty && (
-          <div className="client-settings-actions">
-            <span className="client-note">
-              保存していない変更があります（送信・ポーリングの開始で保存します）
-            </span>
-            <button className="btn-secondary" onClick={revertSettings}>
-              元に戻す
-            </button>
-            <button className="btn-primary" onClick={saveSettings}>
-              保存
-            </button>
-          </div>
-        )}
-
-        <div className="sub-tab-nav client-sub-tabs">
-          <button
-            className={`sub-tab-button ${shownTab === "command" ? "active" : ""}`}
-            onClick={() => onSubTabChange("command")}
-          >
-            コマンド
-          </button>
-          <button
-            className={`sub-tab-button ${shownTab === "polling" ? "active" : ""}`}
-            onClick={() => onSubTabChange("polling")}
-          >
-            ポーリング{client.polling ? "（実行中）" : ""}
-          </button>
-          {protocol.supportsSubscription && (
-            <button
-              className={`sub-tab-button ${shownTab === "subscription" ? "active" : ""}`}
-              onClick={() => onSubTabChange("subscription")}
-            >
-              サブスクリプション{client.subscribing ? "（監視中）" : ""}
-            </button>
-          )}
-        </div>
-
-        {shownTab === "command" ? (
+        ) : shownTab === "command" ? (
           <>
             <div className="vscode-setting-category">
               保存したコマンド（{savedCommands.length}）
