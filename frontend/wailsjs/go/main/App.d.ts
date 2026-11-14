@@ -40,7 +40,7 @@ export function DeleteVariable(arg1:string):Promise<void>;
 
 export function DisconnectClient(arg1:string):Promise<void>;
 
-export function ExportProject():Promise<void>;
+export function ExportProject():Promise<string>;
 
 export function GetAppLogs():Promise<Array<application.AppLogDTO>>;
 
@@ -100,7 +100,7 @@ export function GetVariableMappings(arg1:string):Promise<Array<application.Proto
 
 export function GetVariables():Promise<Array<application.VariableDTO>>;
 
-export function ImportProject():Promise<void>;
+export function ImportProject():Promise<string>;
 
 export function MoveMonitoringItem(arg1:string,arg2:string):Promise<void>;
 

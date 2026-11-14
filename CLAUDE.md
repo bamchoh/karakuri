@@ -76,7 +76,7 @@ go build ./...
 
 `frontend/src/**/*.test.ts` に、state に依存しない純粋な関数の単体テストがある（`npm test`。開発サーバーなしで走り、CI でも実行する）。
 
-- 対象: `utils/address.ts`（アドレスの表示と入力の変換・範囲の検査・マッピング先のエリアの決め方）、`utils/register.ts`（ワードの結合・分解・書式）、`components/registerList.ts`（行の組み立て・選択の移動）
+- 対象: `utils/address.ts`（アドレスの表示と入力の変換・範囲の検査・マッピング先のエリアの決め方）、`utils/register.ts`（ワードの結合・分解・書式）、`components/registerList.ts`（行の組み立て・選択の移動）、`utils/windowTitle.ts`（タイトルバーの文字）
 - 画面の動き（クリック・入力・表示）は、こちらではなく Playwright で確かめる。**計算や変換を足すときは、コンポーネントの中に書かず純粋な関数にして、ここにテストを足す**
 - 設定は `frontend/vite.config.ts` の `test`（`src/**/*.test.ts` だけを対象にする。`e2e/*.spec.ts` は Playwright のテスト）。Vitest のバージョンは固定
 - テストのファイルも `npm run build` の型検査の対象
@@ -97,7 +97,7 @@ go build ./...
 
 `frontend/e2e/` に、ブラウザで画面を操作して確認するテストがある。`task dev` が立てる開発用サーバー（`http://localhost:34115`）に接続するため、Go 側の API とプロトコルの実装を含めた動作を確認できる。手順と注意は `frontend/e2e/README.md` を参照。
 
-- 画面ごとのテスト: 通信画面の右側の配置 `pane-layout.spec.ts`、アプリ全体のログ `app-log.spec.ts`、アドレスの範囲 `register-range.spec.ts`、FINS（「ワード.ビット」のアドレス・項目の表示条件）`fins.spec.ts`、通信画面（サーバー）`server-panel.spec.ts`、変数画面 `variable-dialogs.spec.ts` / `node-publishing.spec.ts`、サーバーの「レジスタ」「モニタリング」のタブ `register-panel.spec.ts` / `monitoring.spec.ts`、スクリプト画面 `script-panel.spec.ts`、通信画面（クライアント）`client-panel.spec.ts` / `client-polling.spec.ts` / `client-mapping.spec.ts` / `client-saved-commands.spec.ts` / `client-opcua.spec.ts`
+- 画面ごとのテスト: 画面の外枠（タイトル・左の帯・HTTP API の表示）`app-shell.spec.ts`、通信画面の右側の配置 `pane-layout.spec.ts`、アプリ全体のログ `app-log.spec.ts`、アドレスの範囲 `register-range.spec.ts`、FINS（「ワード.ビット」のアドレス・項目の表示条件）`fins.spec.ts`、通信画面（サーバー）`server-panel.spec.ts`、変数画面 `variable-dialogs.spec.ts` / `node-publishing.spec.ts`、サーバーの「レジスタ」「モニタリング」のタブ `register-panel.spec.ts` / `monitoring.spec.ts`、スクリプト画面 `script-panel.spec.ts`、通信画面（クライアント）`client-panel.spec.ts` / `client-polling.spec.ts` / `client-mapping.spec.ts` / `client-saved-commands.spec.ts` / `client-opcua.spec.ts`
 - 画面を変更したら、該当するテストを実行する（なければ追加する）。`shot()` で撮ったスクリーンショット（`frontend/e2e/.screenshots/`）で見た目も確認する
 - データの準備は `api(page, "メソッド名", ...)` で Go 側の API を直接呼び、確認したい操作だけを画面で行う
 - **テストはアプリのサーバー・変数・モニタリング項目・スクリプトをすべて削除する。** 開発サーバーは `KARAKURI_CONFIG_DIR` を一時フォルダに向けて起動する
@@ -322,9 +322,23 @@ frontend/src/
 │   ├── ClientBrowseDialog.tsx  # 機器のアドレス（OPC UA ならノード）をツリーでたどって選ぶダイアログ。選んだものを入力欄に入れる `applyBrowsePick()` もここ
 │   ├── ClientSubscriptionView.tsx # サブスクリプション（通知の間隔・監視項目の追加・届いた値）。対応するプロトコルの接続先だけ
 │   ├── clientFormat.ts         # クライアント（通信画面の右側）で共通の表示の書式（状態の名前・時刻・かかった時間）
-│   └── AppLogPanel.tsx     # アプリ全体のログの欄（どのページでも画面の下に出す。開閉できる）
-└── App.tsx                 # タブベースのメインUI
+│   ├── AppLogPanel.tsx     # アプリ全体のログの欄（どのページでも画面の下に出す。開閉できる）
+│   ├── Sidebar.tsx         # 左のアイコンの帯（上にページの切り替え、下にプロジェクトを開く・保存）
+│   └── HttpApiIndicator.tsx # HTTP API の URL とポートの変更（ログの見出しの行の右端に出す）
+└── App.tsx                 # 画面の外枠（左の帯・ページ・下のログの欄）
 ```
+
+#### 画面の外枠と配色
+
+- **上のヘッダーはない**（issue #108）。アプリの名前とバージョンは、ウィンドウのタイトルバーに出す（`App.tsx` が `WindowSetTitle()` と `document.title` に入れる。文字は `utils/windowTitle.ts` の `windowTitle()`）
+  - プロジェクトを開いた・保存したあとは「ファイル名 - Karakuri v0.0.43」。`ExportProject()` / `ImportProject()` が、選んだファイルのパスを返す（やめたときは空）
+  - プロジェクトを開く・保存は左の帯（`Sidebar`）の下端、HTTP API の URL は下の帯の右端（`AppLogPanel` の `status`）
+- **色は `App.css` の先頭の変数で決める**。新しく色を足すときは、16 進の値を直接書かず、変数を使う
+  - 面: `--bg-app`（左の帯）→ `--bg-sidebar`（一覧）→ `--bg-panel`（中身）→ `--bg-elevated`（見出し・ダイアログ・ボタン）。入力欄は `--bg-input`、ログ・コンソール・コードは `--bg-code`
+  - **強調（`--accent`、青）は「選んでいるもの・フォーカス・押せる値・主なボタン」に使う。緑（`--success`）は「起動中・正常」の状態だけに使う**（選択と状態を、色で見分けられるようにするため）
+  - タブは、塗りつぶさず下線で示す。危険な操作のボタン（`.btn-danger`）は、塗らずに赤い枠だけにする（押そうとしたときに赤くなる）
+  - ウィンドウの背景色（`main.go` の `BackgroundColour`）は `--bg-panel` と同じにする（起動した瞬間に違う色が見えないように）
+- **画面のテスト**: `frontend/e2e/app-shell.spec.ts`
 
 #### ServerPanel.tsx
 通信画面（サイドバーの「Connections」）。サーバー（Karakuri が待ち受ける側）とクライアント（外部の機器へつなぐ側・マスター）を 1 つの画面で扱う。左に一覧、右に選んだものの設定（サーバーは `ServerConfigPane`、クライアントは `ClientDetailPane`）を並べる。
@@ -928,7 +942,7 @@ JavaScript（goja）でPLC動作を記述。
 
 #### UI表示
 
-`App.tsx` のヘッダーに HTTP API URL (`http://localhost:{port}/api`) を常時表示。✎ ボタンでポート編集モードに切り替え。保存時に `SetHTTPAPIPort()` を呼び出してサーバーを再起動。
+画面の下の帯（ログの見出しの行）の右端に HTTP API URL (`http://localhost:{port}/api`) を常時表示（`HttpApiIndicator`）。✎ ボタンでポート編集モードに切り替え。保存時に `SetHTTPAPIPort()` を呼び出してサーバーを再起動。
 
 ## License
 

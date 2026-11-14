@@ -5,12 +5,11 @@ import { UnsavedChangesDialog } from "./components/UnsavedChangesDialog";
 import { VariableView } from "./components/VariableView";
 import { ScriptPanel } from "./components/ScriptPanel";
 import { AppLogPanel, LogTarget } from "./components/AppLogPanel";
-import { KarakuriLogo } from "./components/KarakuriLogo";
-import { GetHTTPAPIPort, SetHTTPAPIPort } from "../wailsjs/go/main/App";
 import { Sidebar } from "./components/Sidebar";
+import { HttpApiIndicator } from "./components/HttpApiIndicator";
 import { ExportProject, ImportProject } from "../wailsjs/go/main/App";
-
-import { FolderOpen, Save } from "lucide-react";
+import { WindowSetTitle } from "../wailsjs/runtime/runtime";
+import { windowTitle } from "./utils/windowTitle";
 
 const APP_VERSION = "v0.0.43";
 
@@ -18,10 +17,8 @@ type Tab = "server" | "variables" | "scripts";
 
 function App() {
   const [activeTab, setActiveTab] = useState<Tab>("server");
-  const [httpAPIPort, setHttpAPIPort] = useState<number>(8765);
-  const [editingPort, setEditingPort] = useState(false);
-  const [portInput, setPortInput] = useState("");
-  const [portError, setPortError] = useState<string | null>(null);
+  // 開いている（保存した）プロジェクトのファイル。タイトルバーに名前を出す
+  const [projectPath, setProjectPath] = useState("");
   const [serverPanelDirty, setServerPanelDirty] = useState(false);
   const [pendingTab, setPendingTab] = useState<Tab | null>(null);
   const serverPanelRef = useRef<ServerPanelHandle>(null);
@@ -60,40 +57,22 @@ function App() {
     setActiveTab(tab);
   };
 
+  // アプリの名前とバージョンは、ウィンドウのタイトルバーに出す（画面の中には出さない）
   useEffect(() => {
-    GetHTTPAPIPort().then(setHttpAPIPort);
-  }, []);
-
-  const handleStartEdit = () => {
-    setPortInput(String(httpAPIPort));
-    setPortError(null);
-    setEditingPort(true);
-  };
-
-  const handleSavePort = async () => {
-    const port = parseInt(portInput, 10);
-    if (isNaN(port) || port < 1024 || port > 65535) {
-      setPortError("1024〜65535 の範囲で入力してください");
-      return;
-    }
+    const title = windowTitle(APP_VERSION, projectPath);
+    document.title = title;
     try {
-      await SetHTTPAPIPort(port);
-      setHttpAPIPort(port);
-      setEditingPort(false);
-      setPortError(null);
-    } catch (e: unknown) {
-      setPortError(e instanceof Error ? e.message : String(e));
+      WindowSetTitle(title);
+    } catch (e) {
+      console.error(e);
     }
-  };
+  }, [projectPath]);
 
-  const handlePortKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === "Enter") handleSavePort();
-    if (e.key === "Escape") setEditingPort(false);
-  };
-
+  // 保存・読み込みは、選んだファイルのパスを返す（やめたときは空）
   const handleSaveProject = async () => {
     try {
-      await ExportProject();
+      const path = await ExportProject();
+      if (path) setProjectPath(path);
     } catch (e) {
       console.error(e);
     }
@@ -101,7 +80,8 @@ function App() {
 
   const handleOpenProject = async () => {
     try {
-      await ImportProject();
+      const path = await ImportProject();
+      if (path) setProjectPath(path);
     } catch (e) {
       console.error(e);
     }
@@ -109,71 +89,6 @@ function App() {
 
   return (
     <div id="App">
-      <header className="app-header">
-        <h1>
-          <KarakuriLogo size={28} className="header-logo" />
-          Karakuri({APP_VERSION})
-        </h1>
-        <div className="httpapi-indicator">
-          {editingPort ? (
-            <div className="httpapi-edit-form">
-              <span className="httpapi-label">API port:</span>
-              <input
-                type="number"
-                value={portInput}
-                onChange={(e) => setPortInput(e.target.value)}
-                onKeyDown={handlePortKeyDown}
-                min={1024}
-                max={65535}
-                className="httpapi-port-input"
-                autoFocus
-              />
-              <button className="httpapi-save-btn" onClick={handleSavePort}>
-                保存
-              </button>
-              <button
-                className="httpapi-cancel-btn"
-                onClick={() => setEditingPort(false)}
-              >
-                ✕
-              </button>
-              {portError && <span className="httpapi-error">{portError}</span>}
-            </div>
-          ) : (
-            <>
-              <span className="httpapi-url">
-                http://localhost:{httpAPIPort}/api
-              </span>
-              <button
-                className="httpapi-edit-btn"
-                onClick={handleStartEdit}
-                title="ポートを変更"
-              >
-                ✎
-              </button>
-            </>
-          )}
-        </div>
-        <nav className="tab-nav">
-          <button
-            className="toolbar-icon-button"
-            onClick={handleOpenProject}
-            title="プロジェクトオープン"
-            aria-label="プロジェクトオープン"
-          >
-            <FolderOpen size={22} />
-          </button>
-          <button
-            className="toolbar-icon-button"
-            onClick={handleSaveProject}
-            title="プロジェクト保存"
-            aria-label="プロジェクト保存"
-          >
-            <Save size={22} />
-          </button>
-        </nav>
-      </header>
-
       <div className="main-layout">
         <Sidebar
           selected={activeTab}
@@ -181,6 +96,8 @@ function App() {
             setNavRequest(null);
             handleTabClick(tab);
           }}
+          onOpenProject={handleOpenProject}
+          onSaveProject={handleSaveProject}
         />
         <main className="app-main">
           {activeTab === "server" && (
@@ -219,8 +136,11 @@ function App() {
         )}
       </div>
 
-      {/* アプリ全体のログの欄（どのページでも下に出す） */}
-      <AppLogPanel onNavigate={handleLogNavigate} />
+      {/* アプリ全体のログの欄（どのページでも下に出す。見出しの行の右端に HTTP API の URL） */}
+      <AppLogPanel
+        onNavigate={handleLogNavigate}
+        status={<HttpApiIndicator />}
+      />
     </div>
   );
 }

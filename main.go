@@ -29,7 +29,7 @@ func main() {
 		AssetServer: &assetserver.Options{
 			Assets: assets,
 		},
-		BackgroundColour: &options.RGBA{R: 27, G: 38, B: 54, A: 1},
+		BackgroundColour: &options.RGBA{R: 24, G: 27, B: 32, A: 1}, // 画面の --bg-panel と同じ色
 		OnStartup:        app.startup,
 		OnShutdown:       app.shutdown,
 		Windows: &windows.Options{
