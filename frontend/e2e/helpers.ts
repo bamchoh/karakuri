@@ -64,6 +64,25 @@ export async function openClient(page: Page, name: string) {
   await expect(page.locator(".server-config-pane-name")).toHaveText(name);
 }
 
+// 通信画面の「接続先を追加」を押して、ダイアログで接続先（クライアント）を追加する。
+// protocol を渡さなければ、最初から選ばれているプロトコル（最初に登録したもの）のまま追加する
+export async function addClientFromDialog(
+  page: Page,
+  options: { protocol?: string; name?: string } = {},
+) {
+  await page.getByTitle("接続先を追加").click();
+  const dialog = dialogByTitle(page, "接続先を追加");
+  await expect(dialog).toBeVisible();
+  if (options.protocol) {
+    await dialog.locator("select").selectOption(options.protocol);
+  }
+  if (options.name) {
+    await dialog.locator("input").fill(options.name);
+  }
+  await dialog.getByRole("button", { name: "追加" }).click();
+  await expect(dialog).toBeHidden();
+}
+
 // サーバーの右側のタブ（設定 / レジスタ / モニタリング）を選ぶ
 export async function selectServerTab(
   page: Page,

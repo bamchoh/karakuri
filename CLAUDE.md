@@ -271,6 +271,7 @@ frontend/src/
 │   ├── ServerConfigPane.tsx    # 選択したサーバーの見出しとタブ（設定 / レジスタ / モニタリング）。設定はスキーマ駆動のフォーム・UnitID の応答設定
 │   ├── DynamicField.tsx        # サーバー設定の 1 項目（種類ごとの入力欄）
 │   ├── AddServerDialog.tsx     # サーバー追加ダイアログ
+│   ├── AddClientDialog.tsx     # 接続先（クライアント）追加ダイアログ（プロトコルと名前）
 │   ├── UnsavedChangesDialog.tsx # 保存していない変更の確認ダイアログ（サーバーの切り替え・起動・画面の移動で共通）
 │   ├── serverStatus.ts         # サーバーの状態に対応する CSS クラス
 │   ├── RegisterListView.tsx    # レジスタの一覧表示（サーバーの「レジスタ」のタブ。操作欄・10 列の表・キーボード操作）
@@ -310,7 +311,7 @@ frontend/src/
 - **サーバーのタブ**: サーバーを選ぶと、右側に「設定 / レジスタ / モニタリング」のタブが出る（`ServerSubTab`。選んでいるタブは `ServerPanel` が持ち、サーバーを選び直しても保つ）。レジスタとモニタリングは、選んだサーバーのものだけを扱う（レジスタ専用のページはない）
   - レジスタを持たないサーバー（`supportsNodePublishing` のプロトコル。OPC UA）には、タブを出さず設定だけにする
   - 「レジスタ」「モニタリング」の中身は、`ServerPanel` が `ServerConfigPane` に children で渡す。設定のフォームは、ほかのタブを見ている間も隠すだけ（`.server-sub-tab-hidden`）なので、入力中の内容と「保存していない変更」は消えない
-- **一覧**: 上に「SERVERS」、下に「CLIENTS」のグループ。それぞれに追加ボタン（「サーバーを追加」「接続先を追加」。クライアントのプロトコルが複数あるので、追加ボタンの左でプロトコルを選ぶ）。クライアントの行は `.server-tab-item.client-tab-item`
+- **一覧**: 上に「SERVERS」、下に「CLIENTS」のグループ。それぞれに追加ボタン（「サーバーを追加」「接続先を追加」）。どちらも、押すとダイアログが開く（サーバーは `AddServerDialog`、クライアントは `AddClientDialog`。プロトコルを選び、クライアントは名前も付けられる）。クライアントの行は `.server-tab-item.client-tab-item`
 - **選択**: `{ kind: "server" | "client", id }` で持つ。選んでいるものが消えたら、先頭のサーバー、なければ先頭のクライアントを選ぶ
 - **クライアント**: 一覧・プロトコル・履歴は `useClients()` が読み込む（一覧は 1 秒ごとに読み直す）。右側のサブタブ（コマンド / ポーリング / サブスクリプション）と、接続先の設定の欄を開いているかは `ServerPanel` が持ち、接続先を選び直しても保つ
 - **サーバー一覧**: マウント時に `GetServerInstances()` / `GetAvailableProtocols()` を読み、以後は Wails イベント `plc:server-changed` / `plc:protocols-changed` で更新する
