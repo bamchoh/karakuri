@@ -12,9 +12,16 @@ tasks:
       - wails build
 
   test:
-    desc: 全テストを実行する
+    desc: 全テストを実行する（Go のテストと、画面の単体テスト）
     cmds:
       - go test ./...
+      - task: test-frontend
+
+  test-frontend:
+    desc: 画面の単体テスト（Vitest）を実行する。開発サーバーは要らない
+    dir: frontend
+    cmds:
+      - npm test
 
   e2e:
     desc: 画面の確認用テスト（Playwright）を実行する。先に task dev で開発サーバーを起動しておく

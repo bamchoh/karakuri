@@ -32,8 +32,11 @@ task dev
 # プロダクションビルド（build/bin に exe を 1 つ作る）
 task build
 
-# 全テスト実行
+# 全テスト実行（Go のテストと、画面の単体テスト）
 task test
+
+# 画面の単体テスト（Vitest）だけ。開発サーバーは要らない
+task test-frontend
 
 # 画面の確認用テスト（Playwright）。先に task dev で開発サーバーを起動しておく
 task e2e
@@ -60,7 +63,7 @@ go build ./...
 
 `.github/workflows/ci.yml` が、Pull Request と main への push のたびに実行する。
 
-- **ビルドとテスト（Windows）**: 画面のコードの整形の検査（`npm run format:check`）、画面の型検査とビルド（`npm run build`）、`go vet ./...`、`go test ./...`
+- **ビルドとテスト（Windows）**: 画面のコードの整形の検査（`npm run format:check`）、画面の型検査とビルド（`npm run build`）、画面の単体テスト（`npm test`）、`go vet ./...`、`go test ./...`
 - **整形と競合検出（Linux）**: `gofmt -l .`、`go test -race ./internal/...`
   - 開発 PC には C コンパイラがなく `go test -race` を実行できないので、データ競合は CI で見つける
   - Windows の実行環境は改行を CRLF に変えるため、`gofmt` の検査は Linux で行う
@@ -68,6 +71,15 @@ go build ./...
 - **画面のコード（`frontend/`）は Prettier で整形する**。画面のコードを変更したら `npm run format` を実行する（整形されていないと CI が落ちる）
   - 設定は `frontend/.prettierrc.json`（改行コードは、ファイルのものをそのまま使う）。自動生成される `wailsjs/` などは `frontend/.prettierignore` で対象から外している
 - 画面の確認用テスト（Playwright）は対象外（開発サーバーと WebView2 が要る）。画面を変更したら手元で `task e2e` を実行する
+
+### 画面の単体テスト（Vitest）
+
+`frontend/src/**/*.test.ts` に、state に依存しない純粋な関数の単体テストがある（`npm test`。開発サーバーなしで走り、CI でも実行する）。
+
+- 対象: `utils/address.ts`（アドレスの表示と入力の変換・範囲の検査・マッピング先のエリアの決め方）、`utils/register.ts`（ワードの結合・分解・書式）、`components/registerList.ts`（行の組み立て・選択の移動）
+- 画面の動き（クリック・入力・表示）は、こちらではなく Playwright で確かめる。**計算や変換を足すときは、コンポーネントの中に書かず純粋な関数にして、ここにテストを足す**
+- 設定は `frontend/vite.config.ts` の `test`（`src/**/*.test.ts` だけを対象にする。`e2e/*.spec.ts` は Playwright のテスト）。Vitest のバージョンは固定
+- テストのファイルも `npm run build` の型検査の対象
 
 ### リリース
 
@@ -579,7 +591,9 @@ JavaScript（goja）でPLC動作を記述。
 - **ホスト側のテストはフェイクのプロトコルで動かす**: `protocoltest.NewFactory()` を `PLCService.RegisterFactory()` に登録する。`internal/application` と `internal/infrastructure` のテストは、実際のプロトコルの実装を使わない
 - **REST API**（`internal/infrastructure/httpapi/server_test.go`）: `httptest` でハンドラーを直接呼ぶ。エンドポイントを追加・変更したらここに足す
 - **変数とレジスタの同期**（`internal/infrastructure/adapter/variable_datastore_test.go`）: 複数の変数にまたがる書き込み、同時の書き込み、行き来しないこと
+  - 同じメモリを指すエリア（`MemoryArea.BitsOf`）の間の反映は `variable_datastore_shared_test.go`（ワードのエリアと、それをビットごとに見るエリアを持つフェイクの DataStore を使う）
 - **組み込みの構成での確認**（`internal/protocols/integration_test.go`）: アプリと同じように `protocols.Factories()` を登録した `PLCService` に、実際の Modbus TCP / OPC UA のクライアントからつなぐ。サーバーの起動・停止をまたいだ状態（レジスタ、UnitID の設定）、変数との同期、プロジェクトの読み込みを確認する。**プロトコルを足したら、ここにそのプロトコルの確認を足す**
+- **FINS**（`internal/protocols/fins/`）: `fins_test.go` / `area_test.go` はフレームのバイト列と、自分のサーバーへの接続で確認する。`client_test.go` は、応答を決められるフェイクの相手（UDP のソケット・TCP の待ち受け）で、遅れて届いた応答・壊れた応答・FINS/TCP のエラー・タイムアウト後のつなぎ直しを確認する
 - **Modbus**（`internal/protocols/modbus/`）: `tcp_transport_test.go` は実際に TCP でつないで確認する。`rtu/rtu_test.go` は仕様書の既知のフレームで CRC / LRC を確認し、同じリクエストを RTU と ASCII の両方で処理して結果が一致することを確認する
 - **OPC UA**（`internal/protocols/opcua/`）: 実際の OPC UA クライアントでつなぐ。`host_integration_test.go` は実際の変数ストアを使う（他のテストはフェイクの変数ストアを使うため、変数ストアが持つ値の型や型変換を通らない）
 - 設定フォルダに書き込むパッケージのテストは、`TestMain` で `KARAKURI_CONFIG_DIR` を一時フォルダに向ける

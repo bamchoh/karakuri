@@ -1,7 +1,8 @@
 name: CI
 
 # Pull Request と main への push で、ビルドとテストを実行する。
-# 画面の確認用テスト（Playwright）は、開発サーバーと WebView2 が要るので対象外（手元で task e2e を実行する）。
+# 画面のテストのうち、単体テスト（Vitest）は実行する。
+# 画面を操作する確認用テスト（Playwright）は、開発サーバーと WebView2 が要るので対象外（手元で task e2e を実行する）。
 
 on:
   pull_request:
@@ -48,6 +49,11 @@ jobs:
       - name: 画面の型検査とビルド
         working-directory: frontend
         run: npm run build
+
+      # 画面の単体テスト（Vitest）。開発サーバーなしで走る、純粋な関数のテスト
+      - name: 画面の単体テスト
+        working-directory: frontend
+        run: npm test
 
       - name: go vet
         run: go vet ./...

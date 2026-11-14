@@ -6,6 +6,7 @@ import {
   openApp,
   openServers,
   openVariables,
+  selectServerTab,
   resetApp,
   shot,
 } from "./helpers";
@@ -342,6 +343,48 @@ test.describe("保存していない変更の確認", () => {
 
   const confirm = (page: Page) =>
     dialogByTitle(page, "設定が保存されていません");
+
+  test("設定を変更したままタブを切り替えても、変更は消えない（確認も出ない）", async ({
+    page,
+  }) => {
+    // レジスタ・モニタリングのタブに移っても、確認は出ない。設定は隠れるだけ
+    await selectServerTab(page, "レジスタ");
+    await expect(confirm(page)).toHaveCount(0);
+    await expect(page.locator("td.matrix-cell")).not.toHaveCount(0);
+    await expect(page.locator(".vscode-settings-list")).toBeHidden();
+    await selectServerTab(page, "モニタリング");
+    await expect(confirm(page)).toHaveCount(0);
+
+    // 設定のタブに戻ると、入力した内容がそのまま残っている
+    await selectServerTab(page, "設定");
+    await expect(setting(page, "ポート")).toHaveValue(String(TCP_PORT));
+    await expect(saveButton(page)).toHaveText("保存 *");
+    // まだ保存されていない
+    const before = await api<{ settings: Record<string, unknown> }>(
+      page,
+      "GetServerConfig",
+      "modbus-tcp",
+    );
+    expect(before.settings.tcpPort).toBe(502);
+
+    // ほかのタブを見ている間も、別のサーバーへの切り替えでは確認が出る
+    await selectServerTab(page, "レジスタ");
+    await serverTab(page, "OPC UA").click();
+    await expect(confirm(page)).toBeVisible();
+    await confirm(page).getByRole("button", { name: "キャンセル" }).click();
+    await expect(serverTab(page, "Modbus TCP")).toHaveClass(/selected/);
+
+    // 設定のタブに戻って保存できる
+    await selectServerTab(page, "設定");
+    await saveButton(page).click();
+    await expect(saveButton(page)).toHaveText("保存");
+    const after = await api<{ settings: Record<string, unknown> }>(
+      page,
+      "GetServerConfig",
+      "modbus-tcp",
+    );
+    expect(after.settings.tcpPort).toBe(TCP_PORT);
+  });
 
   test("別のサーバーに切り替えるとき: キャンセル・保存せずに切り替え", async ({
     page,

@@ -227,3 +227,87 @@ func TestAppLog_Clients(t *testing.T) {
 	}
 	requireAppLog(t, svc, "info", source, "接続先を削除しました")
 }
+
+// サブスクリプション: 開始・停止と、切断・復帰がログに出る。つなぎ直しのたびに同じ知らせが来ても、出すのは状態が変わったときだけ
+func TestAppLog_Subscription(t *testing.T) {
+	svc, f := newClientTestService(t)
+	c, err := svc.AddClient("fake-client", "PLC", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	const source = "接続先: PLC"
+	count := func(part string) int {
+		n := 0
+		for _, line := range appLogLines(svc) {
+			if strings.Contains(line, part) {
+				n++
+			}
+		}
+		return n
+	}
+	svc.ClearAppLogs()
+
+	// 監視項目がなければ始められない（失敗もログに出る）
+	if err := svc.StartClientSubscription(c.ID); err == nil {
+		t.Fatal("監視項目がないのに始められた")
+	}
+	requireAppLog(t, svc, "error", source, "サブスクリプションを開始できませんでした")
+
+	if _, err := svc.AddClientSubscriptionItems(c.ID, map[string]interface{}{"keys": "a"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := svc.StartClientSubscription(c.ID); err != nil {
+		t.Fatal(err)
+	}
+	requireAppLog(t, svc, "info", source, "サブスクリプションを開始しました")
+	// 監視中に始めても、ログは増えない
+	if err := svc.StartClientSubscription(c.ID); err != nil {
+		t.Fatal(err)
+	}
+	if n := count("サブスクリプションを開始しました"); n != 1 {
+		t.Errorf("開始のログが %d 回出た", n)
+	}
+
+	sub := lastSubscription(t, f, 1)
+	waitFor(t, "監視中のログ", func() bool {
+		return hasAppLog(svc, "info", source, "サブスクリプションで監視しています")
+	})
+
+	// 切れた: 1 回だけ出る（つなぎ直しに失敗するたびに、同じ知らせが来る）
+	for i := 0; i < 3; i++ {
+		sub.Emit(protocol.SubscriptionEvent{Status: protocol.CommandError, Error: "切れた"})
+	}
+	waitFor(t, "切断のログ", func() bool {
+		return hasAppLog(svc, "error", source, "サブスクリプションがつながっていません: 切れた")
+	})
+	// 値の知らせは、ログに出ない
+	sub.EmitValue("a", "1")
+	// 戻った: 1 回だけ出る
+	for i := 0; i < 3; i++ {
+		sub.Emit(protocol.SubscriptionEvent{Status: protocol.CommandOK})
+	}
+	waitFor(t, "復帰のログ", func() bool { return count("サブスクリプションで監視しています") == 2 })
+	waitFor(t, "値が届く", func() bool { return subscription(t, svc, c.ID).Items[0].Count == 1 })
+	if n := count("サブスクリプションがつながっていません"); n != 1 {
+		t.Errorf("切断のログが %d 回出た（1 回だけのはず）: %v", n, appLogLines(svc))
+	}
+	if n := count("サブスクリプションで監視しています"); n != 2 {
+		t.Errorf("監視中のログが %d 回出た（最初と復帰の 2 回のはず）: %v", n, appLogLines(svc))
+	}
+
+	if err := svc.StopClientSubscription(c.ID); err != nil {
+		t.Fatal(err)
+	}
+	requireAppLog(t, svc, "info", source, "サブスクリプションを停止しました")
+	// 止まっている監視を止めても、ログは増えない
+	_ = svc.StopClientSubscription(c.ID)
+	if n := count("サブスクリプションを停止しました"); n != 1 {
+		t.Errorf("停止のログが %d 回出た", n)
+	}
+	// どのログにも、接続先を指す行き先が付いている
+	for _, e := range svc.GetAppLogs() {
+		if e.Source == source && e.Target != "client:"+c.ID {
+			t.Errorf("行き先 = %q: %+v", e.Target, e)
+		}
+	}
+}
