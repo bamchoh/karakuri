@@ -338,19 +338,6 @@ export const ClientDetailPane = forwardRef<
                 onRefreshPorts={noop}
               />
             ))}
-            {dirty && (
-              <div className="client-settings-actions">
-                <span className="client-note">
-                  保存していない変更があります（送信・ポーリングの開始で保存します）
-                </span>
-                <button className="btn-secondary" onClick={revertSettings}>
-                  元に戻す
-                </button>
-                <button className="btn-primary" onClick={saveSettings}>
-                  保存
-                </button>
-              </div>
-            )}
           </>
         ) : shownTab === "command" ? (
           <>
@@ -405,6 +392,30 @@ export const ClientDetailPane = forwardRef<
           />
         )}
       </div>
+
+      {/* 設定のタブの保存の欄。サーバーの設定と同じように、下に固定する（内容をスクロールしても見えている） */}
+      {shownTab === "settings" && (
+        <div className="server-config-pane-footer client-settings-actions">
+          {dirty && (
+            <span className="client-note">
+              保存していない変更があります（送信・ポーリングの開始で保存します）
+            </span>
+          )}
+          <button
+            className="btn-secondary"
+            onClick={revertSettings}
+            disabled={!dirty}
+          >
+            元に戻す
+          </button>
+          <button
+            className={dirty ? "btn-primary" : "btn-secondary"}
+            onClick={saveSettings}
+          >
+            保存
+          </button>
+        </div>
+      )}
     </div>
   );
 });
