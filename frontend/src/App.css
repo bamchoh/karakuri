@@ -530,6 +530,24 @@ button:disabled {
 .register-controls .form-group {
   margin-bottom: 0;
   min-width: 150px;
+  position: relative;
+}
+
+/* 入力欄（input）と選択欄（select）の高さをそろえる（そのままだと、ブラウザの既定で 2px ほど違う） */
+.register-controls .form-group input,
+.register-controls .form-group select {
+  height: 2.25rem;
+  box-sizing: border-box;
+}
+
+/* アドレスの範囲は、入力欄の下に重ねて出す（高さを取らせない。取らせると、この欄だけほかの欄とずれる） */
+.register-controls .form-group .address-range-hint {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  margin-top: 1px;
+  white-space: nowrap;
+  line-height: 1;
 }
 
 /* Register Matrix */
@@ -1345,10 +1363,27 @@ button:disabled {
   color: #9ca3af;
 }
 
+/* 右ペインの枠。スクロールするのは中身（設定の一覧・タブの中身）だけで、見出し・タブ・保存の欄は動かない */
 .server-tab-content {
   flex: 1;
-  overflow-y: auto;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
   background: var(--bg-panel);
+}
+
+/* 右ペインの中身（サーバーの設定、クライアントの各タブ）。ここだけをスクロールさせる */
+.server-config-pane > .vscode-settings-list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.server-config-pane > .server-config-pane-header,
+.server-config-pane > .sub-tab-nav,
+.server-config-pane > .server-config-pane-footer,
+.server-config-pane > .error-message {
+  flex-shrink: 0;
 }
 
 /* 右ペイン: サーバーのタブ（設定 / レジスタ / モニタリング） */
@@ -2289,12 +2324,10 @@ input.address-invalid:focus,
   color: var(--text-muted);
 }
 
-.client-settings-actions {
-  display: flex;
+/* クライアントの設定のタブの保存の欄（.server-config-pane-footer に、案内とボタンの間隔を足す） */
+.server-config-pane-footer.client-settings-actions {
   align-items: center;
-  justify-content: flex-end;
   gap: 0.5rem;
-  padding: 0.5rem 1rem;
 }
 
 .client-settings-actions .client-note {

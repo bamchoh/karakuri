@@ -96,10 +96,11 @@ go build ./...
 
 `frontend/e2e/` に、ブラウザで画面を操作して確認するテストがある。`task dev` が立てる開発用サーバー（`http://localhost:34115`）に接続するため、Go 側の API とプロトコルの実装を含めた動作を確認できる。手順と注意は `frontend/e2e/README.md` を参照。
 
-- 画面ごとのテスト: アプリ全体のログ `app-log.spec.ts`、アドレスの範囲 `register-range.spec.ts`、FINS（「ワード.ビット」のアドレス・項目の表示条件）`fins.spec.ts`、通信画面（サーバー）`server-panel.spec.ts`、変数画面 `variable-dialogs.spec.ts` / `node-publishing.spec.ts`、サーバーの「レジスタ」「モニタリング」のタブ `register-panel.spec.ts` / `monitoring.spec.ts`、スクリプト画面 `script-panel.spec.ts`、通信画面（クライアント）`client-panel.spec.ts` / `client-polling.spec.ts` / `client-mapping.spec.ts` / `client-saved-commands.spec.ts` / `client-opcua.spec.ts`
+- 画面ごとのテスト: 通信画面の右側の配置 `pane-layout.spec.ts`、アプリ全体のログ `app-log.spec.ts`、アドレスの範囲 `register-range.spec.ts`、FINS（「ワード.ビット」のアドレス・項目の表示条件）`fins.spec.ts`、通信画面（サーバー）`server-panel.spec.ts`、変数画面 `variable-dialogs.spec.ts` / `node-publishing.spec.ts`、サーバーの「レジスタ」「モニタリング」のタブ `register-panel.spec.ts` / `monitoring.spec.ts`、スクリプト画面 `script-panel.spec.ts`、通信画面（クライアント）`client-panel.spec.ts` / `client-polling.spec.ts` / `client-mapping.spec.ts` / `client-saved-commands.spec.ts` / `client-opcua.spec.ts`
 - 画面を変更したら、該当するテストを実行する（なければ追加する）。`shot()` で撮ったスクリーンショット（`frontend/e2e/.screenshots/`）で見た目も確認する
 - データの準備は `api(page, "メソッド名", ...)` で Go 側の API を直接呼び、確認したい操作だけを画面で行う
 - **テストはアプリのサーバー・変数・モニタリング項目・スクリプトをすべて削除する。** 開発サーバーは `KARAKURI_CONFIG_DIR` を一時フォルダに向けて起動する
+  - **作業に使っている開発サーバーには、テストを流さない。** テストは、つないだ先のアプリの状態を消す（設定フォルダを差し替えていなければ、本物の設定ファイルも書き換わる）。作業用の `task dev`（ポート 34115）を動かしたままテストを流すときは、テスト用の開発サーバーを別のポートで起動し、`KARAKURI_DEV_URL` でそちらを指す（手順は `frontend/e2e/README.md`）
 - Playwright のバージョンは固定（インストール済みの Chromium と対応させるため）
 
 ### フロントエンドビルドターゲット
@@ -326,6 +327,7 @@ frontend/src/
 
 #### ServerPanel.tsx
 通信画面（サイドバーの「Connections」）。サーバー（Karakuri が待ち受ける側）とクライアント（外部の機器へつなぐ側・マスター）を 1 つの画面で扱う。左に一覧、右に選んだものの設定（サーバーは `ServerConfigPane`、クライアントは `ClientDetailPane`）を並べる。
+- **右側の配置**（サーバー・クライアントで共通。`.server-config-pane`）: 見出し・タブ・保存の欄は動かず、その間の中身だけがスクロールする。スクロールするのは `.server-config-pane > .vscode-settings-list`（設定、クライアントの各タブ）と `.server-sub-tab-body`（サーバーのレジスタ・モニタリング）で、外側の `.server-tab-content` はスクロールさせない。クライアントの保存の欄（「元に戻す」「保存」）は、設定のタブにだけ、サーバーと同じ位置（下）に出す
 - **サーバーのタブ**: サーバーを選ぶと、右側に「設定 / レジスタ / モニタリング」のタブが出る（`ServerSubTab`。選んでいるタブは `ServerPanel` が持ち、サーバーを選び直しても保つ）。レジスタとモニタリングは、選んだサーバーのものだけを扱う（レジスタ専用のページはない）
   - レジスタを持たないサーバー（`supportsNodePublishing` のプロトコル。OPC UA）には、タブを出さず設定だけにする
   - 「レジスタ」「モニタリング」の中身は、`ServerPanel` が `ServerConfigPane` に children で渡す。設定のフォームは、ほかのタブを見ている間も隠すだけ（`.server-sub-tab-hidden`）なので、入力中の内容と「保存していない変更」は消えない
@@ -365,7 +367,7 @@ frontend/src/
   - ワードのエリアと対になっていないビットのエリア（Modbus のコイル、FINS のアップフラグ）は、これまでどおり別のエリアとして出す
 - **アドレスの変換**: 表示と入力の変換は `frontend/src/utils/address.ts`（`formatAddress()` / `parseAddress()`）、入力欄は `AddressInput`。画面ごとに `oneOrigin` や `bitsOf` を見て変換を書かない
 - **アドレスの範囲**: アドレスを入れる場所には、エリアの範囲（`MemoryAreaDTO.size` から。「範囲: 1〜65536」「範囲: 0.00〜6143.15」のように、画面のアドレスの書き方で）を出す。範囲外なら、入力欄を赤くして理由を出し、保存・追加を止める。関数は `addressRangeText()` / `addressRangeError()`、表示は `AddressRangeHint`
-  - レジスタの一覧表示: 開始アドレスの下に範囲を出す。範囲外を入れたら、最後のページに合わせる
+  - レジスタの一覧表示: 開始アドレスの下に範囲を出す。範囲外を入れたら、最後のページに合わせる。範囲の表示は、入力欄の下に重ねて出す（高さを取らせると、その欄だけほかの欄とずれる）
   - モニタリング項目の追加: まとめて追加する最後の項目まで収まるかを見る
   - マッピング設定・一括マッピング編集: 変数が占める大きさの分を見る（`mappingRange()`: BOOL は 1 ビット、ほかはワード数。ビットのエリアに BOOL 以外を置くときはワード数 × 16 ビット）。サーバーにも、クライアントの接続先にも効く。一括編集は、範囲外の件数を下に出す
   - 検査は画面だけ（REST API や `UpdateVariableMappings()` を直接呼べば、範囲外も保存できる。その場合は、これまでどおり黙って動かない）
