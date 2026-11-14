@@ -19,7 +19,9 @@ import {
   WORD_BIT_COLUMNS,
   WORD_BIT_PAGE_SIZE,
 } from "./registerList";
+import { AddressRangeHint } from "./AddressRangeHint";
 import {
+  addressRangeText,
   BITS_PER_WORD,
   bitViewAreaOf,
   formatAddress,
@@ -331,18 +333,25 @@ export function RegisterListView({ protocolType, active }: Props) {
               const v = parseInt(startAddressText);
 
               if (!isNaN(v)) {
-                setStartAddress(
-                  isWordBit
-                    ? Math.max(0, v) * BITS_PER_WORD
-                    : isOneOriginArea
-                      ? Math.max(0, v - 1)
-                      : Math.max(0, v),
-                );
+                const wanted = isWordBit
+                  ? Math.max(0, v) * BITS_PER_WORD
+                  : isOneOriginArea
+                    ? Math.max(0, v - 1)
+                    : Math.max(0, v);
+                // 範囲外を入れたら、最後のページに合わせる
+                setStartAddress(Math.min(wanted, maxStartAddress));
               }
 
               setStartAddressText(startAddressDisplay(startAddress));
             }}
             onFocus={(e) => e.target.select()}
+          />
+          {/* エリアのアドレスの範囲（1bit のときも、開始アドレスはワードの番号で入れるので、ワードの範囲を出す） */}
+          <AddressRangeHint
+            range={addressRangeText(
+              memoryAreas.find((a) => a.id === selectedArea),
+            )}
+            error={null}
           />
         </div>
 

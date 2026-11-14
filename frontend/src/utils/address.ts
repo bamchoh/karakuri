@@ -122,6 +122,57 @@ export function mappingWidthLabel(dataType: string, wordCount: number): string {
   return `${wordCount} ワード`;
 }
 
+// --- アドレスの範囲 ---
+
+// 範囲の検査に使うエリアの属性（MemoryAreaDTO の一部）。size は、エリアの大きさ（ワードのエリアはワード数、ビットのエリアはビット数）
+export interface RangeArea extends AddressArea {
+  size: number;
+  isBit?: boolean;
+}
+
+// エリアのアドレスの範囲を、画面の書き方で返す（"0〜6143"・"1〜65536"・"0.00〜6143.15"）。大きさが分からなければ空
+export function addressRangeText(area: RangeArea | undefined | null): string {
+  if (!area || !(area.size > 0)) return "";
+  return `${formatAddress(area, 0)}〜${formatAddress(area, area.size - 1)}`;
+}
+
+// address から count 個（ワードのエリアはワード、ビットのエリアはビット）が、エリアに収まらないときの理由を返す。
+// 収まれば null。大きさが分からないエリアは、検査しない（null）
+export function addressRangeError(
+  area: RangeArea | undefined | null,
+  address: number,
+  count = 1,
+): string | null {
+  if (!area || !(area.size > 0)) return null;
+  const range = addressRangeText(area);
+  if (address < 0 || address >= area.size) {
+    return `アドレスが範囲外です（範囲: ${range}）`;
+  }
+  if (address + count > area.size) {
+    return `末尾が範囲を超えます（${formatAddress(area, address)} から ${count} 個。範囲: ${range}）`;
+  }
+  return null;
+}
+
+// 変数をマッピングするときの、範囲の検査の対象（エリアと、占める個数）を返す。
+//   - ビットの型（BOOL）は 1 ビット。ワードのエリアに直接マッピングするとき（対になるビットのエリアがないとき）は、
+//     アドレスがビットの番号になるので、エリアの大きさを 16 倍して見る
+//   - ほかの型は、ワードのエリアなら wordCount ワード、ビットのエリアなら wordCount × 16 ビット
+export function mappingRange(
+  area: RangeArea | undefined | null,
+  dataType: string,
+  wordCount: number,
+): { area: RangeArea | undefined | null; count: number } {
+  if (!area) return { area, count: 1 };
+  if (isBitDataType(dataType)) {
+    return area.isBit
+      ? { area, count: 1 }
+      : { area: { ...area, size: area.size * BITS_PER_WORD }, count: 1 };
+  }
+  const words = Math.max(1, wordCount);
+  return { area, count: area.isBit ? words * BITS_PER_WORD : words };
+}
+
 // アドレスの入力欄に出す例
 export function addressPlaceholder(
   area: AddressArea | undefined | null,

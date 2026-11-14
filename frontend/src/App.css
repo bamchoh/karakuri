@@ -2100,6 +2100,45 @@ button:disabled {
   width: 60px;
 }
 
+/* ----- アドレスの範囲の表示と、範囲外の入力 ----- */
+.address-range-hint {
+  display: block;
+  margin-top: 0.2rem;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  text-align: left;
+}
+
+.address-range-hint.error {
+  color: #f87171;
+}
+
+/* 既存の入力欄のルール（.dialog-row input など）より強くするため、要素とクラスを重ねて書く */
+input.address-invalid,
+input.address-invalid:focus,
+.dialog .dialog-row input.address-invalid,
+.dialog .variable-table td input.address-invalid,
+.form-group input.address-invalid {
+  border-color: #f87171;
+}
+
+.mapping-range-row {
+  padding: 0 0.25rem;
+}
+
+.dialog-row .address-range-hint.monitoring-range {
+  margin-left: auto;
+}
+
+.bulk-range-banner {
+  padding: 6px 16px;
+  background: rgba(248, 113, 113, 0.12);
+  border-top: 1px solid rgba(248, 113, 113, 0.4);
+  color: #f87171;
+  font-size: 0.85em;
+  flex-shrink: 0;
+}
+
 /* ビット幅の列（変数の型で決まる。選べない） */
 .dialog-row .mapping-col-width {
   flex: 0 0 64px;

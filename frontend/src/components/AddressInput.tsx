@@ -15,11 +15,23 @@ interface Props {
   onChange: (address: number) => void;
   className?: string;
   max?: number;
+  // 範囲外など、入力が正しくないとき（赤く表示する）
+  invalid?: boolean;
 }
 
 // メモリエリアのアドレスの入力欄。
 // ふつうのエリアは数値の欄（1 始まりのエリアは +1 して表示）、「ワード.ビット」のエリアは文字の欄（100.05）にする
-export function AddressInput({ area, value, onChange, className, max }: Props) {
+export function AddressInput({
+  area,
+  value,
+  onChange,
+  className,
+  max,
+  invalid,
+}: Props) {
+  const inputClass =
+    [className, invalid ? "address-invalid" : ""].filter(Boolean).join(" ") ||
+    undefined;
   const wordBit = isWordBitArea(area);
   const oneOrigin = area?.oneOrigin ?? false;
 
@@ -39,7 +51,8 @@ export function AddressInput({ area, value, onChange, className, max }: Props) {
   if (wordBit) {
     return (
       <input
-        className={className}
+        className={inputClass}
+        aria-invalid={invalid || undefined}
         type="text"
         value={text}
         placeholder={addressPlaceholder(area)}
@@ -55,7 +68,8 @@ export function AddressInput({ area, value, onChange, className, max }: Props) {
 
   return (
     <input
-      className={className}
+      className={inputClass}
+      aria-invalid={invalid || undefined}
       type="number"
       min={oneOrigin ? 1 : 0}
       max={max}
