@@ -4,6 +4,7 @@ import {
   api,
   openApp,
   openRegisters,
+  selectServerTab,
   readWords,
   resetApp,
   shot,
@@ -37,6 +38,13 @@ function control(page: Page, label: string) {
 }
 
 const cells = (page: Page) => page.locator("td.matrix-cell");
+// 通信画面の一覧の、サーバーの行
+const serverTab = (page: Page, name: string) =>
+  page.locator(".server-tab-item", {
+    has: page.locator(".server-tab-name", {
+      hasText: new RegExp("^" + name + "$"),
+    }),
+  });
 const rowHeaders = (page: Page) => page.locator("td.row-header");
 const colHeaders = (page: Page) => page.locator("th.col-header");
 // 見出しがちょうど「書き込み」のダイアログ（モニタリングの「レジスタ書き込み」と区別する）
@@ -175,10 +183,21 @@ test.describe("レジスタの一覧表示", () => {
     expect(await readWords(page, 0)).toEqual([26]);
     await expect(cells(page).first()).toHaveText("0x001A");
 
-    // モニタリングに切り替えて戻っても、表示形式はそのまま
-    await page.locator(".sub-tab-button", { hasText: "モニタリング" }).click();
+    // モニタリングや設定のタブに切り替えて戻っても、表示形式はそのまま
+    // 設定（入力欄と保存ボタン）は、設定のタブでだけ見える
+    const settings = page.locator(".vscode-settings-list");
+    const saveButton = page.locator(".server-config-pane-footer");
+    await expect(settings).toBeHidden();
+    await expect(saveButton).toBeHidden();
+    await selectServerTab(page, "モニタリング");
     await expect(page.locator(".monitoring-view")).toBeVisible();
-    await page.locator(".sub-tab-button", { hasText: "一覧表示" }).click();
+    await expect(settings).toBeHidden();
+    await selectServerTab(page, "設定");
+    await expect(settings).toBeVisible();
+    await expect(saveButton).toBeVisible();
+    await expect(page.locator(".monitoring-view")).toHaveCount(0);
+    await expect(cells(page)).toHaveCount(0);
+    await selectServerTab(page, "レジスタ");
     await expect(control(page, "表示形式")).toHaveValue("hex");
     await expect(cells(page).first()).toHaveText("0x001A");
   });
@@ -411,30 +430,37 @@ test.describe("レジスタの一覧表示", () => {
     await expect.poll(selectedIndex).toBe(2);
   });
 
-  test("レジスタを持つサーバーが複数あるときだけ、プロトコルを選べる", async ({
+  test("レジスタは、選んだサーバーのものを表示する。レジスタを持たないサーバーにはタブがない", async ({
     page,
   }) => {
+    // プロトコルを選ぶ欄はない（サーバーは、通信画面の一覧で選ぶ）
     await expect(control(page, "プロトコル")).toHaveCount(0);
-
-    // OPC UA はレジスタを持たないので、数に入らない
-    await api(page, "AddServer", "opcua", "");
-    await page.waitForTimeout(1500); // サーバーの一覧は 1 秒ごとに読み直す
-    await expect(control(page, "プロトコル")).toHaveCount(0);
-
-    await api(page, "AddServer", "modbus-rtu", "");
-    const protocol = control(page, "プロトコル");
-    await expect(protocol).toBeVisible();
-    const names = await protocol.locator("option").allTextContents();
-    expect([...names].sort()).toEqual(["Modbus RTU", "Modbus TCP"]);
-    // 選んでいたプロトコルはそのまま
-    await expect(protocol).toHaveValue("modbus-tcp");
     await writeWord(page, 0, 4242);
     await expect(cells(page).first()).toHaveText("4242");
 
-    // 切り替えて戻すと、そのプロトコルのエリアを読み直す
-    await protocol.selectOption("modbus-rtu");
-    await protocol.selectOption("modbus-tcp");
+    await api(page, "AddServer", "opcua", "");
+    await api(page, "AddServer", "modbus-rtu", "");
+    const tabs = page.locator(".server-sub-tabs .sub-tab-button");
+    await expect(tabs).toHaveText(["設定", "レジスタ", "モニタリング"]);
+
+    // OPC UA はレジスタを持たないので、タブが出ない（設定だけ）
+    await serverTab(page, "OPC UA").click();
+    await expect(page.locator(".server-config-pane-name")).toHaveText("OPC UA");
+    await expect(tabs).toHaveCount(0);
+    await expect(cells(page)).toHaveCount(0);
+    await expect(page.locator(".vscode-settings-list")).toBeVisible();
+
+    // 別のサーバーを選んでも、「レジスタ」のタブのまま。そのサーバーのレジスタを表示する
+    await serverTab(page, "Modbus RTU").click();
+    await expect(page.locator(".server-config-pane-name")).toHaveText(
+      "Modbus RTU",
+    );
+    await expect(tabs.nth(1)).toHaveClass(/active/);
     await expect(control(page, "メモリエリア")).toHaveValue("holdingRegisters");
+    await expect(cells(page).first()).toHaveText("0");
+
+    await serverTab(page, "Modbus TCP").click();
     await expect(cells(page).first()).toHaveText("4242");
+    await shot(page, "register-in-server");
   });
 });

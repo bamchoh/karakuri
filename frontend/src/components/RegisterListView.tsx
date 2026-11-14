@@ -28,8 +28,9 @@ import {
 } from "../utils/address";
 
 interface Props {
-  serverInstances: application.ServerInstanceDTO[];
-  // 「一覧表示」のタブが選ばれているか。
+  // レジスタを表示するサーバー
+  protocolType: string;
+  // 「レジスタ」のタブが選ばれているか。
   // 選ばれていない間も state（選んだエリア・表示形式など）を保つため、常にマウントしておき、表示と読み取りだけを止める
   active: boolean;
 }
@@ -42,11 +43,12 @@ interface EditingCell {
   format: DisplayFormat;
 }
 
-// レジスタの一覧表示: メモリエリアの値を 10 列の表で表示し、セルを選んで書き込む。
+// レジスタの一覧表示（通信画面でサーバーを選んだときの「レジスタ」のタブ）:
+// そのサーバーのメモリエリアの値を 10 列の表で表示し、セルを選んで書き込む。
 // ワードのエリアと同じメモリをビットごとに見るエリア（area.bitsOf）は、エリアの選択肢には出さず、
 // ワードのエリアの「ビット幅: 1bit」として見る。1 行に 1 ワード分の 16 ビットを並べ、行の見出しをワードの番号にする
-export function RegisterListView({ serverInstances, active }: Props) {
-  const [selectedProtocol, setSelectedProtocol] = useState<string>("");
+export function RegisterListView({ protocolType, active }: Props) {
+  const selectedProtocol = protocolType;
 
   const [memoryAreas, setMemoryAreas] = useState<application.MemoryAreaDTO[]>(
     [],
@@ -70,24 +72,6 @@ export function RegisterListView({ serverInstances, active }: Props) {
 
   // 書き込みダイアログ（開いていなければ null）
   const [editing, setEditing] = useState<EditingCell | null>(null);
-
-  // レジスタを持つサーバー（ノード公開型のプロトコルは除く）
-  const registerInstances = serverInstances.filter(
-    (i) => !i.supportsNodePublishing,
-  );
-
-  // 選んでいたプロトコルのサーバーがなくなったら、先頭のサーバーを選ぶ
-  useEffect(() => {
-    const candidates = serverInstances.filter((i) => !i.supportsNodePublishing);
-    if (candidates.length > 0) {
-      setSelectedProtocol((prev) => {
-        if (!prev || !candidates.find((i) => i.protocolType === prev)) {
-          return candidates[0].protocolType;
-        }
-        return prev;
-      });
-    }
-  }, [serverInstances]);
 
   // メモリエリア一覧を取得（プロトコルが変更されたら再ロード）
   useEffect(() => {
@@ -322,28 +306,6 @@ export function RegisterListView({ serverInstances, active }: Props) {
   return (
     <>
       <div className="register-controls">
-        {/* プロトコル選択（レジスタを持つサーバーが複数の場合） */}
-        {registerInstances.length > 1 && (
-          <div className="form-group">
-            <label>プロトコル</label>
-            <select
-              value={selectedProtocol}
-              onChange={(e) => {
-                setSelectedProtocol(e.target.value);
-                setMemoryAreas([]);
-                setSelectedArea("");
-                setValues([]);
-              }}
-            >
-              {registerInstances.map((inst) => (
-                <option key={inst.protocolType} value={inst.protocolType}>
-                  {inst.displayName}
-                </option>
-              ))}
-            </select>
-          </div>
-        )}
-
         <div className="form-group">
           <label>メモリエリア</label>
           <select

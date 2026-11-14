@@ -21,7 +21,14 @@ import { EventsOn } from "../../wailsjs/runtime/runtime";
 import { application } from "../../wailsjs/go/models";
 import { Square, Play, SquarePlus } from "lucide-react";
 import { AddServerDialog } from "./AddServerDialog";
-import { ServerConfigPane, ServerConfigPaneHandle } from "./ServerConfigPane";
+import { AddClientDialog } from "./AddClientDialog";
+import {
+  ServerConfigPane,
+  ServerConfigPaneHandle,
+  ServerSubTab,
+} from "./ServerConfigPane";
+import { RegisterListView } from "./RegisterListView";
+import { MonitoringView } from "./MonitoringView";
 import { ClientDetailPane, ClientSubTab } from "./ClientDetailPane";
 import { serverStatusClass } from "./serverStatus";
 import { UnsavedChangesDialog } from "./UnsavedChangesDialog";
@@ -64,8 +71,9 @@ export const ServerPanel = forwardRef<ServerPanelHandle, ServerPanelProps>(
       loadClients,
       loadLogs,
     } = useClients();
-    const [addClientProtocol, setAddClientProtocol] = useState("");
     const [selected, setSelected] = useState<Selection>(null);
+    // サーバーの右側のタブ（設定 / レジスタ / モニタリング）。選び直しても保つ
+    const [serverSubTab, setServerSubTab] = useState<ServerSubTab>("settings");
     // クライアントの右側で、選び直しても保つもの
     const [clientSubTab, setClientSubTab] = useState<ClientSubTab>("command");
     const [clientSettingsOpen, setClientSettingsOpen] = useState(true);
@@ -96,8 +104,9 @@ export const ServerPanel = forwardRef<ServerPanelHandle, ServerPanelProps>(
       [onDirtyChange],
     );
 
-    // サーバー追加ダイアログ
+    // サーバー追加ダイアログ・接続先（クライアント）追加ダイアログ
     const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
+    const [isAddClientDialogOpen, setIsAddClientDialogOpen] = useState(false);
 
     useEffect(() => {
       loadInitialData();
@@ -118,12 +127,6 @@ export const ServerPanel = forwardRef<ServerPanelHandle, ServerPanelProps>(
         offProtocols();
       };
     }, []);
-
-    useEffect(() => {
-      if (!addClientProtocol && clientProtocols.length > 0) {
-        setAddClientProtocol(clientProtocols[0].protocolType);
-      }
-    }, [clientProtocols, addClientProtocol]);
 
     // 選んでいるものが消えたら（または何も選んでいなければ）、先頭のサーバー、なければ先頭のクライアントを選ぶ
     useEffect(() => {
@@ -284,13 +287,16 @@ export const ServerPanel = forwardRef<ServerPanelHandle, ServerPanelProps>(
       }
     };
 
-    const handleAddClient = () => {
-      if (!addClientProtocol) return;
+    // ダイアログで決めたプロトコルと名前で、接続先を追加する。
+    // 追加すると右側が切り替わるので、保存していない変更があれば、ダイアログを閉じてから確認する
+    const handleAddClient = (protocolType: string, name: string) => {
+      if (!protocolType) return;
+      setIsAddClientDialogOpen(false);
       requestAction(
         async () => {
           try {
             setError(null);
-            const added = await AddClient(addClientProtocol, "");
+            const added = await AddClient(protocolType, name);
             await loadClients();
             setSelected({ kind: "client", id: added.id });
           } catch (e) {
@@ -325,6 +331,13 @@ export const ServerPanel = forwardRef<ServerPanelHandle, ServerPanelProps>(
           (p) => p.protocolType === selectedClient.protocolType,
         ) ?? null)
       : null;
+
+    // レジスタを持たないサーバー（ノード公開型のプロトコル）には、設定のタブしかない
+    const selectedServerHasRegisters =
+      !!selectedInstance && !selectedInstance.supportsNodePublishing;
+    const selectedServerTab: ServerSubTab = selectedServerHasRegisters
+      ? serverSubTab
+      : "settings";
 
     // 右側に何も出していなければ、保存していない変更もない（削除したものの変更が残らないように）
     const hasPane = !!selectedInstance || !!selectedClient;
@@ -414,22 +427,8 @@ export const ServerPanel = forwardRef<ServerPanelHandle, ServerPanelProps>(
                 CLIENTS
               </span>
               <div className="panel-header-actions">
-                {clientProtocols.length > 1 && (
-                  <select
-                    className="client-add-protocol"
-                    value={addClientProtocol}
-                    onChange={(e) => setAddClientProtocol(e.target.value)}
-                    aria-label="追加する接続先のプロトコル"
-                  >
-                    {clientProtocols.map((p) => (
-                      <option key={p.protocolType} value={p.protocolType}>
-                        {p.displayName}
-                      </option>
-                    ))}
-                  </select>
-                )}
                 <button
-                  onClick={handleAddClient}
+                  onClick={() => setIsAddClientDialogOpen(true)}
                   disabled={clientProtocols.length === 0}
                   className="toolbar-icon-button"
                   title="接続先を追加"
@@ -493,7 +492,19 @@ export const ServerPanel = forwardRef<ServerPanelHandle, ServerPanelProps>(
                 onRefreshPorts={handleRefreshPorts}
                 onRemove={handleRemoveServer}
                 onDirtyChange={handlePaneDirtyChange}
-              />
+                hasRegisters={selectedServerHasRegisters}
+                tab={selectedServerTab}
+                onTabChange={setServerSubTab}
+              >
+                {/* 一覧表示は、タブを切り替えても選んだエリアなどを保つため、マウントしたままにする */}
+                <RegisterListView
+                  protocolType={selectedInstance.protocolType}
+                  active={selectedServerTab === "registers"}
+                />
+                {selectedServerTab === "monitoring" && (
+                  <MonitoringView server={selectedInstance} />
+                )}
+              </ServerConfigPane>
             </div>
           ) : selectedClient && selectedClientProtocol ? (
             <div className="server-tab-content">
@@ -552,6 +563,15 @@ export const ServerPanel = forwardRef<ServerPanelHandle, ServerPanelProps>(
             protocols={availableProtocols}
             onAdd={handleAddServer}
             onClose={() => setIsAddDialogOpen(false)}
+          />
+        )}
+
+        {/* 接続先（クライアント）追加ダイアログ */}
+        {isAddClientDialogOpen && (
+          <AddClientDialog
+            protocols={clientProtocols}
+            onAdd={handleAddClient}
+            onClose={() => setIsAddClientDialogOpen(false)}
           />
         )}
       </div>

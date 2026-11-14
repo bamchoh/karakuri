@@ -1334,6 +1334,25 @@ button:disabled {
   background: var(--bg-panel);
 }
 
+/* 右ペイン: サーバーのタブ（設定 / レジスタ / モニタリング） */
+.sub-tab-nav.server-sub-tabs {
+  margin-bottom: 0;
+  border-width: 0 0 1px 0;
+  padding: 0.25rem 1rem;
+}
+
+.server-sub-tab-body {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 1rem;
+}
+
+/* あとに書いてある .vscode-settings-list などの display に負けないよう、親のクラスを付けて強くする */
+.server-config-pane .server-sub-tab-hidden {
+  display: none;
+}
+
 /* 右ペイン: サーバー設定 */
 .server-config-pane {
   display: flex;
@@ -2209,15 +2228,6 @@ button:disabled {
 }
 
 /* ----- クライアント画面 ----- */
-.client-add-protocol {
-  font-size: 0.75rem;
-  padding: 2px 4px;
-  background: var(--bg-input);
-  color: var(--text-main);
-  border: 1px solid var(--border);
-  border-radius: 2px;
-}
-
 .client-note {
   font-size: 0.8rem;
   color: var(--text-muted);

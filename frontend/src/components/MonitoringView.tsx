@@ -37,11 +37,15 @@ import { getWordCount } from "../utils/register";
 import type { DisplayFormat, BitWidth, Endianness } from "../types/register";
 
 interface Props {
-  serverInstances: application.ServerInstanceDTO[];
+  // 項目を表示するサーバー
+  server: application.ServerInstanceDTO;
 }
 
-// モニタリング: 登録したレジスタの現在値を一覧で表示し、行ごとの設定変更・書き込み・並べ替えができる
-export function MonitoringView({ serverInstances }: Props) {
+// モニタリング（通信画面でサーバーを選んだときの「モニタリング」のタブ）:
+// そのサーバーに登録したレジスタの現在値を一覧で表示し、行ごとの設定変更・書き込み・並べ替えができる。
+// 項目はアプリ全体で 1 つの並びとして保存してあり、ここでは選んだサーバーのものだけを出す
+export function MonitoringView({ server }: Props) {
+  const serverInstances = [server];
   const [autoRefresh, setAutoRefresh] = useState(true);
   const [memoryAreasByProtocol, setMemoryAreasByProtocol] = useState<
     Record<string, application.MemoryAreaDTO[]>
@@ -49,6 +53,11 @@ export function MonitoringView({ serverInstances }: Props) {
   const { items, setItems, loadItems } = useMonitoringItems(
     memoryAreasByProtocol,
     autoRefresh,
+  );
+
+  // このサーバーの項目（items は、ほかのサーバーの項目も含む全体の並び）
+  const shownItems = items.filter(
+    (i) => i.item.protocolType === server.protocolType,
   );
 
   // ドラッグ＆ドロップ用センサー
@@ -164,7 +173,7 @@ export function MonitoringView({ serverInstances }: Props) {
     }
   };
 
-  // ドラッグ＆ドロップによる並び替え
+  // ドラッグ＆ドロップによる並び替え（位置は、全体の並びの中での位置で指定する）
   const handleDragEnd = async (event: DragEndEvent) => {
     const { active, over } = event;
     if (over && active.id !== over.id) {
@@ -217,7 +226,7 @@ export function MonitoringView({ serverInstances }: Props) {
         </button>
       </div>
 
-      {items.length === 0 ? (
+      {shownItems.length === 0 ? (
         <div className="monitoring-empty">
           モニタリング項目がありません。「追加」ボタンで項目を登録してください。
         </div>
@@ -242,11 +251,11 @@ export function MonitoringView({ serverInstances }: Props) {
               </tr>
             </thead>
             <SortableContext
-              items={items.map((i) => i.item.id)}
+              items={shownItems.map((i) => i.item.id)}
               strategy={verticalListSortingStrategy}
             >
               <tbody>
-                {items.map((itemWithValue) => (
+                {shownItems.map((itemWithValue) => (
                   <MonitoringRow
                     key={itemWithValue.item.id}
                     itemWithValue={itemWithValue}

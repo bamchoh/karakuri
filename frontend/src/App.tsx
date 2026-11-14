@@ -3,7 +3,6 @@ import "./App.css";
 import { ServerPanel, ServerPanelHandle } from "./components/ServerPanel";
 import { UnsavedChangesDialog } from "./components/UnsavedChangesDialog";
 import { VariableView } from "./components/VariableView";
-import { RegisterPanel, RegisterTab } from "./components/RegisterPanel";
 import { ScriptPanel } from "./components/ScriptPanel";
 import { AppLogPanel } from "./components/AppLogPanel";
 import { KarakuriLogo } from "./components/KarakuriLogo";
@@ -15,11 +14,10 @@ import { FolderOpen, Save } from "lucide-react";
 
 const APP_VERSION = "v0.0.42";
 
-type Tab = "server" | "variables" | "registers" | "scripts";
+type Tab = "server" | "variables" | "scripts";
 
 function App() {
   const [activeTab, setActiveTab] = useState<Tab>("server");
-  const [registerSubTab, setRegisterSubTab] = useState<RegisterTab>("list");
   const [httpAPIPort, setHttpAPIPort] = useState<number>(8765);
   const [editingPort, setEditingPort] = useState(false);
   const [portInput, setPortInput] = useState("");
@@ -176,12 +174,6 @@ function App() {
             />
           )}
           {activeTab === "variables" && <VariableView />}
-          {activeTab === "registers" && (
-            <RegisterPanel
-              activeSubTab={registerSubTab}
-              onSubTabChange={setRegisterSubTab}
-            />
-          )}
           {activeTab === "scripts" && <ScriptPanel />}
         </main>{" "}
         {pendingTab && (
