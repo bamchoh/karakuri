@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"math/big"
+	"regexp"
 	"strings"
 	"sync"
 	"time"
@@ -172,22 +173,57 @@ func (e *ScriptEngine) createVM(scriptID, scriptName string) *goja.Runtime {
 		e.addLog(scriptID, scriptName, LogLevelWarn, msg)
 	}
 
+	// --- 変数へのアクセス ---
+	//
+	// どの関数も、失敗したらスクリプトのエラー（例外）にする: 変数がない・フィールドや要素がない・
+	// 型に合わない値を書こうとした、など。黙って null を返したり、何もしなかったりはしない
+	// （変数名の打ち間違いに気づけるようにするため）。変数があるかどうかは hasVariable() で調べる。
+
+	// throw は、スクリプトのエラー（例外）を投げる。スクリプトの try / catch で受け取れる
+	throw := func(format string, args ...any) {
+		errObj, err := vm.New(vm.Get("Error"), vm.ToValue(fmt.Sprintf(format, args...)))
+		if err != nil {
+			panic(vm.NewGoError(fmt.Errorf(format, args...)))
+		}
+		panic(errObj)
+	}
+
 	if e.variableStore != nil {
+		// mustVariable は変数を返す。なければ、スクリプトのエラーにする
+		mustVariable := func(fn, name string) *variable.Variable {
+			v, err := e.variableStore.GetVariableByName(name)
+			if err != nil {
+				throw("plc.%s: 変数 %q がありません", fn, name)
+			}
+			return v
+		}
+		// check は、変数ストアのエラーをスクリプトのエラーにする。
+		// name は "VarName" のほか "Array[2]" / "Struct.field" の形でもよい（変数がないときは、そのことを伝える）
+		check := func(fn, name string, err error) {
+			if err == nil {
+				return
+			}
+			baseName, _ := splitNameAndPath(name)
+			mustVariable(fn, baseName)
+			throw("plc.%s(%q): %v", fn, name, err)
+		}
+
+		// hasVariable(name) - 変数があるかどうか
+		plc.Set("hasVariable", func(name string) bool {
+			_, err := e.variableStore.GetVariableByName(name)
+			return err == nil
+		})
+
 		// readVariable(name) - 変数名で値を読む
 		// name は "VarName", "Array[2]", "Struct.field", "Array[1].field" など
 		plc.Set("readVariable", func(name string) any {
 			baseName, fieldPath := splitNameAndPath(name)
 			if fieldPath != "" {
 				val, err := e.variableStore.ReadFieldValue(baseName, fieldPath)
-				if err != nil {
-					return nil
-				}
+				check("readVariable", name, err)
 				return toJSCompatibleValue(val)
 			}
-			v, err := e.variableStore.GetVariableByName(name)
-			if err != nil {
-				return nil
-			}
+			v := mustVariable("readVariable", name)
 			// LINT/ULINT が safe integer 範囲を超えた場合は精度損失の警告を出す
 			switch val := v.Value.(type) {
 			case int64:
@@ -209,12 +245,9 @@ func (e *ScriptEngine) createVM(scriptID, scriptName string) *goja.Runtime {
 
 		// getVariableStatus(name) - 外部の機器（クライアントの接続先）にマッピングした変数の同期の状態。
 		// { state: "ok" | "comm_error" | "invalid" | "stopped" | "", writePending: bool, error: string, client: 接続先の名前 }
-		// を返す。マッピングしていない変数・ない変数は null
+		// を返す。変数はあるが、接続先にマッピングしていなければ null
 		plc.Set("getVariableStatus", func(name string) any {
-			v, err := e.variableStore.GetVariableByName(name)
-			if err != nil {
-				return nil
-			}
+			v := mustVariable("getVariableStatus", name)
 			e.mu.Lock()
 			statusOf := e.statusOf
 			e.mu.Unlock()
@@ -233,61 +266,55 @@ func (e *ScriptEngine) createVM(scriptID, scriptName string) *goja.Runtime {
 		plc.Set("writeVariable", func(name string, value any) {
 			baseName, fieldPath := splitNameAndPath(name)
 			if fieldPath != "" {
-				e.variableStore.WriteFieldValueByName(baseName, fieldPath, value)
+				// ないフィールド・範囲外の添字は、読んでみて確かめる（書き込みだけでは、エラーにならないことがある）
+				_, err := e.variableStore.ReadFieldValue(baseName, fieldPath)
+				check("writeVariable", name, err)
+				check("writeVariable", name, e.variableStore.WriteFieldValueByName(baseName, fieldPath, value))
 				return
 			}
-			e.variableStore.UpdateValueByName(name, value)
+			check("writeVariable", name, e.variableStore.UpdateValueByName(name, value))
 		})
 
 		// readArrayElement(name, index) - 配列要素読み込み（外部インデックス：表示ベース）
 		// 例: ARRAY[1..10] の場合、index=1 が最初の要素
 		plc.Set("readArrayElement", func(name string, index int) any {
 			val, err := e.variableStore.ReadArrayElement(name, index)
-			if err != nil {
-				return nil
-			}
+			check("readArrayElement", name, err)
 			return toJSCompatibleValue(val)
 		})
 
 		// writeArrayElement(name, index, value) - 配列要素書き込み（外部インデックス：表示ベース）
 		// 例: ARRAY[1..10] の場合、index=1 が最初の要素
 		plc.Set("writeArrayElement", func(name string, index int, value any) {
-			e.variableStore.WriteArrayElement(name, index, value)
+			// 配列でない変数・範囲外の添字は、読んでみて確かめる（書き込みだけでは区別がつかないため）
+			_, err := e.variableStore.ReadArrayElement(name, index)
+			check("writeArrayElement", name, err)
+			check("writeArrayElement", name, e.variableStore.WriteArrayElement(name, index, value))
 		})
 
-		// readStructField(name, fieldName) - 構造体フィールド読み込み
-		plc.Set("readStructField", func(name string, fieldName string) any {
-			v, err := e.variableStore.GetVariableByName(name)
-			if err != nil {
-				return nil
-			}
+		// structField は、構造体の変数とフィールドがあることを確かめて、フィールドの値を返す
+		structField := func(fn, name, fieldName string) any {
+			v := mustVariable(fn, name)
 			m, ok := v.Value.(map[string]any)
 			if !ok {
-				return nil
+				throw("plc.%s: 変数 %q は構造体ではありません（%v）", fn, name, v.DataType)
 			}
 			val, exists := m[fieldName]
 			if !exists {
-				return nil
+				throw("plc.%s: 変数 %q にフィールド %q がありません", fn, name, fieldName)
 			}
-			return toJSCompatibleValue(val)
+			return val
+		}
+
+		// readStructField(name, fieldName) - 構造体フィールド読み込み
+		plc.Set("readStructField", func(name string, fieldName string) any {
+			return toJSCompatibleValue(structField("readStructField", name, fieldName))
 		})
 
 		// writeStructField(name, fieldName, value) - 構造体フィールド書き込み
 		plc.Set("writeStructField", func(name string, fieldName string, value any) {
-			v, err := e.variableStore.GetVariableByName(name)
-			if err != nil {
-				return
-			}
-			m, ok := v.Value.(map[string]any)
-			if !ok {
-				return
-			}
-			newMap := make(map[string]any)
-			for k, val := range m {
-				newMap[k] = val
-			}
-			newMap[fieldName] = value
-			e.variableStore.UpdateValueByName(name, newMap)
+			structField("writeStructField", name, fieldName)
+			check("writeStructField", name, e.variableStore.WriteFieldValueByName(name, "."+fieldName, value))
 		})
 
 		// getVariables() - 全変数名一覧を取得
@@ -299,21 +326,16 @@ func (e *ScriptEngine) createVM(scriptID, scriptName string) *goja.Runtime {
 			}
 			return names
 		})
-	}
 
-	// LINT/ULINT BigInt API（精度損失なく64ビット整数を読み書きするための専用関数）
-	// JavaScriptのBigIntリテラル（例: 9007199254740993n）を使った演算が可能
+		// --- LINT/ULINT BigInt API（精度損失なく64ビット整数を読み書きするための専用関数） ---
+		// JavaScriptのBigIntリテラル（例: 9007199254740993n）を使った演算が可能
 
-	if e.variableStore != nil {
 		// readLintBig(name) -> BigInt - LINT変数をBigIntとして読む（精度損失なし）
 		plc.Set("readLintBig", func(name string) goja.Value {
-			v, err := e.variableStore.GetVariableByName(name)
-			if err != nil {
-				return vm.ToValue(nil)
-			}
+			v := mustVariable("readLintBig", name)
 			val, ok := v.Value.(int64)
 			if !ok {
-				return vm.ToValue(nil)
+				throw("plc.readLintBig: 変数 %q は LINT ではありません（%v）", name, v.DataType)
 			}
 			return vm.ToValue(new(big.Int).SetInt64(val))
 		})
@@ -329,18 +351,15 @@ func (e *ScriptEngine) createVM(scriptID, scriptName string) *goja.Runtime {
 			} else {
 				int64Val = val.ToInteger()
 			}
-			e.variableStore.UpdateValueByName(name, int64Val)
+			check("writeLintBig", name, e.variableStore.UpdateValueByName(name, int64Val))
 		})
 
 		// readUlintBig(name) -> BigInt - ULINT変数をBigIntとして読む（精度損失なし）
 		plc.Set("readUlintBig", func(name string) goja.Value {
-			v, err := e.variableStore.GetVariableByName(name)
-			if err != nil {
-				return vm.ToValue(nil)
-			}
+			v := mustVariable("readUlintBig", name)
 			val, ok := v.Value.(uint64)
 			if !ok {
-				return vm.ToValue(nil)
+				throw("plc.readUlintBig: 変数 %q は ULINT ではありません（%v）", name, v.DataType)
 			}
 			return vm.ToValue(new(big.Int).SetUint64(val))
 		})
@@ -361,95 +380,69 @@ func (e *ScriptEngine) createVM(scriptID, scriptName string) *goja.Runtime {
 					uint64Val = uint64(f)
 				}
 			}
-			e.variableStore.UpdateValueByName(name, uint64Val)
+			check("writeUlintBig", name, e.variableStore.UpdateValueByName(name, uint64Val))
 		})
-	}
 
-	// TIME/DATE型シンタックスシュガー（変数の読み書きをワンステップで）
+		// --- TIME/DATE型シンタックスシュガー（変数の読み書きをワンステップで） ---
 
-	if e.variableStore != nil {
-		// readTimeMs(name) -> ミリ秒(number)
-		plc.Set("readTimeMs", func(name string) any {
-			v, err := e.variableStore.GetVariableByName(name)
-			if err != nil {
-				return nil
-			}
+		// timeText は、時間・日付の型の変数の値（"T#1s" などの文字列）を返す
+		timeText := func(fn, name, typeName string) string {
+			v := mustVariable(fn, name)
 			s, ok := v.Value.(string)
 			if !ok {
-				return nil
+				throw("plc.%s: 変数 %q は %s ではありません（%v）", fn, name, typeName, v.DataType)
 			}
-			ms, err := variable.ParseTIME(s)
+			return s
+		}
+		// checkTime は、時間・日付の文字列を読めなかったときに、スクリプトのエラーにする
+		checkTime := func(fn, name, typeName string, err error) {
 			if err != nil {
-				return nil
+				throw("plc.%s: 変数 %q の値を %s として読めません: %v", fn, name, typeName, err)
 			}
+		}
+
+		// readTimeMs(name) -> ミリ秒(number)
+		plc.Set("readTimeMs", func(name string) any {
+			ms, err := variable.ParseTIME(timeText("readTimeMs", name, "TIME"))
+			checkTime("readTimeMs", name, "TIME", err)
 			return int64(ms)
 		})
 		// writeTimeMs(name, ms)
 		plc.Set("writeTimeMs", func(name string, ms int64) {
-			e.variableStore.UpdateValueByName(name, variable.FormatTIME(int32(ms)))
+			check("writeTimeMs", name, e.variableStore.UpdateValueByName(name, variable.FormatTIME(int32(ms))))
 		})
 
 		// readDateSec(name) -> Unix秒(number)
 		plc.Set("readDateSec", func(name string) any {
-			v, err := e.variableStore.GetVariableByName(name)
-			if err != nil {
-				return nil
-			}
-			s, ok := v.Value.(string)
-			if !ok {
-				return nil
-			}
-			sec, err := variable.ParseDATE(s)
-			if err != nil {
-				return nil
-			}
+			sec, err := variable.ParseDATE(timeText("readDateSec", name, "DATE"))
+			checkTime("readDateSec", name, "DATE", err)
 			return int64(sec)
 		})
 		// writeDateSec(name, sec)
 		plc.Set("writeDateSec", func(name string, sec int64) {
-			e.variableStore.UpdateValueByName(name, variable.FormatDATE(uint64(sec)))
+			check("writeDateSec", name, e.variableStore.UpdateValueByName(name, variable.FormatDATE(uint64(sec))))
 		})
 
 		// readTimeOfDayMs(name) -> ミリ秒(number)
 		plc.Set("readTimeOfDayMs", func(name string) any {
-			v, err := e.variableStore.GetVariableByName(name)
-			if err != nil {
-				return nil
-			}
-			s, ok := v.Value.(string)
-			if !ok {
-				return nil
-			}
-			ms, err := variable.ParseTIME_OF_DAY(s)
-			if err != nil {
-				return nil
-			}
+			ms, err := variable.ParseTIME_OF_DAY(timeText("readTimeOfDayMs", name, "TIME_OF_DAY"))
+			checkTime("readTimeOfDayMs", name, "TIME_OF_DAY", err)
 			return int64(ms)
 		})
 		// writeTimeOfDayMs(name, ms)
 		plc.Set("writeTimeOfDayMs", func(name string, ms int64) {
-			e.variableStore.UpdateValueByName(name, variable.FormatTIME_OF_DAY(uint32(ms)))
+			check("writeTimeOfDayMs", name, e.variableStore.UpdateValueByName(name, variable.FormatTIME_OF_DAY(uint32(ms))))
 		})
 
 		// readDateAndTimeSec(name) -> Unix秒(number)
 		plc.Set("readDateAndTimeSec", func(name string) any {
-			v, err := e.variableStore.GetVariableByName(name)
-			if err != nil {
-				return nil
-			}
-			s, ok := v.Value.(string)
-			if !ok {
-				return nil
-			}
-			sec, err := variable.ParseDATE_AND_TIME(s)
-			if err != nil {
-				return nil
-			}
+			sec, err := variable.ParseDATE_AND_TIME(timeText("readDateAndTimeSec", name, "DATE_AND_TIME"))
+			checkTime("readDateAndTimeSec", name, "DATE_AND_TIME", err)
 			return int64(sec)
 		})
 		// writeDateAndTimeSec(name, sec)
 		plc.Set("writeDateAndTimeSec", func(name string, sec int64) {
-			e.variableStore.UpdateValueByName(name, variable.FormatDATE_AND_TIME(uint64(sec)))
+			check("writeDateAndTimeSec", name, e.variableStore.UpdateValueByName(name, variable.FormatDATE_AND_TIME(uint64(sec))))
 		})
 	}
 
@@ -626,9 +619,17 @@ func runProgram(vm *goja.Runtime, program *goja.Program) (errMsg string) {
 		}
 	}()
 	if _, err := vm.RunProgram(program); err != nil {
-		return err.Error()
+		return errorText(err)
 	}
 	return ""
+}
+
+// nativeFrame は、エラーの文面に付く、Go の関数の呼び出し位置（スクリプトを書く人には意味がない）
+var nativeFrame = regexp.MustCompile(` at karakuri/\S+ \(native\)`)
+
+// errorText は、スクリプトのエラーをコンソールに出す文面にする
+func errorText(err error) string {
+	return nativeFrame.ReplaceAllString(err.Error(), "")
 }
 
 // StopScript はスクリプトを停止する
@@ -702,7 +703,7 @@ func (e *ScriptEngine) RunOnce(code string) (any, error) {
 	result, err := e.runOnce(code)
 	switch {
 	case err != nil:
-		e.addLog("", OnceScriptName, LogLevelError, err.Error())
+		e.addLog("", OnceScriptName, LogLevelError, errorText(err))
 	case result != nil:
 		e.addLog("", OnceScriptName, LogLevelLog, fmt.Sprintf("=> %v", result))
 	default:

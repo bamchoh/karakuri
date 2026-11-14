@@ -22,6 +22,10 @@ const DEFAULT_CODE = `// PLCオブジェクトで変数にアクセスできま�
 // plc.readVariable(name)              - 変数の値を読む
 // plc.writeVariable(name, value)      - 変数に値を書く
 // plc.getVariables()                  - 全変数名の一覧を取得
+// plc.hasVariable(name)               - 変数があるかどうか
+//
+// 変数がない・フィールドがない・型に合わない値を書いた、などの失敗はエラーになります
+// （エラーは下のコンソールに出ます。try / catch で受け取ることもできます）
 //
 // === 配列 ===
 // plc.readArrayElement(name, index)          - 配列要素を読む
