@@ -31,6 +31,10 @@ export function AddressInput({ area, value, onChange, className, max }: Props) {
     );
     // area は描画のたびに別のオブジェクトになることがあるので、中身で比べる
   }, [value, wordBit, oneOrigin]);
+  // アドレスの書き方が変わったら（エリアを変えた・ビット幅を 1bit にした）、その書き方で出し直す
+  useEffect(() => {
+    setText(formatAddress(area, value));
+  }, [wordBit, oneOrigin]);
 
   if (wordBit) {
     return (

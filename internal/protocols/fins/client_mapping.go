@@ -1,14 +1,12 @@
 package fins
 
 import (
-	"fmt"
-	"strings"
-
 	"karakuri/internal/domain/protocol"
 )
 
 // FINS クライアントの、変数マッピング（protocol.MappableClientFactory）の実装。
-// エリアはサーバー（DataStore）と同じ。ビットのエリアのアドレスは「ワード × 16 + ビット」
+// エリアはサーバー（DataStore）と同じ。ビットのエリアのアドレスは「ワード × 16 + ビット」、
+// フラグのエリア（タイマ・カウンタのアップフラグ）のアドレスは番号
 
 var _ protocol.MappableClientFactory = (*ClientFactory)(nil)
 
@@ -17,26 +15,9 @@ func (f *ClientFactory) MappingAreas() []protocol.MemoryArea {
 	return memoryAreas()
 }
 
-// mappingTarget は、マッピングのエリアの ID とアドレスから、エリア種別とアドレスを決める
-func mappingTarget(area string, address uint32) (target, error) {
-	isBit := strings.HasSuffix(area, bitSuffix)
-	def, ok := areaByID(strings.TrimSuffix(area, bitSuffix))
-	if !ok || (isBit && !def.BitArea) {
-		return target{}, fmt.Errorf("不明なエリアです: %s", area)
-	}
-	t := target{def: def, isBit: isBit, word: int(address)}
-	if isBit {
-		t.word, t.bit = int(address/16), int(address%16)
-	}
-	if t.word >= def.Words {
-		return t, fmt.Errorf("アドレスがエリアの範囲を超えています")
-	}
-	return t, nil
-}
-
 // MaxReadCount は 1 回のリクエストで読める個数
 func (f *ClientFactory) MaxReadCount(area string) int {
-	if _, err := mappingTarget(area, 0); err != nil {
+	if _, err := targetFromStore(area, 0); err != nil {
 		return 0
 	}
 	return maxReadCount
@@ -44,7 +25,7 @@ func (f *ClientFactory) MaxReadCount(area string) int {
 
 // MaxWriteCount は 1 回のリクエストで書ける個数
 func (f *ClientFactory) MaxWriteCount(area string) int {
-	if _, err := mappingTarget(area, 0); err != nil {
+	if _, err := targetFromStore(area, 0); err != nil {
 		return 0
 	}
 	return maxWriteCount
@@ -52,7 +33,7 @@ func (f *ClientFactory) MaxWriteCount(area string) int {
 
 // BuildReadRequest は area の address から count 個を読むリクエストを作る
 func (f *ClientFactory) BuildReadRequest(area string, address uint32, count int) ([]byte, error) {
-	t, err := mappingTarget(area, address)
+	t, err := targetFromStore(area, address)
 	if err != nil {
 		return nil, err
 	}
@@ -61,7 +42,7 @@ func (f *ClientFactory) BuildReadRequest(area string, address uint32, count int)
 
 // BuildWriteRequest は area の address からワードかビットを書くリクエストを作る
 func (f *ClientFactory) BuildWriteRequest(area string, address uint32, words []uint16, bits []bool) ([]byte, error) {
-	t, err := mappingTarget(area, address)
+	t, err := targetFromStore(area, address)
 	if err != nil {
 		return nil, err
 	}

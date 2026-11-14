@@ -11,7 +11,6 @@
 package fins
 
 import (
-	"encoding/binary"
 	"fmt"
 
 	"karakuri/internal/domain/protocol"
@@ -116,106 +115,6 @@ func (h header) reply() header {
 		SNA: h.DNA, SA1: h.DA1, SA2: h.DA2,
 		SID: h.SID,
 	}
-}
-
-// --- メモリエリア ---
-
-// エリアの ID（DataStore とクライアントのマッピングで共通）。
-// ビットのエリアは、同じ名前のワードのエリアと同じメモリを、ビットごとに見たもの（アドレス = ワード × 16 + ビット）。
-// ホストには MemoryArea.BitsOf で知らせる
-const (
-	AreaCIO = "CIO"
-	AreaWR  = "WR"
-	AreaHR  = "HR"
-	AreaAR  = "AR"
-	AreaDM  = "DM"
-	AreaEM0 = "EM0"
-
-	bitSuffix = "_BIT"
-)
-
-// areaDef はメモリエリア 1 つの定義
-type areaDef struct {
-	ID       string
-	Name     string // 表示名
-	Prefix   string // アドレスの前に付ける文字（"D100" の "D"）
-	WordCode byte   // FINS のエリア種別（ワード）
-	BitCode  byte   // FINS のエリア種別（ビット）
-	Words    int    // ワード数
-	BitArea  bool   // ビットのエリアとしても見せるか
-}
-
-// areaDefs は対応するエリア（CS / CJ シリーズの種別コードと大きさ）
-var areaDefs = []areaDef{
-	{ID: AreaCIO, Name: "CIO（チャネル I/O）", Prefix: "CIO ", WordCode: 0xB0, BitCode: 0x30, Words: 6144, BitArea: true},
-	{ID: AreaWR, Name: "WR（内部補助リレー）", Prefix: "W", WordCode: 0xB1, BitCode: 0x31, Words: 512, BitArea: true},
-	{ID: AreaHR, Name: "HR（保持リレー）", Prefix: "H", WordCode: 0xB2, BitCode: 0x32, Words: 1536, BitArea: true},
-	{ID: AreaAR, Name: "AR（特殊補助リレー）", Prefix: "A", WordCode: 0xB3, BitCode: 0x33, Words: 960, BitArea: true},
-	{ID: AreaDM, Name: "DM（データメモリ）", Prefix: "D", WordCode: 0x82, BitCode: 0x02, Words: 32768},
-	{ID: AreaEM0, Name: "EM バンク 0（拡張データメモリ）", Prefix: "E0_", WordCode: 0xA0, BitCode: 0x20, Words: 32768},
-}
-
-func areaByID(id string) (areaDef, bool) {
-	for _, a := range areaDefs {
-		if a.ID == id {
-			return a, true
-		}
-	}
-	return areaDef{}, false
-}
-
-// areaByCode はエリア種別から、エリアと、ビットの種別かどうかを返す。
-// CS / CJ の種別に加えて、古い機種（CV モード）の CIO の種別（0x80 / 0x00）と、EM のカレントバンク（0x98）も受け付ける
-func areaByCode(code byte) (def areaDef, isBit, ok bool) {
-	switch code {
-	case 0x80:
-		code = 0xB0
-	case 0x00:
-		code = 0x30
-	case 0x98:
-		code = 0xA0
-	}
-	for _, a := range areaDefs {
-		if a.WordCode == code {
-			return a, false, true
-		}
-		if a.BitCode == code {
-			return a, true, true
-		}
-	}
-	return areaDef{}, false, false
-}
-
-// memoryAreas は、ホストに見せるメモリエリアの一覧を返す（ワードのエリアのあとに、ビットのエリア）
-func memoryAreas() []protocol.MemoryArea {
-	areas := make([]protocol.MemoryArea, 0, len(areaDefs)*2)
-	for _, a := range areaDefs {
-		areas = append(areas, protocol.MemoryArea{ID: a.ID, DisplayName: a.Name, Size: uint32(a.Words), ShortName: a.ID})
-	}
-	for _, a := range areaDefs {
-		if a.BitArea {
-			areas = append(areas, protocol.MemoryArea{
-				ID: a.ID + bitSuffix, DisplayName: a.Name + " ビット", IsBit: true, Size: uint32(a.Words * 16), ShortName: a.ID, BitsOf: a.ID,
-			})
-		}
-	}
-	return areas
-}
-
-// wordLabel / bitLabel は、オムロンの書き方のアドレス（"D100"、"CIO 100.05"）を返す
-func wordLabel(a areaDef, word int) string {
-	return fmt.Sprintf("%s%d", a.Prefix, word)
-}
-
-func bitLabel(a areaDef, word, bit int) string {
-	return fmt.Sprintf("%s%d.%02d", a.Prefix, word, bit)
-}
-
-// appendAddress は、エリア種別・アドレス（ワード 2 バイト + ビット 1 バイト）を足す
-func appendAddress(dst []byte, code byte, word, bit int) []byte {
-	dst = append(dst, code)
-	dst = binary.BigEndian.AppendUint16(dst, uint16(word))
-	return append(dst, byte(bit))
 }
 
 func endCodeText(code uint16) string {

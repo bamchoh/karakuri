@@ -5,7 +5,17 @@ import {
   UpdateVariableNodePublishing,
 } from "../../wailsjs/go/main/App";
 import { application } from "../../wailsjs/go/models";
-import { formatAddress, isWordBitArea, parseAddress } from "../utils/address";
+import {
+  convertAddress,
+  formatAddress,
+  isBitDataType,
+  isWordBitArea,
+  mappingAreaFor,
+  mappingWidthLabel,
+  parseAddress,
+  selectableAreas,
+  selectedAreaId,
+} from "../utils/address";
 import { useEscapeKey } from "./useEscapeKey";
 import { useNodeAddresses } from "./useNodeAddresses";
 import { BulkEditRow } from "./variableTypes";
@@ -27,7 +37,9 @@ interface Props {
   onChanged: () => Promise<void>;
 }
 
-// 全変数のマッピング（または公開設定）を、プロトコルごとにまとめて編集するダイアログ
+// 全変数のマッピング（または公開設定）を、プロトコルごとにまとめて編集するダイアログ。
+// 行の memoryArea は、変数の型に合ったエリア（BOOL なら、ビットごとに見るエリア）の ID。
+// エリアの選択肢には、ワードのエリアと同じメモリをビットごとに見るエリア（area.bitsOf）を出さない
 export const BulkMappingDialog = forwardRef<BulkMappingDialogHandle, Props>(
   function BulkMappingDialog(
     {
@@ -60,10 +72,13 @@ export const BulkMappingDialog = forwardRef<BulkMappingDialogHandle, Props>(
       protocolType: string,
     ): BulkEditRow[] => {
       const isNP = isNodePublishingProtocol(protocolType);
-      const defaultArea =
-        (memoryAreasByProtocol[protocolType] || [])[0]?.id ?? "";
+      const areas = memoryAreasByProtocol[protocolType] || [];
+      const firstArea = selectableAreas(areas)[0]?.id ?? "";
       return vars.map((v) => {
         const wc = getWordCount(v.dataType);
+        const isBit = isBitDataType(v.dataType);
+        const defaultArea =
+          mappingAreaFor(areas, firstArea, isBit)?.id ?? firstArea;
         if (isNP) {
           const existing = (v.nodePublishings || []).find(
             (np) => np.protocolType === protocolType,
@@ -83,11 +98,26 @@ export const BulkMappingDialog = forwardRef<BulkMappingDialogHandle, Props>(
           const existing = (v.mappings || []).find(
             (m) => m.protocolType === protocolType,
           );
+          // 保存してあるエリアを、変数の型に合ったエリアに直す。
+          // BOOL をワードのエリアに保存してあった場合、アドレスはもともとビットの番号なので、そのまま使う
+          const existingArea = existing
+            ? areaOf(protocolType, existing.memoryArea)
+            : undefined;
+          const targetArea = existing
+            ? (mappingAreaFor(areas, existing.memoryArea, isBit) ??
+              existingArea)
+            : undefined;
           const displayAddr =
             existing !== undefined
               ? formatAddress(
-                  areaOf(protocolType, existing.memoryArea),
-                  existing.address,
+                  targetArea,
+                  isBit
+                    ? existing.address
+                    : convertAddress(
+                        existingArea,
+                        targetArea,
+                        existing.address,
+                      ),
                 )
               : "";
           return {
@@ -95,7 +125,7 @@ export const BulkMappingDialog = forwardRef<BulkMappingDialogHandle, Props>(
             variableName: v.name,
             dataType: v.dataType,
             wordCount: wc,
-            memoryArea: existing?.memoryArea ?? defaultArea,
+            memoryArea: targetArea?.id ?? existing?.memoryArea ?? defaultArea,
             addressStr: displayAddr,
             endianness: existing?.endianness ?? "big",
             nodeEnabled: false,
@@ -151,21 +181,25 @@ export const BulkMappingDialog = forwardRef<BulkMappingDialogHandle, Props>(
       );
     };
 
-    // エリア変更（1オリジン変換を維持しながらアドレス文字列を再計算）
-    const handleBulkAreaChange = (variableId: string, newArea: string) => {
+    // エリア変更。選んだエリアを、変数の型に合ったエリアにする
+    const handleBulkAreaChange = (variableId: string, selected: string) => {
       setBulkRows((prev) =>
         prev.map((row) => {
           if (row.variableId !== variableId) return row;
-          // 入力済みのアドレスは、新しいエリアの書き方に直す（内部の 0 始まりの番号は変えない）
-          let newAddrStr = row.addressStr;
-          const addr0based = parseAddress(
-            areaOf(bulkProtocol, row.memoryArea),
-            row.addressStr,
+          const oldArea = areaOf(bulkProtocol, row.memoryArea);
+          const target = mappingAreaFor(
+            memoryAreasByProtocol[bulkProtocol] || [],
+            selected,
+            isBitDataType(row.dataType),
           );
+          const newArea = target?.id ?? selected;
+          // 入力済みのアドレスは、同じワードを指すようにして、新しいエリアの書き方に直す
+          let newAddrStr = row.addressStr;
+          const addr0based = parseAddress(oldArea, row.addressStr);
           if (addr0based !== null) {
             newAddrStr = formatAddress(
-              areaOf(bulkProtocol, newArea),
-              addr0based,
+              target,
+              convertAddress(oldArea, target, addr0based),
             );
           }
           return { ...row, memoryArea: newArea, addressStr: newAddrStr };
@@ -380,7 +414,7 @@ export const BulkMappingDialog = forwardRef<BulkMappingDialogHandle, Props>(
                         <tr>
                           <th className="col-name">変数名</th>
                           <th className="col-type">データ型</th>
-                          <th className="col-words">W数</th>
+                          <th className="col-words">ビット幅</th>
                           <th className="col-area">メモリエリア</th>
                           <th className="col-address">
                             アドレス
@@ -405,10 +439,12 @@ export const BulkMappingDialog = forwardRef<BulkMappingDialogHandle, Props>(
                             >
                               <td className="cell-name">{row.variableName}</td>
                               <td className="cell-type">{row.dataType}</td>
-                              <td className="cell-center">{row.wordCount}</td>
+                              <td className="cell-center">
+                                {mappingWidthLabel(row.dataType, row.wordCount)}
+                              </td>
                               <td>
                                 <select
-                                  value={row.memoryArea}
+                                  value={selectedAreaId(areas, row.memoryArea)}
                                   onChange={(e) =>
                                     handleBulkAreaChange(
                                       row.variableId,
@@ -416,7 +452,7 @@ export const BulkMappingDialog = forwardRef<BulkMappingDialogHandle, Props>(
                                     )
                                   }
                                 >
-                                  {areas.map((a) => (
+                                  {selectableAreas(areas).map((a) => (
                                     <option key={a.id} value={a.id}>
                                       {a.displayName}
                                     </option>

@@ -294,8 +294,15 @@ func TestClientMapping_Requests(t *testing.T) {
 	if req, err := f.BuildWriteRequest(AreaWR+bitSuffix, 17, nil, []bool{true, false}); err != nil || hexOf(req) != "01023100010100020100" {
 		t.Errorf("WR のビットの書き込み = %s, %v", hexOf(req), err)
 	}
-	if _, err := f.BuildReadRequest(AreaDM+bitSuffix, 0, 1); err == nil {
-		t.Error("ビットのエリアがない DM のビットを読めた")
+	if req, err := f.BuildReadRequest(AreaDM+bitSuffix, 100*16+5, 1); err != nil || hexOf(req) != "0101020064050001" {
+		t.Errorf("DM のビットの読み出し = %s, %v", hexOf(req), err)
+	}
+	if req, err := f.BuildReadRequest(AreaC+flagSuffix, 5, 2); err != nil || hexOf(req) != "0101098005000002" {
+		t.Errorf("カウンタのアップフラグの読み出し = %s, %v", hexOf(req), err)
+	}
+	// タイマ・カウンタには「ワードの中のビット」はない
+	if _, err := f.BuildReadRequest(AreaT+bitSuffix, 0, 1); err == nil {
+		t.Error("タイマのビットのエリアを読めた")
 	}
 	if f.MaxReadCount(AreaDM) != maxReadCount || f.MaxWriteCount("XX") != 0 {
 		t.Error("読み書きできる個数")

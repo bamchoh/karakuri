@@ -19,7 +19,13 @@ import {
   WORD_BIT_COLUMNS,
   WORD_BIT_PAGE_SIZE,
 } from "./registerList";
-import { BITS_PER_WORD, formatAddress, isWordBitArea } from "../utils/address";
+import {
+  BITS_PER_WORD,
+  bitViewAreaOf,
+  formatAddress,
+  isWordBitArea,
+  selectableAreas,
+} from "../utils/address";
 
 interface Props {
   serverInstances: application.ServerInstanceDTO[];
@@ -37,7 +43,8 @@ interface EditingCell {
 }
 
 // レジスタの一覧表示: メモリエリアの値を 10 列の表で表示し、セルを選んで書き込む。
-// 「ワード.ビット」のエリア（area.bitsOf）は、1 行に 1 ワード分の 16 ビットを並べ、行の見出しをワードの番号にする
+// ワードのエリアと同じメモリをビットごとに見るエリア（area.bitsOf）は、エリアの選択肢には出さず、
+// ワードのエリアの「ビット幅: 1bit」として見る。1 行に 1 ワード分の 16 ビットを並べ、行の見出しをワードの番号にする
 export function RegisterListView({ serverInstances, active }: Props) {
   const [selectedProtocol, setSelectedProtocol] = useState<string>("");
 
@@ -53,6 +60,8 @@ export function RegisterListView({ serverInstances, active }: Props) {
   const [values, setValues] = useState<RegisterValue[]>([]);
   const [displayFormat, setDisplayFormat] = useState<DisplayFormat>("decimal");
   const [bitWidth, setBitWidth] = useState<BitWidth>(16);
+  // ビット幅で「1bit」を選んでいるか（選べないエリアでは無視する）
+  const [oneBitSelected, setOneBitSelected] = useState(false);
   const [endianness, setEndianness] = useState<Endianness>("big");
 
   // カーソル（選択セル）の状態
@@ -104,7 +113,14 @@ export function RegisterListView({ serverInstances, active }: Props) {
     loadAreas();
   }, [selectedProtocol]);
 
-  const currentArea = memoryAreas.find((a) => a.id === selectedArea);
+  // 「1bit」を選べるエリアなら、ビットごとに見るエリア
+  const bitViewArea = bitViewAreaOf(memoryAreas, selectedArea);
+  const oneBit = oneBitSelected && !!bitViewArea;
+  // 実際に読み書きするエリア（「1bit」のときは、ビットごとに見るエリア）
+  const currentArea = oneBit
+    ? bitViewArea
+    : memoryAreas.find((a) => a.id === selectedArea);
+  const currentAreaId = currentArea?.id ?? selectedArea;
   const isBitType = currentArea?.isBit ?? false;
   const isByteAddr = currentArea?.byteAddressing ?? false;
   const isOneOriginArea = currentArea?.oneOrigin ?? false;
@@ -150,21 +166,21 @@ export function RegisterListView({ serverInstances, active }: Props) {
   };
 
   const loadRegisters = useCallback(async () => {
-    if (!selectedArea || !selectedProtocol) return;
+    if (!currentAreaId || !selectedProtocol) return;
 
     try {
       let data: RegisterValue[];
       if (isBitType) {
         data = await ReadBits(
           selectedProtocol,
-          selectedArea,
+          currentAreaId,
           startAddress,
           readCount,
         );
       } else {
         data = await ReadWords(
           selectedProtocol,
-          selectedArea,
+          currentAreaId,
           startAddress,
           readCount,
         );
@@ -175,7 +191,7 @@ export function RegisterListView({ serverInstances, active }: Props) {
     }
   }, [
     selectedProtocol,
-    selectedArea,
+    currentAreaId,
     startAddress,
     isBitType,
     currentArea?.size,
@@ -268,6 +284,33 @@ export function RegisterListView({ serverInstances, active }: Props) {
     handleCellClick(index);
   };
 
+  // ビット幅の変更。「1bit」との切り替えでは、同じワードが先頭に来るように開始アドレスを直す
+  const handleBitWidthChange = (value: string) => {
+    const nextOneBit = value === "1";
+    if (nextOneBit !== oneBit) {
+      setStartAddress(
+        nextOneBit
+          ? startAddress * BITS_PER_WORD
+          : Math.floor(startAddress / BITS_PER_WORD),
+      );
+      setValues([]);
+      setSelectedIndex(0);
+    }
+    setOneBitSelected(nextOneBit);
+    if (!nextOneBit) setBitWidth(parseInt(value) as BitWidth);
+  };
+
+  // エリアの変更。「1bit」で見ていて、次のエリアでは選べないときは、開始アドレスをワードの番号に戻す
+  const handleAreaChange = (areaId: string) => {
+    if (oneBit && !bitViewAreaOf(memoryAreas, areaId)) {
+      setStartAddress(Math.floor(startAddress / BITS_PER_WORD));
+      setOneBitSelected(false);
+      setValues([]);
+      setSelectedIndex(0);
+    }
+    setSelectedArea(areaId);
+  };
+
   // 現在のビット幅に応じたワード数
   const wordCount = isBitType ? 1 : getWordCount(bitWidth);
 
@@ -305,9 +348,9 @@ export function RegisterListView({ serverInstances, active }: Props) {
           <label>メモリエリア</label>
           <select
             value={selectedArea}
-            onChange={(e) => setSelectedArea(e.target.value)}
+            onChange={(e) => handleAreaChange(e.target.value)}
           >
-            {memoryAreas.map((area) => (
+            {selectableAreas(memoryAreas).map((area) => (
               <option key={area.id} value={area.id}>
                 {area.displayName}
               </option>
@@ -342,39 +385,42 @@ export function RegisterListView({ serverInstances, active }: Props) {
         </div>
 
         {!isBitType && (
+          <div className="form-group">
+            <label>表示形式</label>
+            <select
+              value={displayFormat}
+              onChange={(e) =>
+                setDisplayFormat(e.target.value as DisplayFormat)
+              }
+            >
+              {DISPLAY_FORMATS.map((f) => (
+                <option key={f.value} value={f.value}>
+                  {f.label}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
+
+        {(!isBitType || oneBit) && (
+          <div className="form-group">
+            <label>ビット幅</label>
+            <select
+              value={oneBit ? "1" : bitWidth}
+              onChange={(e) => handleBitWidthChange(e.target.value)}
+            >
+              {bitViewArea && <option value="1">1bit</option>}
+              {BIT_WIDTHS.map((b) => (
+                <option key={b.value} value={b.value}>
+                  {b.label}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
+
+        {!isBitType && (
           <>
-            <div className="form-group">
-              <label>表示形式</label>
-              <select
-                value={displayFormat}
-                onChange={(e) =>
-                  setDisplayFormat(e.target.value as DisplayFormat)
-                }
-              >
-                {DISPLAY_FORMATS.map((f) => (
-                  <option key={f.value} value={f.value}>
-                    {f.label}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div className="form-group">
-              <label>ビット幅</label>
-              <select
-                value={bitWidth}
-                onChange={(e) =>
-                  setBitWidth(parseInt(e.target.value) as BitWidth)
-                }
-              >
-                {BIT_WIDTHS.map((b) => (
-                  <option key={b.value} value={b.value}>
-                    {b.label}
-                  </option>
-                ))}
-              </select>
-            </div>
-
             <div className="form-group">
               <label>エンディアン</label>
               <select
@@ -471,7 +517,7 @@ export function RegisterListView({ serverInstances, active }: Props) {
         <RegisterWriteDialog
           title="書き込み"
           protocolType={selectedProtocol}
-          area={selectedArea}
+          area={currentAreaId}
           address={editing.address}
           displayAddress={
             isWordBit

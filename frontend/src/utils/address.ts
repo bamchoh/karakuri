@@ -55,6 +55,73 @@ export function parseAddress(
   return n;
 }
 
+// エリアの選択肢に出すエリア。ワードのエリアと同じメモリを見るビットのエリア（bitsOf）は出さない
+// （ワードのエリアを選んで、ビット幅の「1bit」で見る）
+export function selectableAreas<T extends AddressArea>(areas: T[]): T[] {
+  return areas.filter((a) => !a.bitsOf);
+}
+
+// areaId のワードのエリアを、ビットごとに見るエリアを返す（なければ undefined）。
+// これがあるエリアは、ビット幅で「1bit」を選べる
+export function bitViewAreaOf<T extends AddressArea>(
+  areas: T[],
+  areaId: string,
+): T | undefined {
+  return areaId ? areas.find((a) => a.bitsOf === areaId) : undefined;
+}
+
+// 変数をマッピングするときに、実際に読み書きするエリアを、変数の型に合わせて決める。
+// ビットの型（BOOL）は、ビットごとに見るエリアがあればそれ（アドレスは「ワード.ビット」）、ほかの型はワードのエリア。
+// areaId は、ワードのエリアの ID でも、ビットごとに見るエリアの ID でもよい
+export function mappingAreaFor<T extends AddressArea & { id: string }>(
+  areas: T[],
+  areaId: string,
+  isBitType: boolean,
+): T | undefined {
+  const area = areas.find((a) => a.id === areaId);
+  if (!area) return undefined;
+  const word = area.bitsOf
+    ? (areas.find((a) => a.id === area.bitsOf) ?? area)
+    : area;
+  return isBitType ? (bitViewAreaOf(areas, word.id) ?? word) : word;
+}
+
+// エリアの選択肢で選ばれているものの ID（ビットごとに見るエリアなら、もとのワードのエリア）
+export function selectedAreaId(
+  areas: (AddressArea & { id: string })[],
+  areaId: string,
+): string {
+  return areas.find((a) => a.id === areaId)?.bitsOf ?? areaId;
+}
+
+// エリアを変えたときに、同じワードを指すようにアドレスを直す
+// （「ワード.ビット」のエリアのアドレスは ワード × 16 + ビット、ほかはワードの番号）
+export function convertAddress(
+  from: AddressArea | undefined | null,
+  to: AddressArea | undefined | null,
+  address: number,
+): number {
+  const fromWordBit = isWordBitArea(from);
+  const toWordBit = isWordBitArea(to);
+  if (fromWordBit && !toWordBit) return Math.floor(address / BITS_PER_WORD);
+  if (!fromWordBit && toWordBit) return address * BITS_PER_WORD;
+  return address;
+}
+
+// ビットの型（1 ビットで読み書きする型）かどうか
+export function isBitDataType(dataType: string): boolean {
+  return dataType === "BOOL";
+}
+
+// 変数がマッピング先で占める大きさの表示（"1bit"・"16bit"・"32bit"・"64bit"・"5 ワード"）
+export function mappingWidthLabel(dataType: string, wordCount: number): string {
+  if (isBitDataType(dataType)) return "1bit";
+  if (wordCount === 1 || wordCount === 2 || wordCount === 4) {
+    return `${wordCount * BITS_PER_WORD}bit`;
+  }
+  return `${wordCount} ワード`;
+}
+
 // アドレスの入力欄に出す例
 export function addressPlaceholder(
   area: AddressArea | undefined | null,

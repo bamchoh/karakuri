@@ -141,18 +141,18 @@ func areaField() protocol.ConfigField {
 }
 
 func unitField() protocol.ConfigField {
-	return protocol.ConfigField{Name: "unit", Label: "単位", Type: "select", Required: true, Default: unitWord, Options: []protocol.FieldOption{
+	return protocol.ConfigField{Name: "unit", Label: "単位", Description: "T（タイマ）と C（カウンタ）は、ワードが現在値、ビットがアップフラグです。", Type: "select", Required: true, Default: unitWord, Options: []protocol.FieldOption{
 		{Value: unitWord, Label: "ワード"},
 		{Value: unitBit, Label: "ビット"},
 	}}
 }
 
 func addressField() protocol.ConfigField {
-	return protocol.ConfigField{Name: "address", Label: "アドレス", Description: "ワードの番号（D100 なら 100、CIO 100.05 なら 100）。", Type: "number", Required: true, Default: 0, Min: fields.IntPtr(0), Max: fields.IntPtr(32767)}
+	return protocol.ConfigField{Name: "address", Label: "アドレス", Description: "ワードの番号（D100 なら 100、CIO 100.05 なら 100）。T と C は、タイマ・カウンタの番号。", Type: "number", Required: true, Default: 0, Min: fields.IntPtr(0), Max: fields.IntPtr(32767)}
 }
 
 func bitField() protocol.ConfigField {
-	return protocol.ConfigField{Name: "bit", Label: "ビット", Description: "ワードの中のビットの番号（CIO 100.05 なら 5）。", Type: "number", Required: true, Default: 0, Min: fields.IntPtr(0), Max: fields.IntPtr(15),
+	return protocol.ConfigField{Name: "bit", Label: "ビット", Description: "ワードの中のビットの番号（CIO 100.05 なら 5）。T と C のアップフラグでは使いません。", Type: "number", Required: true, Default: 0, Min: fields.IntPtr(0), Max: fields.IntPtr(15),
 		Condition: &protocol.FieldCondition{Field: "unit", Value: unitBit}}
 }
 
@@ -195,26 +195,14 @@ func buildTarget(params map[string]interface{}, allowBit bool) (target, error) {
 	}
 	if allowBit && fields.String(params, "unit") == unitBit {
 		t.isBit = true
+		if def.Flags {
+			return t, nil // アップフラグは番号ごとに 1 つ（ビットの番号はない）
+		}
 		if t.bit, err = fields.Int(params, "bit", "ビット", 0, 15); err != nil {
 			return t, err
 		}
 	}
 	return t, nil
-}
-
-func (t target) code() byte {
-	if t.isBit {
-		return t.def.BitCode
-	}
-	return t.def.WordCode
-}
-
-// remaining は、t からエリアの終わりまでの個数
-func (t target) remaining() int {
-	if t.isBit {
-		return t.def.Words*16 - int(t.bitAddress())
-	}
-	return t.def.Words - t.word
 }
 
 // BuildRequest は、コマンドと項目の値からリクエスト（コマンドコード + パラメーター）を作る
@@ -263,7 +251,7 @@ func (f *ClientFactory) BuildRequest(commandID string, params map[string]interfa
 			return nil, fmt.Errorf("値: %w", err)
 		}
 		req := binary.BigEndian.AppendUint16(nil, cmdMemoryFill)
-		req = appendAddress(req, t.code(), t.word, 0)
+		req = t.appendTo(req)
 		req = binary.BigEndian.AppendUint16(req, uint16(count))
 		return binary.BigEndian.AppendUint16(req, value), nil
 
@@ -285,7 +273,7 @@ func readRequest(t target, count int) ([]byte, error) {
 		return nil, fmt.Errorf("アドレスと個数の合計が、エリアの範囲を超えています")
 	}
 	req := binary.BigEndian.AppendUint16(nil, cmdMemoryRead)
-	req = appendAddress(req, t.code(), t.word, t.bit)
+	req = t.appendTo(req)
 	return binary.BigEndian.AppendUint16(req, uint16(count)), nil
 }
 
@@ -301,7 +289,7 @@ func writeRequest(t target, words []uint16, bits []bool) ([]byte, error) {
 		return nil, fmt.Errorf("アドレスと個数の合計が、エリアの範囲を超えています")
 	}
 	req := binary.BigEndian.AppendUint16(nil, cmdMemoryWrite)
-	req = appendAddress(req, t.code(), t.word, t.bit)
+	req = t.appendTo(req)
 	req = binary.BigEndian.AppendUint16(req, uint16(count))
 	if t.isBit {
 		for _, b := range bits {
@@ -326,21 +314,11 @@ func requestTarget(req []byte) (t target, count int, ok bool) {
 	if len(req) < 8 {
 		return target{}, 0, false
 	}
-	def, isBit, found := areaByCode(req[2])
-	if !found {
+	t, end := targetFromWire(req[2], int(binary.BigEndian.Uint16(req[3:5])), int(req[5]))
+	if end != endNormal {
 		return target{}, 0, false
 	}
-	t = target{def: def, isBit: isBit, word: int(binary.BigEndian.Uint16(req[3:5])), bit: int(req[5])}
 	return t, int(binary.BigEndian.Uint16(req[6:8])), true
-}
-
-// label は、t から n 個先のアドレスを、オムロンの書き方で返す
-func (t target) label(n int) string {
-	if t.isBit {
-		addr := int(t.bitAddress()) + n
-		return bitLabel(t.def, addr/16, addr%16)
-	}
-	return wordLabel(t.def, t.word+n)
 }
 
 // DescribeRequest はリクエストの内容を 1 行の要約にする

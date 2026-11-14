@@ -18,7 +18,8 @@ var _ protocol.DataStore = (*DataStore)(nil)
 // DataStore は FINS のメモリ（エリアごとのワードの並び）。
 //
 // ビットは、ワードのエリアの ID でもビットのエリアの ID（"CIO_BIT"）でも読み書きできる。
-// どちらも同じメモリを指し、アドレスは「ワード × 16 + ビット」
+// どちらも同じメモリを指し、アドレスは「ワード × 16 + ビット」。
+// タイマ・カウンタのアップフラグ（"T_FLAG"）は、現在値（"T"）とは別のメモリで、アドレスは番号
 type DataStore struct {
 	mu    sync.RWMutex
 	words map[string][]uint16
@@ -29,6 +30,10 @@ func NewDataStore() *DataStore {
 	s := &DataStore{words: make(map[string][]uint16, len(areaDefs))}
 	for _, a := range areaDefs {
 		s.words[a.ID] = make([]uint16, a.Words)
+		if a.Flags {
+			// フラグは 1 ビットずつ。16 個を 1 ワードに詰めて持つ
+			s.words[a.ID+flagSuffix] = make([]uint16, (a.Words+15)/16)
+		}
 	}
 	return s
 }
@@ -38,9 +43,9 @@ func (s *DataStore) GetAreas() []protocol.MemoryArea {
 	return memoryAreas()
 }
 
-// resolve はエリアの ID から、ワードの並びと、ビットのエリアの ID だったかどうかを返す
+// resolve はエリアの ID から、ワードの並びと、ビットのエリア（フラグのエリアを含む）の ID だったかどうかを返す
 func (s *DataStore) resolve(area string) ([]uint16, bool, error) {
-	isBit := strings.HasSuffix(area, bitSuffix)
+	isBit := strings.HasSuffix(area, bitSuffix) || strings.HasSuffix(area, flagSuffix)
 	regs, ok := s.words[strings.TrimSuffix(area, bitSuffix)]
 	if !ok {
 		return nil, false, errAreaNotFound

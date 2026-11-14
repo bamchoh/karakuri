@@ -220,8 +220,8 @@ func finsSender(t *testing.T, svc *application.PLCService, port int, transport s
 func TestFINS_ServerAndVariableSync(t *testing.T) {
 	svc := newService(t)
 	port := addFINS(t, svc)
-	if areas := svc.GetMemoryAreas(finsType); len(areas) != 10 {
-		t.Fatalf("エリア数 = %d, want 10（ワード 6 + ビット 4）", len(areas))
+	if areas := svc.GetMemoryAreas(finsType); len(areas) != 64 {
+		t.Fatalf("エリア数 = %d, want 64（ワード 32 + ビット 30 + フラグ 2）", len(areas))
 	}
 
 	speed, err := svc.CreateVariable("Speed", "INT", 12)
@@ -358,8 +358,8 @@ func TestFINSClient_VariableMapping(t *testing.T) {
 	id, _ := finsSender(t, svc, port, "udp")
 	must(t, svc.SetClientPollInterval(id, 50))
 	key := "client:" + id
-	if n := len(svc.GetMemoryAreas(key)); n != 10 {
-		t.Fatalf("接続先のエリア数 = %d, want 10", n)
+	if n := len(svc.GetMemoryAreas(key)); n != 64 {
+		t.Fatalf("接続先のエリア数 = %d, want 64", n)
 	}
 
 	must(t, svc.WriteWord(finsType, "DM", 51, 321)) // DINT（ビッグエンディアン）= 321

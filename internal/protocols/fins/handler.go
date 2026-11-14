@@ -61,42 +61,13 @@ func (h *handler) execute(cmd uint16, p []byte) (uint16, []byte) {
 	return endUndefinedCmd, nil
 }
 
-// target は、リクエストの中のエリア種別とアドレスが指す場所
-type target struct {
-	def   areaDef
-	isBit bool
-	word  int
-	bit   int
-}
-
-// storeArea は、DataStore に渡すエリアの ID を返す。ビットのエリアを持つエリアのビットは、ビットのエリアの ID にする
-// （ビットのエリアにマッピングした変数に、書き込みが反映されるようにするため）
-func (t target) storeArea() string {
-	if t.isBit && t.def.BitArea {
-		return t.def.ID + bitSuffix
-	}
-	return t.def.ID
-}
-
-func (t target) bitAddress() uint32 {
-	return uint32(t.word)*16 + uint32(t.bit)
-}
-
 // parseTarget は、エリア種別 1 バイト + アドレス 3 バイトを読み、count 個が範囲に入るかを確かめる
 func parseTarget(p []byte, count int) (target, uint16) {
-	def, isBit, ok := areaByCode(p[0])
-	if !ok {
-		return target{}, endNoAreaType
+	t, end := targetFromWire(p[0], int(binary.BigEndian.Uint16(p[1:3])), int(p[3]))
+	if end != endNormal {
+		return t, end
 	}
-	t := target{def: def, isBit: isBit, word: int(binary.BigEndian.Uint16(p[1:3])), bit: int(p[3])}
-	if t.word >= def.Words || t.bit > 15 || (!isBit && t.bit != 0) {
-		return t, endAddressRange
-	}
-	if isBit {
-		if int(t.bitAddress())+count > def.Words*16 {
-			return t, endAddressExceeds
-		}
-	} else if t.word+count > def.Words {
+	if count > t.remaining() {
 		return t, endAddressExceeds
 	}
 	return t, endNormal
