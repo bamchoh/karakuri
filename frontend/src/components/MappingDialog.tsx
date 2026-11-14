@@ -6,8 +6,12 @@ import {
 } from "../../wailsjs/go/main/App";
 import { application } from "../../wailsjs/go/models";
 import { AddressInput } from "./AddressInput";
+import { AddressRangeHint } from "./AddressRangeHint";
 import {
+  addressRangeError,
+  addressRangeText,
   convertAddress,
+  mappingRange,
   isBitDataType,
   mappingAreaFor,
   mappingWidthLabel,
@@ -90,6 +94,22 @@ export const MappingDialog = forwardRef<MappingDialogHandle, Props>(
       } as application.ProtocolMappingDTO;
     };
 
+    // マッピングのアドレスの範囲と、範囲外のときの理由（変数が占める大きさの分、収まるかを見る）
+    const rangeOf = (m: application.ProtocolMappingDTO) => {
+      const { area, count } = mappingRange(
+        areaOf(m.protocolType, m.memoryArea),
+        mappingVariable?.dataType ?? "",
+        getWordCount(mappingVariable?.dataType ?? ""),
+      );
+      return {
+        range: addressRangeText(area),
+        error: addressRangeError(area, m.address, count),
+      };
+    };
+    const hasRangeError = editMappings
+      .map(effective)
+      .some((m) => rangeOf(m).error !== null);
+
     // プロトコルの、最初に選ばれるエリア（変数の型に合ったもの）
     const defaultAreaId = (protocolType: string): string => {
       const areas = areasOf(protocolType);
@@ -168,6 +188,8 @@ export const MappingDialog = forwardRef<MappingDialogHandle, Props>(
     // マッピングを保存
     const handleSaveMappings = async () => {
       if (!mappingVariable) return;
+      // 範囲外のアドレスは、保存しても動かないので止める
+      if (hasRangeError) return;
       // 公開できない変数は、マッピングだけ保存される前に止める
       for (const pub of editNodePublishings) {
         const error =
@@ -292,6 +314,7 @@ export const MappingDialog = forwardRef<MappingDialogHandle, Props>(
                     className="mapping-col"
                     area={areaOf(m.protocolType, m.memoryArea)}
                     value={m.address}
+                    invalid={rangeOf(m).error !== null}
                     onChange={(address) => {
                       const updated = [...editMappings];
                       updated[index] = { ...m, address };
@@ -327,6 +350,9 @@ export const MappingDialog = forwardRef<MappingDialogHandle, Props>(
                   >
                     X
                   </button>
+                </div>
+                <div className="mapping-range-row">
+                  <AddressRangeHint {...rangeOf(m)} />
                 </div>
                 {(() => {
                   const conflicts = findMappingConflicts(m);
@@ -429,7 +455,12 @@ export const MappingDialog = forwardRef<MappingDialogHandle, Props>(
             <button onClick={() => setIsOpen(false)} className="btn-secondary">
               キャンセル
             </button>
-            <button onClick={handleSaveMappings} className="btn-primary">
+            <button
+              onClick={handleSaveMappings}
+              className="btn-primary"
+              disabled={hasRangeError}
+              title={hasRangeError ? "範囲外のアドレスがあります" : undefined}
+            >
               保存
             </button>
           </div>

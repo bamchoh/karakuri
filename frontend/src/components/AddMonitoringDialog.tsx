@@ -2,7 +2,11 @@ import { useState } from "react";
 import { FocusTrap } from "./FocusTrap";
 import { application } from "../../wailsjs/go/models";
 import { AddressInput } from "./AddressInput";
+import { AddressRangeHint } from "./AddressRangeHint";
+import { getWordCount } from "../utils/register";
 import {
+  addressRangeError,
+  addressRangeText,
   BITS_PER_WORD,
   bitViewAreaOf,
   selectableAreas,
@@ -105,7 +109,16 @@ export function AddMonitoringDialog({
 
   const targetIsBit = targetArea?.isBit ?? false;
 
-  const save = () =>
+  // 追加する項目が、最後の 1 つまでエリアに収まるか（項目は、1 つ分の大きさずつ並べて追加する）
+  const unitsPerItem = targetIsBit ? 1 : getWordCount(formBitWidth);
+  const rangeError = addressRangeError(
+    targetArea,
+    formAddress,
+    Math.max(1, formCount) * unitsPerItem,
+  );
+
+  const save = () => {
+    if (rangeError) return;
     onSave(
       formProtocolType,
       targetAreaId,
@@ -115,6 +128,7 @@ export function AddMonitoringDialog({
       formEndianness,
       formDisplayFormat,
     );
+  };
 
   return (
     <FocusTrap onConfirm={save}>
@@ -158,6 +172,14 @@ export function AddMonitoringDialog({
               area={targetArea}
               value={formAddress}
               onChange={setFormAddress}
+              invalid={!!rangeError}
+            />
+          </div>
+          <div className="dialog-row">
+            <AddressRangeHint
+              className="monitoring-range"
+              range={addressRangeText(targetArea)}
+              error={rangeError}
             />
           </div>
 
@@ -230,7 +252,12 @@ export function AddMonitoringDialog({
           <button onClick={onClose} className="btn-secondary">
             キャンセル
           </button>
-          <button onClick={save} className="btn-primary">
+          <button
+            onClick={save}
+            className="btn-primary"
+            disabled={!!rangeError}
+            title={rangeError ?? undefined}
+          >
             追加
           </button>
         </div>

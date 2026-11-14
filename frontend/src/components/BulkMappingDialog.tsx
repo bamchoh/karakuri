@@ -6,8 +6,11 @@ import {
 } from "../../wailsjs/go/main/App";
 import { application } from "../../wailsjs/go/models";
 import {
+  addressRangeError,
+  addressRangeText,
   convertAddress,
   formatAddress,
+  mappingRange,
   isBitDataType,
   isWordBitArea,
   mappingAreaFor,
@@ -244,9 +247,33 @@ export const BulkMappingDialog = forwardRef<BulkMappingDialogHandle, Props>(
       return conflictIds;
     };
 
+    // 行のアドレスの範囲と、範囲外のときの理由（アドレスが空・読めない行は、検査しない）
+    const rowRange = (row: BulkEditRow, protocolType: string) => {
+      const rowArea = areaOf(protocolType, row.memoryArea);
+      const { area, count } = mappingRange(
+        rowArea,
+        row.dataType,
+        row.wordCount,
+      );
+      const addr0 = parseAddress(rowArea, row.addressStr);
+      return {
+        range: addressRangeText(area),
+        error:
+          row.addressStr.trim() === "" || addr0 === null
+            ? null
+            : addressRangeError(area, addr0, count),
+      };
+    };
+    const rangeErrorCount = isNodePublishingProtocol(bulkProtocol)
+      ? 0
+      : bulkRows.filter((row) => rowRange(row, bulkProtocol).error !== null)
+          .length;
+
     // 一括マッピング保存
     const handleBulkMappingSave = async () => {
       if (bulkIsSaving) return;
+      // 範囲外のアドレスは、保存しても動かないので止める
+      if (rangeErrorCount > 0) return;
       if (isNodePublishingProtocol(bulkProtocol)) {
         // 公開できない変数があれば、途中まで保存される前に止める
         const blocked = bulkRows.filter(
@@ -430,6 +457,7 @@ export const BulkMappingDialog = forwardRef<BulkMappingDialogHandle, Props>(
                           const rowArea = areaOf(bulkProtocol, row.memoryArea);
                           const wordBit = isWordBitArea(rowArea);
                           const hasConflict = conflictIds.has(row.variableId);
+                          const range = rowRange(row, bulkProtocol);
                           return (
                             <tr
                               key={row.variableId}
@@ -466,16 +494,23 @@ export const BulkMappingDialog = forwardRef<BulkMappingDialogHandle, Props>(
                                     value={row.addressStr}
                                     min={rowArea?.oneOrigin ? 1 : 0}
                                     placeholder={
-                                      wordBit
-                                        ? "未設定（例: 100.05）"
+                                      range.range
+                                        ? `未設定（${range.range}）`
                                         : "未設定"
                                     }
+                                    title={
+                                      range.error ??
+                                      (range.range
+                                        ? `範囲: ${range.range}`
+                                        : undefined)
+                                    }
+                                    aria-invalid={!!range.error || undefined}
                                     onChange={(e) =>
                                       handleBulkRowChange(row.variableId, {
                                         addressStr: e.target.value,
                                       })
                                     }
-                                    className={`bulk-address-input${hasConflict ? " conflict" : ""}`}
+                                    className={`bulk-address-input${hasConflict ? " conflict" : ""}${range.error ? " address-invalid" : ""}`}
                                   />
                                   {hasConflict && (
                                     <span
@@ -519,6 +554,12 @@ export const BulkMappingDialog = forwardRef<BulkMappingDialogHandle, Props>(
                 </div>
               ) : null;
             })()}
+          {rangeErrorCount > 0 && (
+            <div className="bulk-range-banner">
+              ⚠ アドレスが範囲外の変数が {rangeErrorCount}{" "}
+              件あります（保存できません。入力欄にマウスを乗せると、範囲が出ます）
+            </div>
+          )}
           <div className="dialog-buttons">
             <button
               onClick={() => setIsOpen(false)}
@@ -530,7 +571,7 @@ export const BulkMappingDialog = forwardRef<BulkMappingDialogHandle, Props>(
             <button
               onClick={handleBulkMappingSave}
               className="btn-primary"
-              disabled={bulkIsSaving}
+              disabled={bulkIsSaving || rangeErrorCount > 0}
             >
               {bulkIsSaving ? "保存中..." : "一括保存"}
             </button>

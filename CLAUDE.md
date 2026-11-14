@@ -84,7 +84,7 @@ go build ./...
 
 `frontend/e2e/` に、ブラウザで画面を操作して確認するテストがある。`task dev` が立てる開発用サーバー（`http://localhost:34115`）に接続するため、Go 側の API とプロトコルの実装を含めた動作を確認できる。手順と注意は `frontend/e2e/README.md` を参照。
 
-- 画面ごとのテスト: アプリ全体のログ `app-log.spec.ts`、FINS（「ワード.ビット」のアドレス・項目の表示条件）`fins.spec.ts`、通信画面（サーバー）`server-panel.spec.ts`、変数画面 `variable-dialogs.spec.ts` / `node-publishing.spec.ts`、サーバーの「レジスタ」「モニタリング」のタブ `register-panel.spec.ts` / `monitoring.spec.ts`、スクリプト画面 `script-panel.spec.ts`、通信画面（クライアント）`client-panel.spec.ts` / `client-polling.spec.ts` / `client-mapping.spec.ts` / `client-saved-commands.spec.ts` / `client-opcua.spec.ts`
+- 画面ごとのテスト: アプリ全体のログ `app-log.spec.ts`、アドレスの範囲 `register-range.spec.ts`、FINS（「ワード.ビット」のアドレス・項目の表示条件）`fins.spec.ts`、通信画面（サーバー）`server-panel.spec.ts`、変数画面 `variable-dialogs.spec.ts` / `node-publishing.spec.ts`、サーバーの「レジスタ」「モニタリング」のタブ `register-panel.spec.ts` / `monitoring.spec.ts`、スクリプト画面 `script-panel.spec.ts`、通信画面（クライアント）`client-panel.spec.ts` / `client-polling.spec.ts` / `client-mapping.spec.ts` / `client-saved-commands.spec.ts` / `client-opcua.spec.ts`
 - 画面を変更したら、該当するテストを実行する（なければ追加する）。`shot()` で撮ったスクリーンショット（`frontend/e2e/.screenshots/`）で見た目も確認する
 - データの準備は `api(page, "メソッド名", ...)` で Go 側の API を直接呼び、確認したい操作だけを画面で行う
 - **テストはアプリのサーバー・変数・モニタリング項目・スクリプトをすべて削除する。** 開発サーバーは `KARAKURI_CONFIG_DIR` を一時フォルダに向けて起動する
@@ -294,6 +294,8 @@ frontend/src/
 │   ├── StructArrayElementEditor.tsx  # 構造体配列要素のエディタ（ValueEditDialog で使用）
 │   ├── DataTypeFields.tsx      # データ型を選ぶ入力欄（変数追加・変数の編集・構造体型のフィールドで共通）
 │   ├── variableTypes.ts    # 変数のデータ型・値の純粋関数と行の型定義（state に依存しない）
+│   ├── AddressInput.tsx        # メモリエリアのアドレスの入力欄（1 始まり・「ワード.ビット」に対応）
+│   ├── AddressRangeHint.tsx    # エリアのアドレスの範囲と、範囲外のときの理由の表示
 │   ├── useNodeAddresses.ts # ノードアドレス（OPC UA の NodeID 等）の取得と保持（マッピングの 2 つのダイアログで使用）
 │   ├── useEscapeKey.ts     # Esc キーでダイアログを閉じるためのフック
 │   ├── ScriptPanel.tsx     # スクリプト管理（一覧・編集・1 回実行・コンソール）
@@ -350,6 +352,11 @@ frontend/src/
   - 変数一覧のマッピングの列などでは、アドレスを `100.05` の形で表示する
   - ワードのエリアと対になっていないビットのエリア（Modbus のコイル、FINS のアップフラグ）は、これまでどおり別のエリアとして出す
 - **アドレスの変換**: 表示と入力の変換は `frontend/src/utils/address.ts`（`formatAddress()` / `parseAddress()`）、入力欄は `AddressInput`。画面ごとに `oneOrigin` や `bitsOf` を見て変換を書かない
+- **アドレスの範囲**: アドレスを入れる場所には、エリアの範囲（`MemoryAreaDTO.size` から。「範囲: 1〜65536」「範囲: 0.00〜6143.15」のように、画面のアドレスの書き方で）を出す。範囲外なら、入力欄を赤くして理由を出し、保存・追加を止める。関数は `addressRangeText()` / `addressRangeError()`、表示は `AddressRangeHint`
+  - レジスタの一覧表示: 開始アドレスの下に範囲を出す。範囲外を入れたら、最後のページに合わせる
+  - モニタリング項目の追加: まとめて追加する最後の項目まで収まるかを見る
+  - マッピング設定・一括マッピング編集: 変数が占める大きさの分を見る（`mappingRange()`: BOOL は 1 ビット、ほかはワード数。ビットのエリアに BOOL 以外を置くときはワード数 × 16 ビット）。サーバーにも、クライアントの接続先にも効く。一括編集は、範囲外の件数を下に出す
+  - 検査は画面だけ（REST API や `UpdateVariableMappings()` を直接呼べば、範囲外も保存できる。その場合は、これまでどおり黙って動かない）
 - **数値の変換**: ワードの結合・分解・書式は `frontend/src/utils/register.ts`、選択肢は `frontend/src/constants/register.ts`。画面ごとに書かない
 - **画面のテスト**: `frontend/e2e/register-panel.spec.ts`
 
