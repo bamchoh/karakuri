@@ -273,7 +273,7 @@ internal/
   - オフにした UnitID には、TCP / RTU / ASCII のどれも応答しない（例外応答も返さない）
   - Modbus TCP は simonvetter/modbus のサーバーを使うが、このライブラリは受け取ったリクエストに必ず応答する。そのため `TCPTransport`（`tcp_transport.go`）がクライアントとの間に中継を入れ、オフにした UnitID 宛てのフレームを捨てる。ライブラリのサーバーは 127.0.0.1 の空きポートで動く
 - **ScriptEngine** (`internal/infrastructure/scripting/engine.go`): gojaベースのJavaScript実行エンジン
-  - `plc`オブジェクトでDataStoreおよびVariableStoreにアクセス可能
+  - `plc`オブジェクトで VariableStore にアクセスする（レジスタを直接読み書きする関数はない。レジスタを動かすときは、変数をマッピングする）
   - スクリプトコードをIIFE `(function(){...})();` でラップして、const/let再宣言エラーを回避
   - エラー（コンパイルエラー・実行時のエラー・panic）はコンソールログに `[ERROR]` として出す。周期実行では、同じエラーが続く間は最初の 1 回だけ出す
   - TIME/DATE型シンタックスシュガー: `plc.readTimeMs(name)`, `plc.writeTimeMs(name, ms)` など、変数の読み取り〜数値変換〜書き込みをワンステップで実行（内部でparse/formatを自動適用）
@@ -447,7 +447,7 @@ JavaScript（goja）でPLC動作を記述。
 - **画面のテスト**: `frontend/e2e/script-panel.spec.ts`
 - **const/let対応**: スクリプトコードをIIFEでラップして再宣言エラーを回避
 - **plcオブジェクト**:
-  - メモリアクセス: `plc.readBit()`, `plc.writeBit()`, `plc.readWord()`, `plc.writeWord()`
+  - レジスタを直接読み書きする関数（`plc.readBit()` / `plc.readWord()` など）はない。変数をレジスタにマッピングして、変数を読み書きする
   - 変数アクセス: `plc.readVariable()`, `plc.writeVariable()`, `plc.readArrayElement()`, `plc.writeArrayElement()`, `plc.readStructField()`, `plc.writeStructField()`, `plc.hasVariable(name)`（変数があるかどうか）
     - **変数の関数は、失敗したらスクリプトのエラー（例外）になる**: 変数がない・フィールドや要素がない・型が違う（`readLintBig` を INT に使うなど）・型に合わない値を書いた、のどれも。黙って `null` を返したり、何もしなかったりはしない。BigInt・TIME/DATE の関数と `getVariableStatus` も同じ
     - エラーは `[ERROR]` としてコンソールに出る（スクリプトの `try` / `catch` で受け取れる）。文面は「`plc.readVariable: 変数 "X" がありません`」の形。関数を足すときは、`createVM()` の `mustVariable()` / `check()` / `throw()` を使う
