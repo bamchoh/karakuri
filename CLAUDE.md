@@ -86,6 +86,7 @@ go build ./...
 `.github/workflows/release.yml` が、`v` で始まるタグの push で Windows 用の exe をビルドし、GitHub のリリースを**下書き**で作る（`Karakuri_<バージョン>.zip` に `Karakuri.exe` と `LICENSE`）。
 
 1. `frontend/src/App.tsx` の `APP_VERSION` を新しいバージョンにして、main にマージする
+   - 画面が変わっていたら、README のスクリーンショット（`docs/screenshot.png`）も撮り直す。バージョンを上げてから `readme-screenshot.spec.ts` を実行する（手順は `frontend/e2e/README.md`）
 2. main でタグを打って push する: `git tag v0.0.39 && git push origin v0.0.39`
 3. Actions の実行が終わったら、GitHub のリリースの画面で下書きの内容と zip を確かめて、公開する
 
