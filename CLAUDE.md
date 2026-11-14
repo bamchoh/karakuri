@@ -83,7 +83,7 @@ go build ./...
 
 `frontend/e2e/` に、ブラウザで画面を操作して確認するテストがある。`task dev` が立てる開発用サーバー（`http://localhost:34115`）に接続するため、Go 側の API とプロトコルの実装を含めた動作を確認できる。手順と注意は `frontend/e2e/README.md` を参照。
 
-- 画面ごとのテスト: FINS（「ワード.ビット」のアドレス・項目の表示条件）`fins.spec.ts`、通信画面（サーバー）`server-panel.spec.ts`、変数画面 `variable-dialogs.spec.ts` / `node-publishing.spec.ts`、レジスタ画面 `register-panel.spec.ts` / `monitoring.spec.ts`、スクリプト画面 `script-panel.spec.ts`、通信画面（クライアント）`client-panel.spec.ts` / `client-polling.spec.ts` / `client-mapping.spec.ts` / `client-saved-commands.spec.ts` / `client-opcua.spec.ts`
+- 画面ごとのテスト: FINS（「ワード.ビット」のアドレス・項目の表示条件）`fins.spec.ts`、通信画面（サーバー）`server-panel.spec.ts`、変数画面 `variable-dialogs.spec.ts` / `node-publishing.spec.ts`、サーバーの「レジスタ」「モニタリング」のタブ `register-panel.spec.ts` / `monitoring.spec.ts`、スクリプト画面 `script-panel.spec.ts`、通信画面（クライアント）`client-panel.spec.ts` / `client-polling.spec.ts` / `client-mapping.spec.ts` / `client-saved-commands.spec.ts` / `client-opcua.spec.ts`
 - 画面を変更したら、該当するテストを実行する（なければ追加する）。`shot()` で撮ったスクリーンショット（`frontend/e2e/.screenshots/`）で見た目も確認する
 - データの準備は `api(page, "メソッド名", ...)` で Go 側の API を直接呼び、確認したい操作だけを画面で行う
 - **テストはアプリのサーバー・変数・モニタリング項目・スクリプトをすべて削除する。** 開発サーバーは `KARAKURI_CONFIG_DIR` を一時フォルダに向けて起動する
@@ -268,16 +268,15 @@ internal/
 frontend/src/
 ├── components/
 │   ├── ServerPanel.tsx     # 通信画面（サーバーとクライアントの一覧・起動と停止・保存していない変更の確認の流れ）
-│   ├── ServerConfigPane.tsx    # 選択したサーバーの設定（スキーマ駆動のフォーム・UnitID の応答設定）
+│   ├── ServerConfigPane.tsx    # 選択したサーバーの見出しとタブ（設定 / レジスタ / モニタリング）。設定はスキーマ駆動のフォーム・UnitID の応答設定
 │   ├── DynamicField.tsx        # サーバー設定の 1 項目（種類ごとの入力欄）
 │   ├── AddServerDialog.tsx     # サーバー追加ダイアログ
 │   ├── UnsavedChangesDialog.tsx # 保存していない変更の確認ダイアログ（サーバーの切り替え・起動・画面の移動で共通）
 │   ├── serverStatus.ts         # サーバーの状態に対応する CSS クラス
-│   ├── RegisterPanel.tsx   # レジスタ画面（サブタブの切り替えとサーバー一覧の読み込み）
-│   ├── RegisterListView.tsx    # レジスタの一覧表示（操作欄・10 列の表・キーボード操作）
+│   ├── RegisterListView.tsx    # レジスタの一覧表示（サーバーの「レジスタ」のタブ。操作欄・10 列の表・キーボード操作）
 │   ├── registerList.ts         # 一覧表示の純粋関数（行の組み立て・選択の移動・値の書式）
 │   ├── RegisterWriteDialog.tsx # レジスタの書き込みダイアログ（一覧表示とモニタリングで共通）
-│   ├── MonitoringView.tsx  # モニタリング（項目の追加・設定変更・並べ替え・削除）
+│   ├── MonitoringView.tsx  # モニタリング（サーバーの「モニタリング」のタブ。項目の追加・設定変更・並べ替え・削除）
 │   ├── MonitoringRow.tsx       # モニタリングの 1 行（ドラッグで並べ替え）
 │   ├── useMonitoringItems.ts   # モニタリング項目と現在値の読み込み・自動更新
 │   ├── AddMonitoringDialog.tsx # モニタリング項目の追加ダイアログ
@@ -308,6 +307,9 @@ frontend/src/
 
 #### ServerPanel.tsx
 通信画面（サイドバーの「Connections」）。サーバー（Karakuri が待ち受ける側）とクライアント（外部の機器へつなぐ側・マスター）を 1 つの画面で扱う。左に一覧、右に選んだものの設定（サーバーは `ServerConfigPane`、クライアントは `ClientDetailPane`）を並べる。
+- **サーバーのタブ**: サーバーを選ぶと、右側に「設定 / レジスタ / モニタリング」のタブが出る（`ServerSubTab`。選んでいるタブは `ServerPanel` が持ち、サーバーを選び直しても保つ）。レジスタとモニタリングは、選んだサーバーのものだけを扱う（レジスタ専用のページはない）
+  - レジスタを持たないサーバー（`supportsNodePublishing` のプロトコル。OPC UA）には、タブを出さず設定だけにする
+  - 「レジスタ」「モニタリング」の中身は、`ServerPanel` が `ServerConfigPane` に children で渡す。設定のフォームは、ほかのタブを見ている間も隠すだけ（`.server-sub-tab-hidden`）なので、入力中の内容と「保存していない変更」は消えない
 - **一覧**: 上に「SERVERS」、下に「CLIENTS」のグループ。それぞれに追加ボタン（「サーバーを追加」「接続先を追加」。クライアントのプロトコルが複数あるので、追加ボタンの左でプロトコルを選ぶ）。クライアントの行は `.server-tab-item.client-tab-item`
 - **選択**: `{ kind: "server" | "client", id }` で持つ。選んでいるものが消えたら、先頭のサーバー、なければ先頭のクライアントを選ぶ
 - **クライアント**: 一覧・プロトコル・履歴は `useClients()` が読み込む（一覧は 1 秒ごとに読み直す）。右側のサブタブ（コマンド / ポーリング / サブスクリプション）と、接続先の設定の欄を開いているかは `ServerPanel` が持ち、接続先を選び直しても保つ
@@ -321,18 +323,16 @@ frontend/src/
 - **保存していない変更の確認**: 設定を変更したまま、別のサーバー・クライアントへの切り替え・選択中のサーバーの起動・接続先の追加・別の画面への移動（`App.tsx`）をしようとすると `UnsavedChangesDialog` を出す。`ServerPanel` の `requestAction()` が「変更があれば確認してから実行する」をまとめている。サーバーとクライアントの右側は、どちらも ref の `save()` / `revert()` と `onDirtyChange` を持つ
 - **画面のテスト**: `frontend/e2e/server-panel.spec.ts`（クライアントは `client-panel.spec.ts` など。e2e の `openClient(page, 名前)` で通信画面を開いて接続先を選ぶ）
 
-#### RegisterPanel.tsx
-「一覧表示」（`RegisterListView`）と「モニタリング」（`MonitoringView`）のサブタブを持ちます。サーバーの一覧は `RegisterPanel` が 1 秒ごとに読み、両方に渡す。
-- `RegisterListView` は、タブを切り替えても設定（エリア・表示形式・表示範囲など）を保つため常にマウントし、`active` が false の間は描画と読み取りを止める。`MonitoringView` はタブを開いている間だけマウントする
-- **プロトコル選択**: レジスタを持つサーバーが複数あるときだけ、上部にプロトコル選択セレクトを表示
-  - `supportsNodePublishing=true` のサーバー（OPC UA 等）はレジスタを持たないため除外
+#### RegisterListView.tsx
+通信画面でサーバーを選んだときの「レジスタ」のタブ。そのサーバー（props の `protocolType`）のレジスタを表示する。
+- タブを切り替えても設定（エリア・表示形式・表示範囲など）を保つため、サーバーを選んでいる間はマウントしたままにし、`active` が false の間は描画と読み取りを止める。別のサーバーを選ぶと作り直す。`MonitoringView` は、タブを開いている間だけマウントする
 - **一覧表示**: 選択中プロトコルのメモリエリアごとのレジスタ値を 10 列の表で表示（100ms ごとに読み直す）。セルのクリックか Enter で書き込みダイアログを開く
   - ビット幅が 32bit / 64bit のときは、複数ワードを 1 つのセルにまとめて表示する
   - 行の組み立て・キーによる選択の移動・値の書式は `registerList.ts` の純粋関数
 - **書き込みダイアログ（`RegisterWriteDialog`）**: 一覧表示とモニタリングで共通。入力形式（10 進・16 進・8 進・2 進）を変えると入力中の値を変換する。32bit / 64bit はエンディアンに従って複数ワードに分けて書く
   - ビットの値の入れ方だけが違う: 一覧表示は ON / OFF のボタン（`bitInput="buttons"`）、モニタリングは文字（`bitInput="text"`）
 - **1オリジンアドレス表示**: `area.oneOrigin` が true のエリアはアドレス表示を+1（内部値は0ベースを維持）
-- **「ワード.ビット」のエリア**（`area.bitsOf` があるエリア）: レジスタ画面（一覧表示・モニタリング項目の追加）では、メモリエリアの選択肢に出さない。ワードのエリアを選び、**ビット幅で「1bit」を選ぶ**と、そのエリアを読み書きする（`selectableAreas()` / `bitViewAreaOf()`。「1bit」は、ビットのエリアが対になっているワードのエリアにだけ出る）
+- **「ワード.ビット」のエリア**（`area.bitsOf` があるエリア）: サーバーの「レジスタ」「モニタリング」のタブ（一覧表示・モニタリング項目の追加）では、メモリエリアの選択肢に出さない。ワードのエリアを選び、**ビット幅で「1bit」を選ぶ**と、そのエリアを読み書きする（`selectableAreas()` / `bitViewAreaOf()`。「1bit」は、ビットのエリアが対になっているワードのエリアにだけ出る）
   - 一覧表示は 1 行に 1 ワード分の 16 ビットを並べる（列は `.00`〜`.15`、行と開始アドレスはワードの番号）。16bit と切り替えても、同じワードが先頭に来る
   - モニタリングの項目は、ビットのエリアの ID（`CIO_BIT`）で保存する
   - マッピングのダイアログ（個別・一括）でも、エリアの選択肢に出さない。**変数の型に合わせて、読み書きするエリアを決める**（`mappingAreaFor()`）: BOOL なら、選んだワードのエリアをビットごとに見るエリア（アドレスは `100.05` の形）、ほかの型ならワードのエリア。保存する `memoryArea` は、実際に読み書きするエリアの ID（BOOL なら `CIO_BIT`）
@@ -345,11 +345,12 @@ frontend/src/
 - **画面のテスト**: `frontend/e2e/register-panel.spec.ts`
 
 #### MonitoringView.tsx
-プロトコルを横断したレジスタモニタリング。任意のレジスタを登録してリアルタイム監視・書き込みができる。
-- **Props**: `serverInstances: ServerInstanceDTO[]`（RegisterPanel から渡す）
+通信画面でサーバーを選んだときの「モニタリング」のタブ。任意のレジスタを登録してリアルタイム監視・書き込みができる。
+- **Props**: `server: ServerInstanceDTO`（選んでいるサーバー）
+- **表示する項目**: 項目はアプリ全体で 1 つの並びとして保存してあり（`GetMonitoringItems()`）、そのうち選んだサーバーのものだけを出す。項目の追加も、そのサーバーに対して行う（プロトコルの選択はない）。並べ替えは、全体の並びの中での位置で指定する
 - **項目と現在値**: `useMonitoringItems(memoryAreasByProtocol, autoRefresh)` が持つ。自動更新が有効な間は 100ms ごとに読み直す
 - **プロトコル別メモリエリア**: `memoryAreasByProtocol: Record<string, MemoryAreaDTO[]>` でプロトコルごとにエリア一覧をキャッシュ
-- **項目追加ダイアログ（`AddMonitoringDialog`）**: 開始アドレスと個数を指定してまとめて追加できる。複数サーバー時はプロトコル選択セレクトを表示
+- **項目追加ダイアログ（`AddMonitoringDialog`）**: 開始アドレスと個数を指定してまとめて追加できる
 - **行（`MonitoringRow`）**: ビット幅・エンディアン・表示形式を行ごとに変更できる。左端のつまみをドラッグして並べ替える（@dnd-kit 使用）
 - **サーバー変化の検出**: `protocolTypesKey = serverInstances.map(i => i.protocolType).join(',')` でサーバー構成変化を効率的に検出してエリアを再取得
 - **API 呼び出し**: `ReadWords(item.protocolType, item.memoryArea, ...)` など全 API に `protocolType` を渡す

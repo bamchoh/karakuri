@@ -64,16 +64,37 @@ export async function openClient(page: Page, name: string) {
   await expect(page.locator(".server-config-pane-name")).toHaveText(name);
 }
 
-// レジスタ画面を開く。tab を渡すとサブタブ（一覧表示 / モニタリング）も切り替える
+// サーバーの右側のタブ（設定 / レジスタ / モニタリング）を選ぶ
+export async function selectServerTab(
+  page: Page,
+  tab: "設定" | "レジスタ" | "モニタリング",
+) {
+  await page
+    .locator(".server-sub-tabs .sub-tab-button", {
+      hasText: new RegExp("^" + tab + "$"),
+    })
+    .click();
+}
+
+// 通信画面でサーバーを選び、レジスタの一覧表示かモニタリングのタブを開く。
+// server を渡さなければ、選ばれているサーバー（最初は先頭のサーバー）のものを開く
 export async function openRegisters(
   page: Page,
-  tab?: "一覧表示" | "モニタリング",
+  tab: "一覧表示" | "モニタリング" = "一覧表示",
+  server?: string,
 ) {
-  await page.getByTitle("Registers").click();
-  await expect(page.locator(".sub-tab-nav")).toBeVisible();
-  if (tab) {
-    await page.locator(".sub-tab-button", { hasText: tab }).click();
+  await openServers(page);
+  if (server) {
+    await page
+      .locator(".server-tab-item", {
+        has: page.locator(".server-tab-name", {
+          hasText: new RegExp("^" + escapeRegExp(server) + "$"),
+        }),
+      })
+      .click();
+    await expect(page.locator(".server-config-pane-name")).toHaveText(server);
   }
+  await selectServerTab(page, tab === "一覧表示" ? "レジスタ" : "モニタリング");
 }
 
 // 保持レジスタ（0 始まりのアドレス）を読む・書く
