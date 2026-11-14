@@ -365,37 +365,52 @@ test.describe("モニタリング", () => {
     expect((await items(page)).map((i) => i.address)).toEqual([1, 0]);
   });
 
-  test("サーバーが複数あるときは、プロトコルの列と選択が出る", async ({
+  test("サーバーが複数あっても、選んだサーバーの項目だけを出す", async ({
     page,
   }) => {
+    await api(page, "AddServer", "modbus-rtu", "");
     await addItem(page, 0);
+    await api(page, "AddMonitoringItem", {
+      id: "",
+      order: 0,
+      protocolType: "modbus-rtu",
+      memoryArea: "holdingRegisters",
+      address: 4,
+      bitWidth: 16,
+      endianness: "big",
+      displayFormat: "decimal",
+    });
+    await addItem(page, 2);
+
+    // Modbus TCP: 自分の 2 項目だけ。プロトコルの列はない
     await openRegisters(page, "モニタリング");
     const headers = page.locator("table.monitoring-table thead th");
     await expect(headers).toHaveCount(8);
+    await expect(rows(page)).toHaveCount(2);
+    expect(
+      await rows(page).locator("td:nth-child(3)").allTextContents(),
+    ).toEqual(["1", "3"]);
 
-    await api(page, "AddServer", "opcua", "");
-    // サーバーの一覧は 1 秒ごとに読み直す
-    await expect(headers).toHaveCount(9);
-    await expect(headers.nth(1)).toHaveText("プロトコル");
-    await expect(cell(rows(page).first(), 1)).toHaveText("Modbus TCP");
-    await expect(cell(rows(page).first(), 3)).toHaveText("1");
-
+    // 追加ダイアログにプロトコルの選択はなく、選んでいるサーバーに追加する
     await openAddDialog(page);
     const dialog = addDialog(page);
-    const protocol = field(dialog, "プロトコル:");
-    await expect(protocol).toBeVisible();
-    await expect(protocol.locator("option")).toHaveCount(2);
-    await protocol.selectOption("modbus-tcp");
-    await expect(field(dialog, "メモリエリア:")).toHaveValue(
-      "holdingRegisters",
-    );
+    await expect(field(dialog, "プロトコル:")).toHaveCount(0);
     await field(dialog, "開始アドレス:").fill("8");
     await dialog.getByRole("button", { name: "追加" }).click();
-    await expect(rows(page)).toHaveCount(2);
-    expect((await items(page))[1]).toMatchObject({
-      protocolType: "modbus-tcp",
-      memoryArea: "holdingRegisters",
-      address: 7,
-    });
+    await expect(rows(page)).toHaveCount(3);
+    expect((await items(page)).map((i) => [i.protocolType, i.address])).toEqual(
+      [
+        ["modbus-tcp", 0],
+        ["modbus-rtu", 4],
+        ["modbus-tcp", 2],
+        ["modbus-tcp", 7],
+      ],
+    );
+
+    // Modbus RTU を選ぶと、モニタリングのタブのまま、その 1 項目だけになる
+    await openRegisters(page, "モニタリング", "Modbus RTU");
+    await expect(rows(page)).toHaveCount(1);
+    await expect(cell(rows(page).first(), 2)).toHaveText("5");
+    await shot(page, "monitoring-in-server");
   });
 });

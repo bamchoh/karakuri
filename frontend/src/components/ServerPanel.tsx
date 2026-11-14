@@ -22,7 +22,13 @@ import { application } from "../../wailsjs/go/models";
 import { Square, Play, SquarePlus } from "lucide-react";
 import { AddServerDialog } from "./AddServerDialog";
 import { AddClientDialog } from "./AddClientDialog";
-import { ServerConfigPane, ServerConfigPaneHandle } from "./ServerConfigPane";
+import {
+  ServerConfigPane,
+  ServerConfigPaneHandle,
+  ServerSubTab,
+} from "./ServerConfigPane";
+import { RegisterListView } from "./RegisterListView";
+import { MonitoringView } from "./MonitoringView";
 import { ClientDetailPane, ClientSubTab } from "./ClientDetailPane";
 import { serverStatusClass } from "./serverStatus";
 import { UnsavedChangesDialog } from "./UnsavedChangesDialog";
@@ -66,6 +72,8 @@ export const ServerPanel = forwardRef<ServerPanelHandle, ServerPanelProps>(
       loadLogs,
     } = useClients();
     const [selected, setSelected] = useState<Selection>(null);
+    // サーバーの右側のタブ（設定 / レジスタ / モニタリング）。選び直しても保つ
+    const [serverSubTab, setServerSubTab] = useState<ServerSubTab>("settings");
     // クライアントの右側で、選び直しても保つもの
     const [clientSubTab, setClientSubTab] = useState<ClientSubTab>("command");
     const [clientSettingsOpen, setClientSettingsOpen] = useState(true);
@@ -324,6 +332,13 @@ export const ServerPanel = forwardRef<ServerPanelHandle, ServerPanelProps>(
         ) ?? null)
       : null;
 
+    // レジスタを持たないサーバー（ノード公開型のプロトコル）には、設定のタブしかない
+    const selectedServerHasRegisters =
+      !!selectedInstance && !selectedInstance.supportsNodePublishing;
+    const selectedServerTab: ServerSubTab = selectedServerHasRegisters
+      ? serverSubTab
+      : "settings";
+
     // 右側に何も出していなければ、保存していない変更もない（削除したものの変更が残らないように）
     const hasPane = !!selectedInstance || !!selectedClient;
     useEffect(() => {
@@ -477,7 +492,19 @@ export const ServerPanel = forwardRef<ServerPanelHandle, ServerPanelProps>(
                 onRefreshPorts={handleRefreshPorts}
                 onRemove={handleRemoveServer}
                 onDirtyChange={handlePaneDirtyChange}
-              />
+                hasRegisters={selectedServerHasRegisters}
+                tab={selectedServerTab}
+                onTabChange={setServerSubTab}
+              >
+                {/* 一覧表示は、タブを切り替えても選んだエリアなどを保つため、マウントしたままにする */}
+                <RegisterListView
+                  protocolType={selectedInstance.protocolType}
+                  active={selectedServerTab === "registers"}
+                />
+                {selectedServerTab === "monitoring" && (
+                  <MonitoringView server={selectedInstance} />
+                )}
+              </ServerConfigPane>
             </div>
           ) : selectedClient && selectedClientProtocol ? (
             <div className="server-tab-content">
