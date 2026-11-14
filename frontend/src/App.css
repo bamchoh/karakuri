@@ -2074,15 +2074,6 @@ button:disabled {
 }
 
 /* ----- クライアント画面 ----- */
-.client-add-protocol {
-  font-size: 0.75rem;
-  padding: 2px 4px;
-  background: var(--bg-input);
-  color: var(--text-main);
-  border: 1px solid var(--border);
-  border-radius: 2px;
-}
-
 .client-note {
   font-size: 0.8rem;
   color: var(--text-muted);

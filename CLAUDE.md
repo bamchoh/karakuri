@@ -271,6 +271,7 @@ frontend/src/
 │   ├── ServerConfigPane.tsx    # 選択したサーバーの設定（スキーマ駆動のフォーム・UnitID の応答設定）
 │   ├── DynamicField.tsx        # サーバー設定の 1 項目（種類ごとの入力欄）
 │   ├── AddServerDialog.tsx     # サーバー追加ダイアログ
+│   ├── AddClientDialog.tsx     # 接続先（クライアント）追加ダイアログ（プロトコルと名前）
 │   ├── UnsavedChangesDialog.tsx # 保存していない変更の確認ダイアログ（サーバーの切り替え・起動・画面の移動で共通）
 │   ├── serverStatus.ts         # サーバーの状態に対応する CSS クラス
 │   ├── RegisterPanel.tsx   # レジスタ画面（サブタブの切り替えとサーバー一覧の読み込み）
@@ -308,7 +309,7 @@ frontend/src/
 
 #### ServerPanel.tsx
 通信画面（サイドバーの「Connections」）。サーバー（Karakuri が待ち受ける側）とクライアント（外部の機器へつなぐ側・マスター）を 1 つの画面で扱う。左に一覧、右に選んだものの設定（サーバーは `ServerConfigPane`、クライアントは `ClientDetailPane`）を並べる。
-- **一覧**: 上に「SERVERS」、下に「CLIENTS」のグループ。それぞれに追加ボタン（「サーバーを追加」「接続先を追加」。クライアントのプロトコルが複数あるので、追加ボタンの左でプロトコルを選ぶ）。クライアントの行は `.server-tab-item.client-tab-item`
+- **一覧**: 上に「SERVERS」、下に「CLIENTS」のグループ。それぞれに追加ボタン（「サーバーを追加」「接続先を追加」）。どちらも、押すとダイアログが開く（サーバーは `AddServerDialog`、クライアントは `AddClientDialog`。プロトコルを選び、クライアントは名前も付けられる）。クライアントの行は `.server-tab-item.client-tab-item`
 - **選択**: `{ kind: "server" | "client", id }` で持つ。選んでいるものが消えたら、先頭のサーバー、なければ先頭のクライアントを選ぶ
 - **クライアント**: 一覧・プロトコル・履歴は `useClients()` が読み込む（一覧は 1 秒ごとに読み直す）。右側のサブタブ（コマンド / ポーリング / サブスクリプション）と、接続先の設定の欄を開いているかは `ServerPanel` が持ち、接続先を選び直しても保つ
 - **サーバー一覧**: マウント時に `GetServerInstances()` / `GetAvailableProtocols()` を読み、以後は Wails イベント `plc:server-changed` / `plc:protocols-changed` で更新する

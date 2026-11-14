@@ -340,15 +340,8 @@ test.describe("FINS", () => {
     await expect(variableRow(page, "Run")).toContainText("fins:WR:10.15");
   });
 
-  test("クライアント: 既定のプロトコルは最初に登録したもの。コマンドの項目は条件で出し分ける", async ({
-    page,
-  }) => {
+  test("クライアント: コマンドの項目は条件で出し分ける", async ({ page }) => {
     await openServers(page);
-    // プロトコルは登録した順に並ぶ（名前順ではない）
-    await expect(page.getByLabel("追加する接続先のプロトコル")).toHaveValue(
-      "modbus-tcp",
-    );
-
     await api(page, "WriteWord", "fins", "DM", 100, 0x1234);
     const client = await api<{ id: string }>(page, "AddClient", "fins", "PLC");
     await api(page, "UpdateClient", client.id, "PLC", {

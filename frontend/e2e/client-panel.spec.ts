@@ -10,6 +10,7 @@ import {
   escapeRegExp,
   MODBUS_PORT,
   openClient,
+  addClientFromDialog,
   dialogByTitle,
 } from "./helpers";
 
@@ -80,9 +81,46 @@ test("接続先を画面から追加して、設定を保存できる", async ({
   await openClients(page);
   await expect(page.getByText("接続先が登録されていません")).toBeVisible();
 
+  // 「＋」を押すと、サーバーの追加と同じ形のダイアログが開く（一覧の見出しにプルダウンはない）
+  await expect(page.locator(".server-panel-header select")).toHaveCount(0);
   await page.getByTitle("接続先を追加").click();
+  const addDialog = dialogByTitle(page, "接続先を追加");
+  await expect(addDialog).toBeVisible();
+  // プロトコルは登録した順に並び、最初のもの（Modbus TCP）が選ばれている
+  await expect(addDialog.locator("select")).toHaveValue("modbus-tcp");
+  await expect(addDialog.locator("select option").first()).toHaveText(
+    "Modbus TCP",
+  );
+  await shot(page, "client-add-dialog");
+
+  // Esc とキャンセルでは追加しない
+  await page.keyboard.press("Escape");
+  await expect(addDialog).toBeHidden();
+  await page.getByTitle("接続先を追加").click();
+  await addDialog.getByRole("button", { name: "キャンセル" }).click();
+  await expect(addDialog).toBeHidden();
+  await expect(page.locator(".client-tab-item")).toHaveCount(0);
+
+  // 名前を入れて Enter で追加できる
+  await page.getByTitle("接続先を追加").click();
+  await addDialog.locator("input").fill("名前つき");
+  await page.waitForTimeout(150); // FocusTrap は、開いた直後の Enter を無視する
+  await addDialog.locator("input").press("Enter");
+  await expect(addDialog).toBeHidden();
   await expect(page.locator(".server-tab-item.selected")).toContainText(
-    "接続先 1",
+    "名前つき",
+  );
+  await api(
+    page,
+    "RemoveClient",
+    (await api<{ id: string }[]>(page, "GetClients"))[0].id,
+  );
+  await expect(page.locator(".client-tab-item")).toHaveCount(0);
+
+  // 名前を空のまま追加すると、名前が付く
+  await addClientFromDialog(page);
+  await expect(page.locator(".server-tab-item.selected")).toContainText(
+    "接続先",
   );
   await expect(setting(page, "ホスト")).toHaveValue("127.0.0.1");
   await expect(setting(page, "ポート")).toHaveValue("502");

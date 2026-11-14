@@ -6,6 +6,7 @@ import {
   shot,
   escapeRegExp,
   openClient,
+  addClientFromDialog,
   openServers,
 } from "./helpers";
 
@@ -117,8 +118,7 @@ test("プロトコルを選んで接続先を追加し、設定を保存でき�
   page,
 }) => {
   await openServers(page);
-  await page.getByLabel("追加する接続先のプロトコル").selectOption("opcua");
-  await page.getByTitle("接続先を追加").click();
+  await addClientFromDialog(page, { protocol: "opcua" });
   await expect(page.locator(".server-tab-item.selected")).toContainText(
     "接続先 1",
   );
