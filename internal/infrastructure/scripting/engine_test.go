@@ -162,15 +162,105 @@ func TestScriptEngine_RunOnce_GetVariables(t *testing.T) {
 	}
 }
 
-func TestScriptEngine_RunOnce_ReadNonexistentVariable(t *testing.T) {
-	engine, _ := newTestEngine()
-
-	result, err := engine.RunOnce(`plc.readVariable("Nonexistent")`)
-	if err != nil {
-		t.Fatalf("RunOnce failed: %v", err)
+// 変数の関数は、失敗したらスクリプトのエラーになる（黙って null を返したり、何もしなかったりしない）
+func TestScriptEngine_VariableFunctionsFailLoudly(t *testing.T) {
+	engine, vs := newTestEngine()
+	mustCreate := func(name string, dt variable.DataType, value any) {
+		t.Helper()
+		if _, err := vs.CreateVariable(name, dt, value); err != nil {
+			t.Fatal(err)
+		}
 	}
-	if result != nil {
-		t.Errorf("expected nil, got %v", result)
+	if err := vs.RegisterStructType(&variable.StructTypeDef{Name: "Motor", Fields: []variable.StructField{
+		{Name: "speed", DataType: variable.TypeINT},
+	}}); err != nil {
+		t.Fatal(err)
+	}
+	mustCreate("Count", variable.TypeINT, int16(10))
+	mustCreate("Big", variable.TypeLINT, int64(1))
+	mustCreate("Wait", variable.TypeTIME, "T#1s")
+	mustCreate("Values", variable.DataType("ARRAY[1..3] OF INT"), nil)
+	mustCreate("M1", variable.DataType("Motor"), nil)
+
+	cases := []struct {
+		name, code, wantInError string
+	}{
+		{"ない変数を読む", `plc.readVariable("Nope")`, `plc.readVariable: 変数 "Nope" がありません`},
+		{"ない変数に書く", `plc.writeVariable("Nope", 1)`, `plc.writeVariable: 変数 "Nope" がありません`},
+		{"ない変数のフィールドを読む", `plc.readVariable("Nope.speed")`, `変数 "Nope" がありません`},
+		{"ない変数の要素に書く", `plc.writeVariable("Nope[1]", 1)`, `変数 "Nope" がありません`},
+		{"ないフィールドを読む", `plc.readVariable("M1.nope")`, `plc.readVariable("M1.nope")`},
+		{"ないフィールドに書く", `plc.writeVariable("M1.nope", 1)`, `plc.writeVariable("M1.nope")`},
+		{"配列の範囲外を読む", `plc.readVariable("Values[9]")`, `plc.readVariable("Values[9]")`},
+		{"型に合わない値を書く", `plc.writeVariable("Count", "abc")`, `plc.writeVariable("Count")`},
+		{"readArrayElement: ない変数", `plc.readArrayElement("Nope", 1)`, `変数 "Nope" がありません`},
+		{"readArrayElement: 配列でない変数", `plc.readArrayElement("Count", 1)`, `plc.readArrayElement("Count")`},
+		{"readArrayElement: 範囲外", `plc.readArrayElement("Values", 0)`, `plc.readArrayElement("Values")`},
+		{"writeArrayElement: 範囲外", `plc.writeArrayElement("Values", 4, 1)`, `plc.writeArrayElement("Values")`},
+		{"writeArrayElement: ない変数", `plc.writeArrayElement("Nope", 1, 1)`, `変数 "Nope" がありません`},
+		{"readStructField: ない変数", `plc.readStructField("Nope", "speed")`, `変数 "Nope" がありません`},
+		{"readStructField: 構造体でない変数", `plc.readStructField("Count", "speed")`, `は構造体ではありません`},
+		{"readStructField: ないフィールド", `plc.readStructField("M1", "nope")`, `フィールド "nope" がありません`},
+		{"writeStructField: ないフィールド", `plc.writeStructField("M1", "nope", 1)`, `フィールド "nope" がありません`},
+		{"readLintBig: ない変数", `plc.readLintBig("Nope")`, `変数 "Nope" がありません`},
+		{"readLintBig: LINT でない変数", `plc.readLintBig("Count")`, `は LINT ではありません`},
+		{"readUlintBig: ULINT でない変数", `plc.readUlintBig("Big")`, `は ULINT ではありません`},
+		{"writeLintBig: ない変数", `plc.writeLintBig("Nope", 1n)`, `変数 "Nope" がありません`},
+		{"readTimeMs: ない変数", `plc.readTimeMs("Nope")`, `変数 "Nope" がありません`},
+		{"readTimeMs: TIME でない変数", `plc.readTimeMs("Count")`, `は TIME ではありません`},
+		{"readDateSec: DATE でない値", `plc.readDateSec("Wait")`, `DATE として読めません`},
+		{"writeTimeMs: ない変数", `plc.writeTimeMs("Nope", 1000)`, `変数 "Nope" がありません`},
+		{"getVariableStatus: ない変数", `plc.getVariableStatus("Nope")`, `plc.getVariableStatus: 変数 "Nope" がありません`},
+	}
+	for _, c := range cases {
+		_, err := engine.RunOnce(c.code)
+		if err == nil {
+			t.Errorf("%s: エラーにならなかった（%s）", c.name, c.code)
+			continue
+		}
+		if !strings.Contains(err.Error(), c.wantInError) {
+			t.Errorf("%s: エラー = %q, want …%s…", c.name, err.Error(), c.wantInError)
+		}
+	}
+
+	// コンソールに出る文面には、Go の関数の呼び出し位置を含めない
+	logs := engine.GetConsoleLogs()
+	last := logs[len(logs)-1]
+	if last.Level != LogLevelError || strings.Contains(last.Message, "(native)") || !strings.Contains(last.Message, `変数 "Nope" がありません`) {
+		t.Errorf("コンソールの文面: %+v", last)
+	}
+
+	// 失敗した書き込みで、値は変わっていない
+	if v, _ := vs.GetVariableByName("Count"); v.Value != int16(10) {
+		t.Errorf("Count = %v, want 10", v.Value)
+	}
+
+	// 成功する呼び出しは、これまでどおり
+	ok := []struct {
+		code string
+		want any
+	}{
+		{`plc.hasVariable("Count")`, true},
+		{`plc.hasVariable("Nope")`, false},
+		{`plc.readVariable("Count")`, int64(10)},
+		{`plc.writeVariable("M1.speed", 7); plc.readStructField("M1", "speed")`, int64(7)},
+		{`plc.writeStructField("M1", "speed", 8); plc.readVariable("M1.speed")`, int64(8)},
+		{`plc.writeArrayElement("Values", 3, 5); plc.readArrayElement("Values", 3)`, int64(5)},
+		{`plc.writeTimeMs("Wait", 2500); plc.readTimeMs("Wait")`, int64(2500)},
+		// エラーは、スクリプトの try / catch で受け取れる
+		{`let caught = ""; try { plc.readVariable("Nope") } catch (e) { caught = e.message } caught`, `plc.readVariable: 変数 "Nope" がありません`},
+		// 変数はあるが、接続先にマッピングしていなければ null
+		{`plc.getVariableStatus("Count")`, nil},
+	}
+	for _, c := range ok {
+		got, err := engine.RunOnce(c.code)
+		if err != nil {
+			t.Errorf("%s: %v", c.code, err)
+			continue
+		}
+		if got != c.want {
+			t.Errorf("%s = %v (%T), want %v (%T)", c.code, got, got, c.want, c.want)
+		}
 	}
 }
 
