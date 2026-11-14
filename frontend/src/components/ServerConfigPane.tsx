@@ -14,7 +14,7 @@ import {
 } from "../../wailsjs/go/main/App";
 import { application } from "../../wailsjs/go/models";
 import { Trash2 } from "lucide-react";
-import { DynamicField } from "./DynamicField";
+import { DynamicField, visibleFields } from "./DynamicField";
 import { serverStatusClass } from "./serverStatus";
 
 // サーバー画面の右側: 選択したサーバーの設定（プロトコルのスキーマから作るフォーム・UnitID の応答設定）。
@@ -212,7 +212,7 @@ export const ServerConfigPane = forwardRef<
           // カテゴリ順序を保持しながらグループ化（空カテゴリは先頭）
           const categoryOrder: string[] = [];
           const grouped: Record<string, application.FieldDTO[]> = {};
-          for (const field of fields) {
+          for (const field of visibleFields(fields, config?.settings)) {
             const cat = field.category || "";
             if (!grouped[cat]) {
               grouped[cat] = [];

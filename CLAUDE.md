@@ -8,11 +8,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-このプロジェクトは PLC シミュレーター です。Modbus（TCP/RTU/ASCII）と OPC UA をサポートしています。
+このプロジェクトは PLC シミュレーター です。Modbus（TCP/RTU/ASCII）・OPC UA・FINS（オムロン）をサポートしています。
 
 ### 主な機能
 
-- **マルチプロトコル対応**: Modbus TCP / Modbus RTU / Modbus ASCII / OPC UA を個別のサーバーとして起動可能
+- **マルチプロトコル対応**: Modbus TCP / Modbus RTU / Modbus ASCII / OPC UA / FINS を個別のサーバーとして起動可能
 - **複数サーバー同時実行**: 異なるプロトコル（例: Modbus TCP + OPC UA）を同時に起動可能。各サーバーは独立したメモリ空間を持つ
 - **変数管理**: IEC 61131-3準拠のデータ型（スカラー、配列、構造体、STRING[n]）をサポート。OPC UA でノードとして公開可能
 - **スクリプト機能**: JavaScriptで周期処理を記述。const/let対応（IIFE wrapping）、結果とエラーはコンソールに表示
@@ -83,7 +83,7 @@ go build ./...
 
 `frontend/e2e/` に、ブラウザで画面を操作して確認するテストがある。`task dev` が立てる開発用サーバー（`http://localhost:34115`）に接続するため、Go 側の API とプロトコルの実装を含めた動作を確認できる。手順と注意は `frontend/e2e/README.md` を参照。
 
-- 画面ごとのテスト: 通信画面（サーバー）`server-panel.spec.ts`、変数画面 `variable-dialogs.spec.ts` / `node-publishing.spec.ts`、レジスタ画面 `register-panel.spec.ts` / `monitoring.spec.ts`、スクリプト画面 `script-panel.spec.ts`、通信画面（クライアント）`client-panel.spec.ts` / `client-polling.spec.ts` / `client-mapping.spec.ts` / `client-saved-commands.spec.ts` / `client-opcua.spec.ts`
+- 画面ごとのテスト: FINS（「ワード.ビット」のアドレス・項目の表示条件）`fins.spec.ts`、通信画面（サーバー）`server-panel.spec.ts`、変数画面 `variable-dialogs.spec.ts` / `node-publishing.spec.ts`、レジスタ画面 `register-panel.spec.ts` / `monitoring.spec.ts`、スクリプト画面 `script-panel.spec.ts`、通信画面（クライアント）`client-panel.spec.ts` / `client-polling.spec.ts` / `client-mapping.spec.ts` / `client-saved-commands.spec.ts` / `client-opcua.spec.ts`
 - 画面を変更したら、該当するテストを実行する（なければ追加する）。`shot()` で撮ったスクリーンショット（`frontend/e2e/.screenshots/`）で見た目も確認する
 - データの準備は `api(page, "メソッド名", ...)` で Go 側の API を直接呼び、確認したい操作だけを画面で行う
 - **テストはアプリのサーバー・変数・モニタリング項目・スクリプトをすべて削除する。** 開発サーバーは `KARAKURI_CONFIG_DIR` を一時フォルダに向けて起動する
@@ -135,6 +135,7 @@ app.go / main.go      # Wails のエントリー。起動時に protocols.Factor
 internal/
 ├── domain/           # ドメイン層
 │   ├── protocol/     # プロトコル共通インターフェース（ServerFactory, DataStore, ConfigField等）
+│   │   ├── fields/        # 設定・コマンドの項目の値を読む関数（数値・ワードの並びなど）。プロトコルの実装で共通に使う
 │   │   └── protocoltest/  # テスト用のフェイク（Factory / Server / DataStore）。ホスト側のテストで共通に使う
 │   ├── script/       # スクリプトエンティティ
 │   └── variable/     # 変数・構造体型・NodePublishing
@@ -161,6 +162,16 @@ internal/
 │   │   ├── client.go       # TCPClientFactory / TCPClient（Modbus TCP クライアント。リクエストの組み立て・送受信・応答の解釈）
 │   │   ├── client_mapping.go # 変数マッピング用のエリアと読み書きのリクエスト（MappableClientFactory）
 │   │   └── rtu/            # RTU / ASCII のフレーム処理（Processor は RTU と ASCII で共通）
+│   ├── fins/             # FINS（オムロン。FINS/UDP と FINS/TCP）
+│   │   ├── fins.go         # フレームのヘッダー・コマンドコード・終了コード
+│   │   ├── area.go         # エリアの定義（種別コード・大きさ）と、エリアの中の場所（target）
+│   │   ├── factory.go      # Factory / Config（アドレス・ポート・通信方式・ノードアドレス）
+│   │   ├── server.go       # Server（UDP と TCP の待ち受け。FINS/TCP のヘッダーとノードアドレスのやりとり）
+│   │   ├── handler.go      # リクエストの処理（メモリエリアの読み出し・書き込み・一括書き込み・複合読み出し・CPU 情報・時計）
+│   │   ├── datastore.go    # DataStore（ワードのエリアと、同じメモリをビットで見るエリア）
+│   │   ├── client.go       # ClientFactory（接続先の設定・コマンドの定義・リクエストの組み立てと応答の解釈）
+│   │   ├── client_conn.go  # Client（UDP / TCP の送受信）
+│   │   └── client_mapping.go # 変数マッピング用のリクエスト（MappableClientFactory）
 │   └── opcua/            # OPC UA（bamchoh/uastack 使用）
 │       ├── factory.go      # Factory（VariableStoreInjector 実装）
 │       ├── config.go       # Config（ネットワーク設定 + アプリケーション情報）
@@ -195,6 +206,7 @@ internal/
   - `variableStore` と `scriptEngine` は全サーバーで共有
   - `factories map[protocol.ProtocolType]protocol.ServerFactory` でプロトコルファクトリーを管理
   - `RegisterFactory()`: ファクトリーを登録する（起動時に `app.go` が `protocols.Factories()` の分だけ呼ぶ）
+    - **サーバーの一覧・追加できるプロトコル・クライアントのプロトコルは、登録した順に並ぶ**（名前順ではない）。クライアントは、最初に登録したものが「接続先を追加」の既定になる
   - `AddServer()`: バリアントの指定が空なら、そのプロトコルの最初のバリアントにする。`VariableStoreInjector` を実装するファクトリーへ `VariableStoreAccessor` を注入する
   - `attachServer()`（`plc_service_instance.go`）: DataStore とサーバーを作る。DataStore は `VariableBackedDataStore` で包み、変数と双方向に同期する
     - **DataStore とサーバーは、サーバーを削除するまで同じものを使い続ける**（起動・停止では作り直さない）。そのため、起動前からレジスタを読み書きでき、レジスタの値と UnitID の応答設定は起動し直しても残る
@@ -217,6 +229,7 @@ internal/
   - レジスタ → 変数: この DataStore に書かれると（`Write*`）、その範囲にマッピングされた変数に反映する。プロトコルのサーバーにはこの DataStore を渡すので、クライアントの書き込み・画面・スクリプトのどれもここを通る
   - **どちらも、呼び出しが戻った時点で反映が終わっている**（別のゴルーチンに回さない。Modbus のクライアントに応答が返った時点で、変数は更新済み）
   - 行き来を防ぐ仕組み: 変数 → レジスタは内側の DataStore に直接書く。レジスタ → 変数は `VariableStore.UpdateValueFrom()` で自分を通知先から外す
+  - **同じメモリを指すエリア**（`MemoryArea.BitsOf`）: 片方に書かれたら（レジスタへの書き込みでも、変数の変更でも）、もう片方にマッピングした変数を、メモリの値で更新する（`syncSharedAreas()`。範囲は「ワード × 16 + ビット」の番号で比べる）
 - **plcNodes** (`internal/protocols/opcua/nodes.go`): 公開変数を uastack の `AddressSpace` に実ノードとして登録する
   - `rebuild()`: `GetEnabledNodePublishings("opcua")` からノード構成を計画し、差分（追加・削除・型変更）だけノードを作り直す
   - 構造体フィールド・配列要素は子ノード（HasComponent）として事前に展開
@@ -226,6 +239,7 @@ internal/
   - `ReadBits()`, `WriteBit()`, `ReadWords()`, `WriteWord()`: 汎用メモリ操作
   - `GetAreas()`: `MemoryArea` スライスを返す。`MemoryArea.OneOrigin` が true のエリアはUIで1オリジンアドレスを表示する（内部は常に0ベース）。Modbusの全4エリアは `OneOrigin: true`
   - `MemoryArea.ShortName`: マッピング列などに表示する短い名前（Modbus は `0` / `1` / `3` / `4`）。空ならエリア ID を表示する
+  - `MemoryArea.BitsOf`: ビットのエリアが、ワードのエリアと同じメモリをビットごとに見たものであるとき、そのワードのエリアの ID（FINS の `CIO_BIT` は `CIO`）。アドレスは「ワード × 16 + ビット」。ホストは変数を両方に反映し、画面はアドレスを「ワード.ビット」（`100.05`）で表示する
 - **VariableStoreAccessor** (`internal/domain/protocol/server.go`): プロトコルが VariableStore にアクセスするための汎用インターフェース
   - `GetEnabledNodePublishings(protocolType)`: 指定プロトコルで公開設定された変数一覧を返す
   - `ReadVariableValue(variableID)` / `WriteVariableValue(variableID, value)`: 変数値の読み書き
@@ -301,6 +315,7 @@ frontend/src/
 - **サーバー追加**: `AddServerDialog` で未追加のプロトコルから選択して追加（`AddServer(protocolType, variant)`）。ダイアログは開くたびにマウントし、選択中のプロトコルを自分で持つ
 - **個別操作**: 一覧の再生・停止ボタンで起動と停止、設定の右上のごみ箱で削除（起動中は削除できない）
 - **設定（`ServerConfigPane`）**: `GetProtocolSchema(protocolType)` のスキーマから `DynamicField` でフォームを作る。項目はカテゴリごとにまとめる。起動中は変更できない
+  - **項目の表示条件**: `ConfigField.Condition`（DTO では `showWhen`）がある項目は、指定した項目の値が一致するときだけ出す。`DynamicField.tsx` の `visibleFields(fields, values)` で絞る（サーバーの設定・接続先の設定・コマンド・ポーリング・サブスクリプションの項目で共通）
   - UnitID をサポートするプロトコルでは「UnitID 応答設定」を出す。切り替えは保存ボタンを押さなくてもすぐ反映する
   - 親からは ref の `save()` / `revert()` で、保存していない変更を保存・破棄できる
 - **保存していない変更の確認**: 設定を変更したまま、別のサーバー・クライアントへの切り替え・選択中のサーバーの起動・接続先の追加・別の画面への移動（`App.tsx`）をしようとすると `UnsavedChangesDialog` を出す。`ServerPanel` の `requestAction()` が「変更があれば確認してから実行する」をまとめている。サーバーとクライアントの右側は、どちらも ref の `save()` / `revert()` と `onDirtyChange` を持つ
@@ -317,6 +332,15 @@ frontend/src/
 - **書き込みダイアログ（`RegisterWriteDialog`）**: 一覧表示とモニタリングで共通。入力形式（10 進・16 進・8 進・2 進）を変えると入力中の値を変換する。32bit / 64bit はエンディアンに従って複数ワードに分けて書く
   - ビットの値の入れ方だけが違う: 一覧表示は ON / OFF のボタン（`bitInput="buttons"`）、モニタリングは文字（`bitInput="text"`）
 - **1オリジンアドレス表示**: `area.oneOrigin` が true のエリアはアドレス表示を+1（内部値は0ベースを維持）
+- **「ワード.ビット」のエリア**（`area.bitsOf` があるエリア）: レジスタ画面（一覧表示・モニタリング項目の追加）では、メモリエリアの選択肢に出さない。ワードのエリアを選び、**ビット幅で「1bit」を選ぶ**と、そのエリアを読み書きする（`selectableAreas()` / `bitViewAreaOf()`。「1bit」は、ビットのエリアが対になっているワードのエリアにだけ出る）
+  - 一覧表示は 1 行に 1 ワード分の 16 ビットを並べる（列は `.00`〜`.15`、行と開始アドレスはワードの番号）。16bit と切り替えても、同じワードが先頭に来る
+  - モニタリングの項目は、ビットのエリアの ID（`CIO_BIT`）で保存する
+  - マッピングのダイアログ（個別・一括）でも、エリアの選択肢に出さない。**変数の型に合わせて、読み書きするエリアを決める**（`mappingAreaFor()`）: BOOL なら、選んだワードのエリアをビットごとに見るエリア（アドレスは `100.05` の形）、ほかの型ならワードのエリア。保存する `memoryArea` は、実際に読み書きするエリアの ID（BOOL なら `CIO_BIT`）
+    - 「ビット幅」の列に、型で決まる大きさを出す（`mappingWidthLabel()`: `1bit` / `16bit` / `32bit` / `64bit` / `5 ワード`。選べない）。BOOL ではエンディアンを選べない
+    - BOOL をワードのエリアに保存してあったマッピングは、開いたときにビットごとに見るエリアに読み替える（アドレスは、もともとビットの番号なので変えない）
+  - 変数一覧のマッピングの列などでは、アドレスを `100.05` の形で表示する
+  - ワードのエリアと対になっていないビットのエリア（Modbus のコイル、FINS のアップフラグ）は、これまでどおり別のエリアとして出す
+- **アドレスの変換**: 表示と入力の変換は `frontend/src/utils/address.ts`（`formatAddress()` / `parseAddress()`）、入力欄は `AddressInput`。画面ごとに `oneOrigin` や `bitsOf` を見て変換を書かない
 - **数値の変換**: ワードの結合・分解・書式は `frontend/src/utils/register.ts`、選択肢は `frontend/src/constants/register.ts`。画面ごとに書かない
 - **画面のテスト**: `frontend/e2e/register-panel.spec.ts`
 
@@ -556,6 +580,8 @@ JavaScript（goja）でPLC動作を記述。
    - 接続先の設定項目（`ConnectionFields()`）とコマンドの定義（`Commands()`）は `ConfigField` で返す。画面はサーバー設定と同じ `DynamicField` で入力欄を作る
    - 読み取りのコマンドには `Pollable: true` を付ける（ポーリングに使える）。読み取った値をビット・ワードで返すなら `ResultValue.Bit` / `Word` にも入れ、コマンドに `WordValues: true` を付ける（画面で 10 進・16 進などの表示形式を選べる。付けなければ `Value` の文字列をそのまま出す）
    - 16 進で直接入れる欄に出す説明と入力例は、`protocol.RequestHelpProvider`（`RequestHelp()`）で返す
+   - 項目の値を読む関数（数値・ワードやビットの並び）は `internal/domain/protocol/fields` のものを使う（プロトコルの実装同士は import しない）
+   - ほかの項目の値によって出し分ける項目には `ConfigField.Condition` を指定する
    - `ConfigField.Type` に `"password"` を使うと、入力を隠す欄になる（閉じた設定の要約にも出さない）。`"textarea"` は複数行の欄
    - 入力欄の値を機器のアドレスの一覧から選べるようにするなら、クライアントで `protocol.BrowsableClient`（`Browse(parent)`: 子の一覧）を実装し、選ばせたい項目の `ConfigField.Browse` に `protocol.BrowseValues`（値を持つアドレスだけ）か `protocol.BrowseAll`（どれでも）を指定する。`BrowseEntry.Fields` に、選んだときに入力欄に入れる内容を項目の名前ごとに入れる（なければ `Address` を入れる）
    - 値の変化の通知（サブスクリプション）に対応するなら、ファクトリーで `protocol.SubscriptionClientFactory`（監視項目の入力項目・入力から監視項目を作る）、クライアントで `protocol.SubscribingClient`（`RunSubscription()`）を実装する。`RunSubscription()` は ctx が取り消されるまで戻らず、つながらない・切れたときは状態を知らせてから自分でつなぎ直す。`onEvent` は同時に呼ばない
@@ -776,6 +802,22 @@ JavaScript（goja）でPLC動作を記述。
   - 読み取りで変数を更新するときは `UpdateValueFrom()` で自分を通知先から外す（機器へ書き戻さない）。`DeviceSync` のロックの中では変数ストアを更新しない
   - 接続先を削除すると、その接続先へのマッピングを変数から外す。プロジェクトには接続先の ID を保存し、読み込んでも ID を変えない（マッピングが接続先を指すため）
   - スクリプトからは `plc.getVariableStatus(name)` で状態を読める（`{ state, writePending, error, client }`、マッピングしていなければ `null`）
+
+### FINS 実装
+
+- **運び方**: FINS/UDP（FINS フレームをそのまま送る）と FINS/TCP（16 バイトのヘッダーを付け、つないだ直後にノードアドレスを決めるやりとりをする）。サーバーは同じポート（既定 9600）で両方を待ち受ける（設定で片方だけにもできる）
+- **エリア**（`area.go`。CS / CJ の種別コード）: CIO・WR・HR・AR・DM・T（タイマ）・C（カウンタ）・EM0〜EM18（EM のバンク。番号は 16 進で、25 個）
+  - CIO・WR・HR・AR・DM・EM の各バンクは、ビットのエリア（`CIO_BIT`・`DM_BIT`・`EM0_BIT` など、`BitsOf` 付き）も持つ。画面では、ワードのエリアの「1bit」として出る
+  - T・C は、ワードが現在値、ビットの種別がアップフラグ（`T_FLAG` / `C_FLAG`。現在値とは別のメモリで、アドレスは番号。「ワード.ビット」ではない）。FINS ではタイマとカウンタが同じ種別（0x89 / 0x09）で、アドレスが 0x8000 以上ならカウンタ
+  - EM の種別は、バンク 0〜F が 0xA0〜0xAF（ビットは 0x20〜0x2F）、バンク 10〜18 が 0x60〜0x68（ビットは 0xE0〜0xE8）。カレントバンク（0x98）はバンク 0 として扱う
+  - エリア種別とアドレスから場所を決める処理（`targetFromWire()`）と、DataStore のエリアの ID から決める処理（`targetFromStore()`）は、サーバーとクライアントで共通
+- **サーバーのコマンド**: 0101 読み出し・0102 書き込み・0103 一括書き込み・0104 複合読み出し・0501 CPU ユニット情報・0601 CPU ユニットステータス・0701 時計。ほかは終了コード 0x0401
+  - 宛先のノードアドレスは確かめない（どのノード宛てでも応答する）。ICF で応答不要のリクエストには応答しない
+- **クライアント**: リクエストは「コマンドコード 2 バイト + パラメーター」。FINS ヘッダー（宛先・送信元・SID）と FINS/TCP のヘッダーはクライアントが付ける。ノードアドレスは 0 なら自動（UDP は IP アドレスの最後の数字、TCP はやりとりで決まった値）
+  - 終了コードが 0 以外なら `exception`（接続は閉じない）。SID が違う応答（遅れて届いたもの）は読み捨てる
+- **未実装**: タイマ・カウンタの動作（現在値とアップフラグは、書かれた値を持つだけ。時間で進まない）、EM のカレントバンクの切り替え、運転モードの切り替え、ネットワークをまたぐ中継、シリアル（Host Link）
+- **確認していないこと**: 実機・他社製の FINS クライアントとの接続（テストは、Karakuri のクライアントとサーバーの組み合わせと、フレームのバイト列）
+- **テスト**: `internal/protocols/fins/fins_test.go` / `area_test.go`（全エリアをクライアントから読み書きする）、`integration_test.go` の `TestFINS_*` / `TestFINSClient_VariableMapping`、画面は `fins.spec.ts`
 
 ### REST HTTP API 実装
 

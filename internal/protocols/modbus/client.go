@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"karakuri/internal/domain/protocol"
+	"karakuri/internal/domain/protocol/fields"
 )
 
 // Modbus TCP のクライアント。外部の機器（Modbus TCP サーバー）につないで、リクエストを送る。
@@ -50,9 +51,9 @@ func (f *TCPClientFactory) DisplayName() string {
 func (f *TCPClientFactory) ConnectionFields() []protocol.ConfigField {
 	return []protocol.ConfigField{
 		{Name: "host", Label: "ホスト", Description: "接続先の機器の IP アドレスまたはホスト名。", Type: "text", Required: true, Default: defaultClientHost},
-		{Name: "port", Label: "ポート", Description: "接続先のポート番号。標準ポートは 502 です。", Type: "number", Required: true, Default: defaultClientPort, Min: intPtr(1), Max: intPtr(65535)},
-		{Name: "unitId", Label: "UnitID", Description: "MBAP ヘッダーに入れる UnitID（0〜255）。", Type: "number", Required: true, Default: defaultClientUnitID, Min: intPtr(0), Max: intPtr(255)},
-		{Name: "timeoutMs", Label: "タイムアウト（ms）", Description: "接続と応答を待つ時間。過ぎるとタイムアウトにして接続を閉じます。", Type: "number", Required: true, Default: defaultClientTimeoutMs, Min: intPtr(10), Max: intPtr(60000)},
+		{Name: "port", Label: "ポート", Description: "接続先のポート番号。標準ポートは 502 です。", Type: "number", Required: true, Default: defaultClientPort, Min: fields.IntPtr(1), Max: fields.IntPtr(65535)},
+		{Name: "unitId", Label: "UnitID", Description: "MBAP ヘッダーに入れる UnitID（0〜255）。", Type: "number", Required: true, Default: defaultClientUnitID, Min: fields.IntPtr(0), Max: fields.IntPtr(255)},
+		{Name: "timeoutMs", Label: "タイムアウト（ms）", Description: "接続と応答を待つ時間。過ぎるとタイムアウトにして接続を閉じます。", Type: "number", Required: true, Default: defaultClientTimeoutMs, Min: fields.IntPtr(10), Max: fields.IntPtr(60000)},
 	}
 }
 
@@ -65,10 +66,10 @@ type tcpClientSettings struct {
 
 func parseTCPClientSettings(settings map[string]interface{}) (tcpClientSettings, error) {
 	s := tcpClientSettings{Host: defaultClientHost, Port: defaultClientPort, UnitID: defaultClientUnitID, TimeoutMs: defaultClientTimeoutMs}
-	setString(settings, "host", &s.Host)
-	setInt(settings, "port", &s.Port)
-	setInt(settings, "unitId", &s.UnitID)
-	setInt(settings, "timeoutMs", &s.TimeoutMs)
+	fields.SetString(settings, "host", &s.Host)
+	fields.SetInt(settings, "port", &s.Port)
+	fields.SetInt(settings, "unitId", &s.UnitID)
+	fields.SetInt(settings, "timeoutMs", &s.TimeoutMs)
 	s.Host = strings.TrimSpace(s.Host)
 	switch {
 	case s.Host == "":
@@ -137,11 +138,11 @@ var functionNames = map[byte]string{
 const addressDescription = "PDU に入れるアドレス（0 始まり）。画面の 1 始まりの番号（40001 など）のときは、エリアの先頭からの番号から 1 を引いた値です。"
 
 func addressField() protocol.ConfigField {
-	return protocol.ConfigField{Name: "address", Label: "アドレス", Description: addressDescription, Type: "number", Required: true, Default: 0, Min: intPtr(0), Max: intPtr(65535)}
+	return protocol.ConfigField{Name: "address", Label: "アドレス", Description: addressDescription, Type: "number", Required: true, Default: 0, Min: fields.IntPtr(0), Max: fields.IntPtr(65535)}
 }
 
 func countField(max int) protocol.ConfigField {
-	return protocol.ConfigField{Name: "count", Label: "個数", Description: fmt.Sprintf("読み取る個数（1〜%d）。", max), Type: "number", Required: true, Default: 1, Min: intPtr(1), Max: intPtr(max)}
+	return protocol.ConfigField{Name: "count", Label: "個数", Description: fmt.Sprintf("読み取る個数（1〜%d）。", max), Type: "number", Required: true, Default: 1, Min: fields.IntPtr(1), Max: fields.IntPtr(max)}
 }
 
 // Commands は組み立てられるコマンドの一覧を返す
@@ -205,7 +206,7 @@ func (f *TCPClientFactory) BuildRequest(commandID string, params map[string]inte
 		return nil, fmt.Errorf("不明なコマンドです: %s", commandID)
 	}
 
-	address, err := paramInt(params, "address", "アドレス", 0, 65535)
+	address, err := fields.Int(params, "address", "アドレス", 0, 65535)
 	if err != nil {
 		return nil, err
 	}
@@ -218,7 +219,7 @@ func (f *TCPClientFactory) BuildRequest(commandID string, params map[string]inte
 		if fc == fcReadCoils || fc == fcReadDiscreteInputs {
 			max = 2000
 		}
-		count, err := paramInt(params, "count", "個数", 1, max)
+		count, err := fields.Int(params, "count", "個数", 1, max)
 		if err != nil {
 			return nil, err
 		}
@@ -241,18 +242,18 @@ func (f *TCPClientFactory) BuildRequest(commandID string, params map[string]inte
 	case fcWriteSingleRegister:
 		s, _ := params["value"].(string)
 		if s == "" {
-			if n, ok := numberParam(params["value"]); ok {
+			if n, ok := fields.Number(params["value"]); ok {
 				s = strconv.FormatInt(n, 10)
 			}
 		}
-		v, err := parseWord(s)
+		v, err := fields.ParseWord(s)
 		if err != nil {
 			return nil, fmt.Errorf("値: %w", err)
 		}
 		pdu = binary.BigEndian.AppendUint16(pdu, v)
 
 	case fcWriteMultipleCoils:
-		bits, err := parseBitList(stringParam(params, "values"))
+		bits, err := fields.ParseBitList(fields.String(params, "values"))
 		if err != nil {
 			return nil, fmt.Errorf("値: %w", err)
 		}
@@ -273,7 +274,7 @@ func (f *TCPClientFactory) BuildRequest(commandID string, params map[string]inte
 		pdu = append(pdu, packed...)
 
 	case fcWriteMultipleRegisters:
-		words, err := parseWordList(stringParam(params, "values"))
+		words, err := fields.ParseWordList(fields.String(params, "values"))
 		if err != nil {
 			return nil, fmt.Errorf("値: %w", err)
 		}
@@ -292,51 +293,6 @@ func (f *TCPClientFactory) BuildRequest(commandID string, params map[string]inte
 	return pdu, nil
 }
 
-// numberParam は JSON から来た数値（float64）や Go の int を int64 にする
-func numberParam(v interface{}) (int64, bool) {
-	switch n := v.(type) {
-	case float64:
-		if n != float64(int64(n)) {
-			return 0, false
-		}
-		return int64(n), true
-	case int:
-		return int64(n), true
-	case int64:
-		return n, true
-	}
-	return 0, false
-}
-
-func stringParam(params map[string]interface{}, key string) string {
-	s, _ := params[key].(string)
-	return s
-}
-
-// paramInt は数値の項目を読む（文字列なら 10 進・0x・0b を受け付ける）
-func paramInt(params map[string]interface{}, key, label string, min, max int) (int, error) {
-	v, ok := params[key]
-	if !ok || v == nil {
-		return 0, fmt.Errorf("%sを入力してください", label)
-	}
-	var n int64
-	if s, isStr := v.(string); isStr {
-		parsed, err := parseInteger(s)
-		if err != nil {
-			return 0, fmt.Errorf("%s: %w", label, err)
-		}
-		n = parsed
-	} else if num, isNum := numberParam(v); isNum {
-		n = num
-	} else {
-		return 0, fmt.Errorf("%sが数値ではありません", label)
-	}
-	if n < int64(min) || n > int64(max) {
-		return 0, fmt.Errorf("%sは %d〜%d で指定してください", label, min, max)
-	}
-	return int(n), nil
-}
-
 func paramCoil(params map[string]interface{}, key string) (bool, error) {
 	switch v := params[key].(type) {
 	case bool:
@@ -349,88 +305,11 @@ func paramCoil(params map[string]interface{}, key string) (bool, error) {
 			return false, nil
 		}
 	default:
-		if n, ok := numberParam(v); ok && (n == 0 || n == 1) {
+		if n, ok := fields.Number(v); ok && (n == 0 || n == 1) {
 			return n == 1, nil
 		}
 	}
 	return false, fmt.Errorf("値は ON か OFF にしてください")
-}
-
-// parseInteger は 10 進・16 進（0x）・2 進（0b）の整数を読む。負の数も受け付ける
-func parseInteger(s string) (int64, error) {
-	s = strings.TrimSpace(s)
-	if s == "" {
-		return 0, fmt.Errorf("値を入力してください")
-	}
-	neg := false
-	body := s
-	if strings.HasPrefix(body, "-") {
-		neg = true
-		body = body[1:]
-	}
-	base := 10
-	lower := strings.ToLower(body)
-	switch {
-	case strings.HasPrefix(lower, "0x"):
-		base, body = 16, body[2:]
-	case strings.HasPrefix(lower, "0b"):
-		base, body = 2, body[2:]
-	}
-	n, err := strconv.ParseInt(strings.ReplaceAll(body, "_", ""), base, 64)
-	if err != nil {
-		return 0, fmt.Errorf("数値として読めません: %q", s)
-	}
-	if neg {
-		n = -n
-	}
-	return n, nil
-}
-
-// parseWord は 1 ワードの値を読む（-32768〜65535。負の数は 2 の補数にする）
-func parseWord(s string) (uint16, error) {
-	n, err := parseInteger(s)
-	if err != nil {
-		return 0, err
-	}
-	if n < -32768 || n > 65535 {
-		return 0, fmt.Errorf("%q は 1 ワードに入りません（-32768〜65535）", strings.TrimSpace(s))
-	}
-	return uint16(n), nil
-}
-
-func splitList(s string) []string {
-	return strings.FieldsFunc(s, func(r rune) bool {
-		return r == ',' || r == ' ' || r == '\t' || r == '\n' || r == '\r' || r == '、'
-	})
-}
-
-func parseWordList(s string) ([]uint16, error) {
-	parts := splitList(s)
-	words := make([]uint16, 0, len(parts))
-	for _, p := range parts {
-		w, err := parseWord(p)
-		if err != nil {
-			return nil, err
-		}
-		words = append(words, w)
-	}
-	return words, nil
-}
-
-func parseBitList(s string) ([]bool, error) {
-	parts := splitList(s)
-	bits := make([]bool, 0, len(parts))
-	for _, p := range parts {
-		switch strings.ToLower(p) {
-		case "1", "on", "true":
-			bits = append(bits, true)
-		case "0", "off", "false":
-			bits = append(bits, false)
-		default:
-			return nil, fmt.Errorf("%q は 1 か 0 ではありません", p)
-		}
-	}
-	return bits, nil
 }
 
 // --- 送受信 ---

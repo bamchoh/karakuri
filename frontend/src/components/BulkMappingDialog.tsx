@@ -5,6 +5,17 @@ import {
   UpdateVariableNodePublishing,
 } from "../../wailsjs/go/main/App";
 import { application } from "../../wailsjs/go/models";
+import {
+  convertAddress,
+  formatAddress,
+  isBitDataType,
+  isWordBitArea,
+  mappingAreaFor,
+  mappingWidthLabel,
+  parseAddress,
+  selectableAreas,
+  selectedAreaId,
+} from "../utils/address";
 import { useEscapeKey } from "./useEscapeKey";
 import { useNodeAddresses } from "./useNodeAddresses";
 import { BulkEditRow } from "./variableTypes";
@@ -26,7 +37,9 @@ interface Props {
   onChanged: () => Promise<void>;
 }
 
-// 全変数のマッピング（または公開設定）を、プロトコルごとにまとめて編集するダイアログ
+// 全変数のマッピング（または公開設定）を、プロトコルごとにまとめて編集するダイアログ。
+// 行の memoryArea は、変数の型に合ったエリア（BOOL なら、ビットごとに見るエリア）の ID。
+// エリアの選択肢には、ワードのエリアと同じメモリをビットごとに見るエリア（area.bitsOf）を出さない
 export const BulkMappingDialog = forwardRef<BulkMappingDialogHandle, Props>(
   function BulkMappingDialog(
     {
@@ -45,9 +58,8 @@ export const BulkMappingDialog = forwardRef<BulkMappingDialogHandle, Props>(
     const [bulkIsSaving, setBulkIsSaving] = useState(false);
     const { nodeAddresses, loadNodeAddresses } = useNodeAddresses();
 
-    const isOneOriginArea = (protocolType: string, areaId: string): boolean =>
-      (memoryAreasByProtocol[protocolType] || []).find((a) => a.id === areaId)
-        ?.oneOrigin ?? false;
+    const areaOf = (protocolType: string, areaId: string) =>
+      (memoryAreasByProtocol[protocolType] || []).find((a) => a.id === areaId);
 
     // 指定プロトコルが SupportsNodePublishing かどうか
     const isNodePublishingProtocol = (protocolType: string): boolean =>
@@ -60,10 +72,13 @@ export const BulkMappingDialog = forwardRef<BulkMappingDialogHandle, Props>(
       protocolType: string,
     ): BulkEditRow[] => {
       const isNP = isNodePublishingProtocol(protocolType);
-      const defaultArea =
-        (memoryAreasByProtocol[protocolType] || [])[0]?.id ?? "";
+      const areas = memoryAreasByProtocol[protocolType] || [];
+      const firstArea = selectableAreas(areas)[0]?.id ?? "";
       return vars.map((v) => {
         const wc = getWordCount(v.dataType);
+        const isBit = isBitDataType(v.dataType);
+        const defaultArea =
+          mappingAreaFor(areas, firstArea, isBit)?.id ?? firstArea;
         if (isNP) {
           const existing = (v.nodePublishings || []).find(
             (np) => np.protocolType === protocolType,
@@ -83,23 +98,35 @@ export const BulkMappingDialog = forwardRef<BulkMappingDialogHandle, Props>(
           const existing = (v.mappings || []).find(
             (m) => m.protocolType === protocolType,
           );
-          const oneOrigin = isOneOriginArea(
-            protocolType,
-            existing?.memoryArea ?? defaultArea,
-          );
+          // 保存してあるエリアを、変数の型に合ったエリアに直す。
+          // BOOL をワードのエリアに保存してあった場合、アドレスはもともとビットの番号なので、そのまま使う
+          const existingArea = existing
+            ? areaOf(protocolType, existing.memoryArea)
+            : undefined;
+          const targetArea = existing
+            ? (mappingAreaFor(areas, existing.memoryArea, isBit) ??
+              existingArea)
+            : undefined;
           const displayAddr =
             existing !== undefined
-              ? oneOrigin
-                ? existing.address + 1
-                : existing.address
+              ? formatAddress(
+                  targetArea,
+                  isBit
+                    ? existing.address
+                    : convertAddress(
+                        existingArea,
+                        targetArea,
+                        existing.address,
+                      ),
+                )
               : "";
           return {
             variableId: v.id,
             variableName: v.name,
             dataType: v.dataType,
             wordCount: wc,
-            memoryArea: existing?.memoryArea ?? defaultArea,
-            addressStr: existing !== undefined ? String(displayAddr) : "",
+            memoryArea: targetArea?.id ?? existing?.memoryArea ?? defaultArea,
+            addressStr: displayAddr,
             endianness: existing?.endianness ?? "big",
             nodeEnabled: false,
             accessMode: "readwrite",
@@ -154,20 +181,26 @@ export const BulkMappingDialog = forwardRef<BulkMappingDialogHandle, Props>(
       );
     };
 
-    // エリア変更（1オリジン変換を維持しながらアドレス文字列を再計算）
-    const handleBulkAreaChange = (variableId: string, newArea: string) => {
+    // エリア変更。選んだエリアを、変数の型に合ったエリアにする
+    const handleBulkAreaChange = (variableId: string, selected: string) => {
       setBulkRows((prev) =>
         prev.map((row) => {
           if (row.variableId !== variableId) return row;
-          const oldOneOrigin = isOneOriginArea(bulkProtocol, row.memoryArea);
-          const newOneOrigin = isOneOriginArea(bulkProtocol, newArea);
+          const oldArea = areaOf(bulkProtocol, row.memoryArea);
+          const target = mappingAreaFor(
+            memoryAreasByProtocol[bulkProtocol] || [],
+            selected,
+            isBitDataType(row.dataType),
+          );
+          const newArea = target?.id ?? selected;
+          // 入力済みのアドレスは、同じワードを指すようにして、新しいエリアの書き方に直す
           let newAddrStr = row.addressStr;
-          if (row.addressStr !== "") {
-            const parsed = parseInt(row.addressStr, 10);
-            if (!isNaN(parsed)) {
-              const addr0based = oldOneOrigin ? parsed - 1 : parsed;
-              newAddrStr = String(newOneOrigin ? addr0based + 1 : addr0based);
-            }
+          const addr0based = parseAddress(oldArea, row.addressStr);
+          if (addr0based !== null) {
+            newAddrStr = formatAddress(
+              target,
+              convertAddress(oldArea, target, addr0based),
+            );
           }
           return { ...row, memoryArea: newArea, addressStr: newAddrStr };
         }),
@@ -183,10 +216,11 @@ export const BulkMappingDialog = forwardRef<BulkMappingDialogHandle, Props>(
       const activeRows = rows
         .filter((row) => row.addressStr.trim() !== "")
         .map((row) => {
-          const parsed = parseInt(row.addressStr, 10);
-          if (isNaN(parsed)) return null;
-          const oneOrigin = isOneOriginArea(protocolType, row.memoryArea);
-          const addr0 = oneOrigin ? Math.max(0, parsed - 1) : parsed;
+          const addr0 = parseAddress(
+            areaOf(protocolType, row.memoryArea),
+            row.addressStr,
+          );
+          if (addr0 === null) return null;
           const wc = Math.max(1, row.wordCount);
           return {
             variableId: row.variableId,
@@ -252,10 +286,11 @@ export const BulkMappingDialog = forwardRef<BulkMappingDialogHandle, Props>(
             if (row.addressStr.trim() === "") {
               await UpdateVariableMappings(row.variableId, otherMappings);
             } else {
-              const parsed = parseInt(row.addressStr, 10);
-              if (isNaN(parsed)) continue;
-              const oneOrigin = isOneOriginArea(bulkProtocol, row.memoryArea);
-              const addr0based = oneOrigin ? Math.max(0, parsed - 1) : parsed;
+              const addr0based = parseAddress(
+                areaOf(bulkProtocol, row.memoryArea),
+                row.addressStr,
+              );
+              if (addr0based === null) continue;
               await UpdateVariableMappings(row.variableId, [
                 ...otherMappings,
                 {
@@ -379,7 +414,7 @@ export const BulkMappingDialog = forwardRef<BulkMappingDialogHandle, Props>(
                         <tr>
                           <th className="col-name">変数名</th>
                           <th className="col-type">データ型</th>
-                          <th className="col-words">W数</th>
+                          <th className="col-words">ビット幅</th>
                           <th className="col-area">メモリエリア</th>
                           <th className="col-address">
                             アドレス
@@ -392,10 +427,8 @@ export const BulkMappingDialog = forwardRef<BulkMappingDialogHandle, Props>(
                         {bulkRows.map((row) => {
                           const areas =
                             memoryAreasByProtocol[bulkProtocol] || [];
-                          const oneOrigin = isOneOriginArea(
-                            bulkProtocol,
-                            row.memoryArea,
-                          );
+                          const rowArea = areaOf(bulkProtocol, row.memoryArea);
+                          const wordBit = isWordBitArea(rowArea);
                           const hasConflict = conflictIds.has(row.variableId);
                           return (
                             <tr
@@ -406,10 +439,12 @@ export const BulkMappingDialog = forwardRef<BulkMappingDialogHandle, Props>(
                             >
                               <td className="cell-name">{row.variableName}</td>
                               <td className="cell-type">{row.dataType}</td>
-                              <td className="cell-center">{row.wordCount}</td>
+                              <td className="cell-center">
+                                {mappingWidthLabel(row.dataType, row.wordCount)}
+                              </td>
                               <td>
                                 <select
-                                  value={row.memoryArea}
+                                  value={selectedAreaId(areas, row.memoryArea)}
                                   onChange={(e) =>
                                     handleBulkAreaChange(
                                       row.variableId,
@@ -417,7 +452,7 @@ export const BulkMappingDialog = forwardRef<BulkMappingDialogHandle, Props>(
                                     )
                                   }
                                 >
-                                  {areas.map((a) => (
+                                  {selectableAreas(areas).map((a) => (
                                     <option key={a.id} value={a.id}>
                                       {a.displayName}
                                     </option>
@@ -427,10 +462,14 @@ export const BulkMappingDialog = forwardRef<BulkMappingDialogHandle, Props>(
                               <td>
                                 <div className="bulk-address-cell">
                                   <input
-                                    type="number"
+                                    type={wordBit ? "text" : "number"}
                                     value={row.addressStr}
-                                    min={oneOrigin ? 1 : 0}
-                                    placeholder="未設定"
+                                    min={rowArea?.oneOrigin ? 1 : 0}
+                                    placeholder={
+                                      wordBit
+                                        ? "未設定（例: 100.05）"
+                                        : "未設定"
+                                    }
                                     onChange={(e) =>
                                       handleBulkRowChange(row.variableId, {
                                         addressStr: e.target.value,

@@ -111,6 +111,11 @@ type MemoryArea struct {
 	ByteAddressing bool   `json:"byteAddressing"` // trueの場合、アドレスをバイトベースで表示
 	OneOrigin      bool   `json:"oneOrigin"`      // trueの場合、UIでのアドレス表示を1オリジンにする
 	ShortName      string `json:"shortName"`      // マッピング一覧などに表示する短い名前（空なら ID を使う）
+	// BitsOf は、このエリアが、別のワードのエリアと同じメモリをビットごとに見たものであるとき、そのワードのエリアの ID。
+	// アドレスは「ワード × 16 + ビット」。IsBit が true のエリアにだけ指定する。
+	// ホストは、片方に書かれたら、もう片方にマッピングした変数にも反映する。
+	// 画面は、アドレスを「ワード.ビット」（100.05）の形で表示する
+	BitsOf string `json:"bitsOf,omitempty"`
 }
 
 // ConfigField は設定フィールドの定義

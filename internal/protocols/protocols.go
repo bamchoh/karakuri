@@ -7,6 +7,7 @@ package protocols
 
 import (
 	"karakuri/internal/domain/protocol"
+	"karakuri/internal/protocols/fins"
 	"karakuri/internal/protocols/modbus"
 	"karakuri/internal/protocols/opcua"
 )
@@ -18,6 +19,7 @@ func Factories() []protocol.ServerFactory {
 		&modbus.RTUFactory{},
 		&modbus.ASCIIFactory{},
 		&opcua.Factory{},
+		&fins.Factory{},
 	}
 }
 
@@ -26,5 +28,6 @@ func ClientFactories() []protocol.ClientFactory {
 	return []protocol.ClientFactory{
 		&modbus.TCPClientFactory{},
 		&opcua.ClientFactory{},
+		&fins.ClientFactory{},
 	}
 }

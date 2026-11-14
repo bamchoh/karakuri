@@ -5,6 +5,15 @@ import {
   UpdateVariableNodePublishing,
 } from "../../wailsjs/go/main/App";
 import { application } from "../../wailsjs/go/models";
+import { AddressInput } from "./AddressInput";
+import {
+  convertAddress,
+  isBitDataType,
+  mappingAreaFor,
+  mappingWidthLabel,
+  selectableAreas,
+  selectedAreaId,
+} from "../utils/address";
 import { useEscapeKey } from "./useEscapeKey";
 import { useNodeAddresses } from "./useNodeAddresses";
 
@@ -25,7 +34,9 @@ interface Props {
   onChanged: () => Promise<void>;
 }
 
-// 1 つの変数のマッピング（レジスタ型プロトコル）と公開設定（ノード公開型プロトコル）を編集するダイアログ
+// 1 つの変数のマッピング（レジスタ型プロトコル）と公開設定（ノード公開型プロトコル）を編集するダイアログ。
+// ワードのエリアと同じメモリをビットごとに見るエリア（area.bitsOf）は、選択肢に出さない。
+// 変数の型に合わせて、BOOL ならビットごとに見るエリア（アドレスは「ワード.ビット」）、ほかの型ならワードのエリアに保存する
 export const MappingDialog = forwardRef<MappingDialogHandle, Props>(
   function MappingDialog(
     {
@@ -49,9 +60,42 @@ export const MappingDialog = forwardRef<MappingDialogHandle, Props>(
     >([]);
     const { nodeAddresses, loadNodeAddresses } = useNodeAddresses();
 
-    const isOneOriginArea = (protocolType: string, areaId: string): boolean =>
-      (memoryAreasByProtocol[protocolType] || []).find((a) => a.id === areaId)
-        ?.oneOrigin ?? false;
+    const areasOf = (protocolType: string) =>
+      memoryAreasByProtocol[protocolType] || [];
+    const areaOf = (protocolType: string, areaId: string) =>
+      areasOf(protocolType).find((a) => a.id === areaId);
+    const isBitVariable = isBitDataType(mappingVariable?.dataType ?? "");
+
+    // マッピングを、変数の型に合ったエリアに直したものを返す（画面にはこれを出し、これを保存する）。
+    // BOOL をワードのエリアに保存してあった場合、アドレスはもともとビットの番号なので、そのまま使う
+    const effective = (
+      m: application.ProtocolMappingDTO,
+    ): application.ProtocolMappingDTO => {
+      const target = mappingAreaFor(
+        areasOf(m.protocolType),
+        m.memoryArea,
+        isBitVariable,
+      );
+      if (!target || target.id === m.memoryArea) return m;
+      return {
+        ...m,
+        memoryArea: target.id,
+        address: isBitVariable
+          ? m.address
+          : convertAddress(
+              areaOf(m.protocolType, m.memoryArea),
+              target,
+              m.address,
+            ),
+      } as application.ProtocolMappingDTO;
+    };
+
+    // プロトコルの、最初に選ばれるエリア（変数の型に合ったもの）
+    const defaultAreaId = (protocolType: string): string => {
+      const areas = areasOf(protocolType);
+      const first = selectableAreas(areas)[0]?.id || "";
+      return mappingAreaFor(areas, first, isBitVariable)?.id ?? first;
+    };
 
     // マッピングダイアログを開く
     const open = async (v: application.VariableDTO) => {
@@ -105,13 +149,11 @@ export const MappingDialog = forwardRef<MappingDialogHandle, Props>(
     // マッピングを追加
     const handleAddMapping = () => {
       const firstProtocol = serverInstances[0]?.protocolType || "";
-      const firstArea =
-        (memoryAreasByProtocol[firstProtocol] || [])[0]?.id || "";
       setEditMappings([
         ...editMappings,
         {
           protocolType: firstProtocol,
-          memoryArea: firstArea,
+          memoryArea: defaultAreaId(firstProtocol),
           address: 0,
           endianness: "big",
         } as application.ProtocolMappingDTO,
@@ -136,7 +178,10 @@ export const MappingDialog = forwardRef<MappingDialogHandle, Props>(
         }
       }
       try {
-        await UpdateVariableMappings(mappingVariable.id, editMappings);
+        await UpdateVariableMappings(
+          mappingVariable.id,
+          editMappings.map(effective),
+        );
         for (const pub of editNodePublishings) {
           await UpdateVariableNodePublishing(
             mappingVariable.id,
@@ -163,12 +208,13 @@ export const MappingDialog = forwardRef<MappingDialogHandle, Props>(
               この変数をプロトコルのアドレスにマッピングします。
             </p>
 
-            {editMappings.map((m, index) => (
+            {editMappings.map(effective).map((m, index) => (
               <div key={index} className="dialog-section">
                 {/* ヘッダ行 */}
                 <div className="dialog-row">
                   <label className="mapping-col">プロトコル</label>
                   <label className="mapping-col">メモリエリア</label>
+                  <label className="mapping-col-width">ビット幅</label>
                   <label className="mapping-col">アドレス</label>
                   <label className="mapping-col">エンディアン</label>
                   <span className="mapping-col-spacer"></span>
@@ -181,12 +227,16 @@ export const MappingDialog = forwardRef<MappingDialogHandle, Props>(
                     onChange={(e) => {
                       const updated = [...editMappings];
                       const newProtocol = e.target.value;
-                      const firstArea =
-                        (memoryAreasByProtocol[newProtocol] || [])[0]?.id || "";
+                      const firstArea = defaultAreaId(newProtocol);
                       updated[index] = {
-                        ...updated[index],
+                        ...m,
                         protocolType: newProtocol,
                         memoryArea: firstArea,
+                        address: convertAddress(
+                          areaOf(m.protocolType, m.memoryArea),
+                          areaOf(newProtocol, firstArea),
+                          m.address,
+                        ),
                       };
                       setEditMappings(updated);
                     }}
@@ -200,54 +250,68 @@ export const MappingDialog = forwardRef<MappingDialogHandle, Props>(
 
                   <select
                     className="mapping-col"
-                    value={m.memoryArea}
+                    value={selectedAreaId(
+                      areasOf(m.protocolType),
+                      m.memoryArea,
+                    )}
                     onChange={(e) => {
+                      // 選んだエリアを、変数の型に合ったエリアにして、同じワードを指すようにアドレスを直す
+                      const target = mappingAreaFor(
+                        areasOf(m.protocolType),
+                        e.target.value,
+                        isBitVariable,
+                      );
                       const updated = [...editMappings];
                       updated[index] = {
-                        ...updated[index],
-                        memoryArea: e.target.value,
+                        ...m,
+                        memoryArea: target?.id ?? e.target.value,
+                        address: convertAddress(
+                          areaOf(m.protocolType, m.memoryArea),
+                          target,
+                          m.address,
+                        ),
                       };
                       setEditMappings(updated);
                     }}
                   >
-                    {(memoryAreasByProtocol[m.protocolType] || []).map((a) => (
+                    {selectableAreas(areasOf(m.protocolType)).map((a) => (
                       <option key={a.id} value={a.id}>
                         {a.displayName}
                       </option>
                     ))}
                   </select>
 
-                  <input
+                  <span className="mapping-col-width mapping-width">
+                    {mappingWidthLabel(
+                      mappingVariable.dataType,
+                      getWordCount(mappingVariable.dataType),
+                    )}
+                  </span>
+
+                  <AddressInput
                     className="mapping-col"
-                    type="number"
-                    value={
-                      isOneOriginArea(m.protocolType, m.memoryArea)
-                        ? m.address + 1
-                        : m.address
-                    }
-                    onChange={(e) => {
-                      const oneOrigin = isOneOriginArea(
-                        m.protocolType,
-                        m.memoryArea,
-                      );
-                      const v = parseInt(e.target.value) || (oneOrigin ? 1 : 0);
+                    area={areaOf(m.protocolType, m.memoryArea)}
+                    value={m.address}
+                    onChange={(address) => {
                       const updated = [...editMappings];
-                      updated[index] = {
-                        ...updated[index],
-                        address: oneOrigin ? Math.max(0, v - 1) : v,
-                      };
+                      updated[index] = { ...m, address };
                       setEditMappings(updated);
                     }}
-                    min={isOneOriginArea(m.protocolType, m.memoryArea) ? 1 : 0}
                   />
 
                   <select
                     className="mapping-col"
                     value={m.endianness}
+                    disabled={isBitVariable}
+                    title={
+                      isBitVariable
+                        ? "1 ビットの変数には関係しません"
+                        : undefined
+                    }
                     onChange={(e) => {
                       const updated = [...editMappings];
                       updated[index] = {
-                        ...updated[index],
+                        ...m,
                         endianness: e.target.value,
                       };
                       setEditMappings(updated);

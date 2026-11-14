@@ -60,10 +60,12 @@ type clientManager struct {
 	mu        sync.Mutex
 	varStore  *variable.VariableStore
 	factories map[protocol.ProtocolType]protocol.ClientFactory
-	clients   map[string]*clientInstance
-	seq       int
-	logs      []ClientCommandLogDTO // 古い順。最大 maxClientCommandLogs 件
-	logSeq    int64
+	// factoryOrder は、ファクトリーを登録した順（画面のプロトコルの並びと、既定のプロトコルになる）
+	factoryOrder []protocol.ProtocolType
+	clients      map[string]*clientInstance
+	seq          int
+	logs         []ClientCommandLogDTO // 古い順。最大 maxClientCommandLogs 件
+	logSeq       int64
 }
 
 func newClientManager(varStore *variable.VariableStore) *clientManager {
@@ -79,6 +81,9 @@ func (s *PLCService) RegisterClientFactory(factory protocol.ClientFactory) {
 	m := s.clients
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	if _, exists := m.factories[factory.ProtocolType()]; !exists {
+		m.factoryOrder = append(m.factoryOrder, factory.ProtocolType())
+	}
 	m.factories[factory.ProtocolType()] = factory
 }
 
@@ -111,17 +116,16 @@ func toFieldDTOs(fields []protocol.ConfigField) []FieldDTO {
 	return dtos
 }
 
-// GetClientProtocols はクライアントとして使えるプロトコル（接続先の設定項目・コマンドの定義）の一覧を返す
+// GetClientProtocols はクライアントとして使えるプロトコル（接続先の設定項目・コマンドの定義）の一覧を、登録した順に返す
 func (s *PLCService) GetClientProtocols() []ClientProtocolDTO {
 	m := s.clients
 	m.mu.Lock()
-	factories := make([]protocol.ClientFactory, 0, len(m.factories))
-	for _, f := range m.factories {
-		factories = append(factories, f)
+	factories := make([]protocol.ClientFactory, 0, len(m.factoryOrder))
+	for _, pt := range m.factoryOrder {
+		factories = append(factories, m.factories[pt])
 	}
 	m.mu.Unlock()
 
-	sort.Slice(factories, func(i, j int) bool { return factories[i].ProtocolType() < factories[j].ProtocolType() })
 	result := make([]ClientProtocolDTO, len(factories))
 	for i, f := range factories {
 		cmds := f.Commands()

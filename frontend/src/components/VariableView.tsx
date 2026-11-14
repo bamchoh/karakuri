@@ -10,6 +10,7 @@ import {
 } from "../../wailsjs/go/main/App";
 import { EventsOn } from "../../wailsjs/runtime/runtime";
 import { application } from "../../wailsjs/go/models";
+import { formatAddress } from "../utils/address";
 import {
   AddVariableDialog,
   AddVariableDialogHandle,
@@ -556,9 +557,8 @@ export function VariableView() {
     (memoryAreasByProtocol[protocolType] || []).find((a) => a.id === areaId)
       ?.shortName || areaId;
 
-  const isOneOriginArea = (protocolType: string, areaId: string): boolean =>
-    (memoryAreasByProtocol[protocolType] || []).find((a) => a.id === areaId)
-      ?.oneOrigin ?? false;
+  const areaOf = (protocolType: string, areaId: string) =>
+    (memoryAreasByProtocol[protocolType] || []).find((a) => a.id === areaId);
 
   // 変数のマッピングが他の変数と重複しているか確認し、変数名一覧を返す（テーブル表示用）
   const getVariableMappingConflicts = (
@@ -597,9 +597,10 @@ export function VariableView() {
     if (!mappings || mappings.length === 0) return "-";
     return mappings
       .map((m) => {
-        const addr = isOneOriginArea(m.protocolType, m.memoryArea)
-          ? m.address + 1
-          : m.address;
+        const addr = formatAddress(
+          areaOf(m.protocolType, m.memoryArea),
+          m.address,
+        );
         // 接続先は ID ではなく名前（label）で出す。サーバーは protocolType のまま
         const label =
           serverInstances.find((t) => t.protocolType === m.protocolType)
@@ -637,9 +638,10 @@ export function VariableView() {
     if (!mappings || mappings.length === 0) return "-";
     return mappings
       .map((m) => {
-        const addr = isOneOriginArea(m.protocolType, m.memoryArea)
-          ? m.address + offset + 1
-          : m.address + offset;
+        const addr = formatAddress(
+          areaOf(m.protocolType, m.memoryArea),
+          m.address + offset,
+        );
         return `${areaShortName(m.protocolType, m.memoryArea)}:${addr}`;
       })
       .join(", ");

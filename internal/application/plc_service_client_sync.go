@@ -80,6 +80,7 @@ func toMemoryAreaDTOs(areas []protocol.MemoryArea) []MemoryAreaDTO {
 			ByteAddressing: area.ByteAddressing,
 			OneOrigin:      area.OneOrigin,
 			ShortName:      area.ShortName,
+			BitsOf:         area.BitsOf,
 		}
 	}
 	return result

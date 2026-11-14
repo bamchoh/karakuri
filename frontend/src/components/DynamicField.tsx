@@ -1,6 +1,22 @@
 import { application } from "../../wailsjs/go/models";
 import { FolderTree } from "lucide-react";
 
+// 表示条件（field.showWhen）を満たす項目だけを返す。
+// 条件は「別の項目の値が、決まった値のとき」。まだ入力していない項目は、既定値で判定する
+export function visibleFields(
+  fields: application.FieldDTO[],
+  values: Record<string, any> | undefined,
+): application.FieldDTO[] {
+  return fields.filter((field) => {
+    const cond = field.showWhen;
+    if (!cond) return true;
+    const current =
+      values?.[cond.field] ??
+      fields.find((f) => f.name === cond.field)?.default;
+    return String(current) === cond.value;
+  });
+}
+
 // サーバー設定の 1 項目。プロトコルの実装が返す項目の定義（種類・選択肢・範囲）に合わせて入力欄を出す
 interface DynamicFieldProps {
   field: application.FieldDTO;

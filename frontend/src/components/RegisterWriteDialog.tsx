@@ -20,7 +20,8 @@ interface Props {
   area: string;
   address: number;
   // 画面に出すアドレス（1 始まりのエリアなら +1 したもの）と現在の値
-  displayAddress: number;
+  // 表示用のアドレス（1 始まりのエリアは +1 した番号、「ワード.ビット」のエリアは "100.05"）
+  displayAddress: number | string;
   currentValueText: string;
   isBit: boolean;
   // ビットの値の入れ方: "buttons" は ON / OFF のボタン、"text" は文字（0, 1, ON, OFF）

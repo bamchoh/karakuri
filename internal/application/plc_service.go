@@ -2,7 +2,6 @@ package application
 
 import (
 	"fmt"
-	"sort"
 	"sync"
 	"time"
 
@@ -30,6 +29,8 @@ type PLCService struct {
 
 	// 登録済みプロトコルファクトリー（protocolType → factory）
 	factories map[protocol.ProtocolType]protocol.ServerFactory
+	// factoryOrder は、ファクトリーを登録した順（画面のプロトコルの並びになる）
+	factoryOrder []protocol.ProtocolType
 
 	// 中央変数ストア
 	variableStore *variable.VariableStore
@@ -104,18 +105,26 @@ func NewPLCService() *PLCService {
 func (s *PLCService) RegisterFactory(factory protocol.ServerFactory) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if _, exists := s.factories[factory.ProtocolType()]; !exists {
+		s.factoryOrder = append(s.factoryOrder, factory.ProtocolType())
+	}
 	s.factories[factory.ProtocolType()] = factory
 }
 
 // === サーバーインスタンス管理 ===
 
-// GetServerInstances はサーバーインスタンス一覧を返す
+// GetServerInstances はサーバーインスタンス一覧を、プロトコルを登録した順に返す
 func (s *PLCService) GetServerInstances() []ServerInstanceDTO {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
 	result := make([]ServerInstanceDTO, 0, len(s.servers))
-	for _, inst := range s.servers {
+	// プロトコルを登録した順に並べる（追加ダイアログの並びと同じ）
+	for _, pt := range s.factoryOrder {
+		inst, ok := s.servers[pt]
+		if !ok {
+			continue
+		}
 		status := "Stopped"
 		if inst.server != nil {
 			status = inst.server.Status().String()
@@ -129,11 +138,6 @@ func (s *PLCService) GetServerInstances() []ServerInstanceDTO {
 			SupportsNodePublishing: caps.SupportsNodePublishing,
 		})
 	}
-
-	// プロトコルタイプ順にソート（安定した順序）
-	sort.Slice(result, func(i, j int) bool {
-		return result[i].ProtocolType < result[j].ProtocolType
-	})
 
 	return result
 }

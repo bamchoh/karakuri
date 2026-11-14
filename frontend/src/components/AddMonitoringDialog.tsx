@@ -1,6 +1,12 @@
 import { useState } from "react";
 import { FocusTrap } from "./FocusTrap";
 import { application } from "../../wailsjs/go/models";
+import { AddressInput } from "./AddressInput";
+import {
+  BITS_PER_WORD,
+  bitViewAreaOf,
+  selectableAreas,
+} from "../utils/address";
 
 import {
   BIT_WIDTHS,
@@ -42,18 +48,31 @@ export function AddMonitoringDialog({
   const [formAddress, setFormAddress] = useState(0);
   const [formCount, setFormCount] = useState(1);
   const [formBitWidth, setFormBitWidth] = useState<BitWidth>(16);
+  // ビット幅で「1bit」を選んでいるか（ワードのエリアを、ビットごとに見る）
+  const [formOneBit, setFormOneBit] = useState(false);
   const [formEndianness, setFormEndianness] = useState<Endianness>("big");
   const [formDisplayFormat, setFormDisplayFormat] =
     useState<DisplayFormat>("decimal");
 
   const formProtocolType =
     selectedProtocolType || serverInstances[0]?.protocolType || "";
-  const formAreas = memoryAreasByProtocol[formProtocolType] || [];
+  const allAreas = memoryAreasByProtocol[formProtocolType] || [];
+  // ワードのエリアと同じメモリを見るビットのエリアは、選択肢に出さない（ビット幅の「1bit」で選ぶ）
+  const formAreas = selectableAreas(allAreas);
   const formArea =
     selectedArea ||
     formAreas.find((a) => !a.isBit)?.id ||
     formAreas[0]?.id ||
     "";
+
+  // 「1bit」を選べるエリアなら、ビットごとに見るエリア
+  const bitViewArea = bitViewAreaOf(allAreas, formArea);
+  const oneBit = formOneBit && !!bitViewArea;
+  // 実際に読み書きするエリア（「1bit」のときは、ビットごとに見るエリア）
+  const targetArea = oneBit
+    ? bitViewArea
+    : formAreas.find((a) => a.id === formArea);
+  const targetAreaId = targetArea?.id ?? formArea;
 
   // フォームのプロトコル変更（エリアは、そのプロトコルの既定に戻す）
   const handleFormProtocolChange = (protocolType: string) => {
@@ -61,26 +80,44 @@ export function AddMonitoringDialog({
     setSelectedArea("");
   };
 
-  // 選択されたエリアがビットタイプかどうか
-  const selectedAreaIsBit =
-    formAreas.find((a) => a.id === formArea)?.isBit ?? false;
-  const isOneOriginFormArea =
-    formAreas.find((a) => a.id === formArea)?.oneOrigin ?? false;
+  // ビット幅の変更。「1bit」との切り替えでは、同じワードを指すようにアドレスを直す
+  const handleBitWidthChange = (value: string) => {
+    const nextOneBit = value === "1";
+    if (nextOneBit !== oneBit) {
+      setFormAddress(
+        nextOneBit
+          ? formAddress * BITS_PER_WORD
+          : Math.floor(formAddress / BITS_PER_WORD),
+      );
+    }
+    setFormOneBit(nextOneBit);
+    if (!nextOneBit) setFormBitWidth(parseInt(value) as BitWidth);
+  };
+
+  // エリアの変更。「1bit」を選べないエリアに変えたら、アドレスをワードの番号に戻す
+  const handleAreaChange = (areaId: string) => {
+    if (oneBit && !bitViewAreaOf(allAreas, areaId)) {
+      setFormAddress(Math.floor(formAddress / BITS_PER_WORD));
+      setFormOneBit(false);
+    }
+    setSelectedArea(areaId);
+  };
+
+  const targetIsBit = targetArea?.isBit ?? false;
+
+  const save = () =>
+    onSave(
+      formProtocolType,
+      targetAreaId,
+      formAddress,
+      formCount,
+      formBitWidth,
+      formEndianness,
+      formDisplayFormat,
+    );
 
   return (
-    <FocusTrap
-      onConfirm={() =>
-        onSave(
-          formProtocolType,
-          formArea,
-          formAddress,
-          formCount,
-          formBitWidth,
-          formEndianness,
-          formDisplayFormat,
-        )
-      }
-    >
+    <FocusTrap onConfirm={save}>
       <div className="dialog">
         <h3>モニタリング項目を追加</h3>
 
@@ -105,7 +142,7 @@ export function AddMonitoringDialog({
             <label>メモリエリア:</label>
             <select
               value={formArea}
-              onChange={(e) => setSelectedArea(e.target.value)}
+              onChange={(e) => handleAreaChange(e.target.value)}
             >
               {formAreas.map((area) => (
                 <option key={area.id} value={area.id}>
@@ -117,16 +154,10 @@ export function AddMonitoringDialog({
 
           <div className="dialog-row">
             <label>開始アドレス:</label>
-            <input
-              type="number"
-              min={isOneOriginFormArea ? "1" : "0"}
-              max="65535"
-              value={isOneOriginFormArea ? formAddress + 1 : formAddress}
-              onChange={(e) => {
-                const v =
-                  parseInt(e.target.value) || (isOneOriginFormArea ? 1 : 0);
-                setFormAddress(isOneOriginFormArea ? Math.max(0, v - 1) : v);
-              }}
+            <AddressInput
+              area={targetArea}
+              value={formAddress}
+              onChange={setFormAddress}
             />
           </div>
 
@@ -141,24 +172,25 @@ export function AddMonitoringDialog({
             />
           </div>
 
-          {!selectedAreaIsBit && (
-            <>
-              <div className="dialog-row">
-                <label>ビット幅:</label>
-                <select
-                  value={formBitWidth}
-                  onChange={(e) =>
-                    setFormBitWidth(parseInt(e.target.value) as BitWidth)
-                  }
-                >
-                  {BIT_WIDTHS.map((b) => (
-                    <option key={b.value} value={b.value}>
-                      {b.label}
-                    </option>
-                  ))}
-                </select>
-              </div>
+          {(!targetIsBit || oneBit) && (
+            <div className="dialog-row">
+              <label>ビット幅:</label>
+              <select
+                value={oneBit ? "1" : formBitWidth}
+                onChange={(e) => handleBitWidthChange(e.target.value)}
+              >
+                {bitViewArea && <option value="1">1bit</option>}
+                {BIT_WIDTHS.map((b) => (
+                  <option key={b.value} value={b.value}>
+                    {b.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
 
+          {!targetIsBit && (
+            <>
               <div className="dialog-row">
                 <label>エンディアン:</label>
                 <select
@@ -198,20 +230,7 @@ export function AddMonitoringDialog({
           <button onClick={onClose} className="btn-secondary">
             キャンセル
           </button>
-          <button
-            onClick={() =>
-              onSave(
-                formProtocolType,
-                formArea,
-                formAddress,
-                formCount,
-                formBitWidth,
-                formEndianness,
-                formDisplayFormat,
-              )
-            }
-            className="btn-primary"
-          >
+          <button onClick={save} className="btn-primary">
             追加
           </button>
         </div>

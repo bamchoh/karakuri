@@ -1929,6 +1929,17 @@ button:disabled {
   width: 60px;
 }
 
+/* ビット幅の列（変数の型で決まる。選べない） */
+.dialog-row .mapping-col-width {
+  flex: 0 0 64px;
+  text-align: center;
+}
+
+.dialog-row .mapping-width {
+  color: var(--text-muted);
+  font-size: 0.9rem;
+}
+
 .dialog-section.publish-section {
   margin-top: 16px;
 }
