@@ -365,6 +365,63 @@ test.describe("モニタリング", () => {
     expect((await items(page)).map((i) => i.address)).toEqual([1, 0]);
   });
 
+  test("ほかのサーバーの項目があっても、ドラッグした位置に並べ替えられる", async ({
+    page,
+  }) => {
+    // 全体の並び: TCP 1、RTU 5、TCP 3、RTU 6、TCP 8（アドレスは表示の番号）
+    await api(page, "AddServer", "modbus-rtu", "");
+    const rtu = { protocolType: "modbus-rtu" };
+    await addItem(page, 0);
+    await addItem(page, 4, rtu);
+    await addItem(page, 2);
+    await addItem(page, 5, rtu);
+    await addItem(page, 7);
+    const order = async () =>
+      (await items(page)).map(
+        (i) => (i.protocolType === "modbus-rtu" ? "RTU" : "TCP") + i.address,
+      );
+    expect(await order()).toEqual(["TCP0", "RTU4", "TCP2", "RTU5", "TCP7"]);
+
+    await openRegisters(page, "モニタリング");
+    await expect(rows(page)).toHaveCount(3);
+    const addresses = () =>
+      rows(page).evaluateAll((trs) =>
+        trs.map((tr) => tr.querySelectorAll("td")[2].textContent),
+      );
+    expect(await addresses()).toEqual(["1", "3", "8"]);
+
+    // TCP の先頭の行を、TCP の 3 行目の位置までドラッグする
+    const handle = rows(page).nth(0).locator(".monitoring-drag-handle");
+    const from = (await handle.boundingBox())!;
+    const to = (await rows(page)
+      .nth(2)
+      .locator(".monitoring-drag-handle")
+      .boundingBox())!;
+    await page.mouse.move(from.x + from.width / 2, from.y + from.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(to.x + to.width / 2, to.y + to.height / 2 + 4, {
+      steps: 12,
+    });
+    await page.mouse.up();
+    await expect.poll(addresses).toEqual(["3", "8", "1"]);
+
+    // 保存される並びでも、TCP の項目は見えている順になり、RTU の項目どうしの順は変わらない
+    await expect
+      .poll(async () => (await order()).filter((x) => x.startsWith("TCP")))
+      .toEqual(["TCP2", "TCP7", "TCP0"]);
+    expect((await order()).filter((x) => x.startsWith("RTU"))).toEqual([
+      "RTU4",
+      "RTU5",
+    ]);
+    expect(await order()).toHaveLength(5);
+
+    // RTU の側から見ても、並びは変わっていない
+    await page.waitForTimeout(500);
+    await openRegisters(page, "モニタリング", "Modbus RTU");
+    await expect(rows(page)).toHaveCount(2);
+    expect(await addresses()).toEqual(["5", "6"]);
+  });
+
   test("サーバーが複数あっても、選んだサーバーの項目だけを出す", async ({
     page,
   }) => {
