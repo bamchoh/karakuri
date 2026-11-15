@@ -158,3 +158,92 @@ func TestHW_SerialClient_VariableMapping(t *testing.T) {
 		})
 	}
 }
+
+const finsHostLink = "fins-hostlink"
+
+// FINS の Host Link: Karakuri のサーバー（COM の片側）に、Karakuri のクライアント（もう片側）からつなぐ
+func TestHW_FINSHostLink_AgainstOwnServer(t *testing.T) {
+	for _, baud := range []int{9600, 115200} {
+		t.Run(fmt.Sprintf("%dbps", baud), func(t *testing.T) {
+			svc := newService(t)
+			c := startSerialPair(t, svc, finsHostLink, baud)
+
+			send := func(hex string) application.ClientCommandLogDTO {
+				t.Helper()
+				r, err := svc.SendClientRequest(c.ID, hex)
+				must(t, err)
+				return *r
+			}
+
+			// DM 100 から 3 ワード書いて（0102）、サーバーのメモリに入る
+			if r := send("01 02 82 00 64 00 00 03 00 0B 00 16 00 21"); r.Status != "ok" {
+				t.Fatalf("書き込み: %s %s", r.Status, r.Error)
+			}
+			if w, _ := svc.ReadWords(finsHostLink, "DM", 100, 3); !reflect.DeepEqual(w, []int{11, 22, 33}) {
+				t.Errorf("サーバーの DM = %v", w)
+			}
+			// 読み出し（0101）
+			must(t, svc.WriteWord(finsHostLink, "DM", 200, 4321))
+			r := send("01 01 82 00 C8 00 00 01")
+			if r.Status != "ok" || len(r.Values) != 1 || r.Values[0].Word == nil || *r.Values[0].Word != 4321 {
+				t.Fatalf("読み出し: %+v", r)
+			}
+			// 長い応答（1 フレームで返る）。9600bps・7E2 は 1 文字 11 ビットなので、500 ワード（約 2000 文字）は
+			// 2 秒を超える。タイムアウト（2 秒）に収まるよう 100 ワードにする
+			count := 500
+			if baud == 9600 {
+				count = 100
+			}
+			r = send(fmt.Sprintf("01 01 82 00 00 00 %02X %02X", count>>8, count&0xFF))
+			if r.Status != "ok" || len(r.Values) != count {
+				t.Fatalf("%d ワード: %s %s（%d 個）", count, r.Status, r.Error, len(r.Values))
+			}
+			// FINS の異常終了（未定義のコマンド）
+			if r := send("29 99"); r.Status != "exception" {
+				t.Errorf("未定義のコマンド: %s %s", r.Status, r.Error)
+			}
+
+			start := time.Now()
+			for range 30 {
+				if r := send("01 01 82 00 00 00 00 01"); r.Status != "ok" {
+					t.Fatalf("連続: %s %s", r.Status, r.Error)
+				}
+			}
+			t.Logf("0101（1 ワード）30 回 平均 %v", time.Since(start)/30)
+			svc.Shutdown()
+		})
+	}
+}
+
+func TestHW_FINSHostLink_VariableMapping(t *testing.T) {
+	svc := newService(t)
+	c := startSerialPair(t, svc, finsHostLink, 115200)
+	must(t, svc.SetClientPollInterval(c.ID, 100))
+	key := "client:" + c.ID
+
+	must(t, svc.WriteWord(finsHostLink, "DM", 50, 0))
+	must(t, svc.WriteWord(finsHostLink, "DM", 51, 321))
+	v, err := svc.CreateVariable("remote", "DINT", 0)
+	must(t, err)
+	must(t, svc.UpdateVariableMappings(v.ID, []application.ProtocolMappingDTO{{ProtocolType: key, MemoryArea: "DM", Address: 50, Endianness: "big"}}))
+	must(t, svc.StartClientPolling(c.ID))
+
+	waitUntil := func(what string, cond func() bool) {
+		t.Helper()
+		deadline := time.Now().Add(5 * time.Second)
+		for !cond() {
+			if time.Now().After(deadline) {
+				t.Fatalf("待っても %s にならない（値 %s、状態 %+v）", what, variableValue(t, svc, v.ID), svc.VariableDeviceStatus(v.ID))
+			}
+			time.Sleep(20 * time.Millisecond)
+		}
+	}
+	waitUntil("機器の値を読む", func() bool { return variableValue(t, svc, v.ID) == "321" })
+	must(t, svc.UpdateVariableValue(v.ID, 70000))
+	waitUntil("書く", func() bool {
+		w, _ := svc.ReadWords(finsHostLink, "DM", 50, 2)
+		return reflect.DeepEqual(w, []int{1, 70000 - 65536})
+	})
+	_ = svc.StopClientPolling(c.ID)
+	svc.Shutdown()
+}

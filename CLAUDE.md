@@ -8,11 +8,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-このプロジェクトは PLC シミュレーター です。Modbus（TCP/RTU/ASCII）・OPC UA・FINS（オムロン）・SLMP（三菱電機）をサポートしています。
+このプロジェクトは PLC シミュレーター です。Modbus（TCP/RTU/ASCII）・OPC UA・FINS（オムロン。Ethernet と Host Link）・SLMP（三菱電機）をサポートしています。
 
 ### 主な機能
 
-- **マルチプロトコル対応**: Modbus TCP / Modbus RTU / Modbus ASCII / OPC UA / FINS / SLMP を個別のサーバーとして起動可能
+- **マルチプロトコル対応**: Modbus TCP / Modbus RTU / Modbus ASCII / OPC UA / FINS / FINS（Host Link）/ SLMP を個別のサーバーとして起動可能
 - **複数サーバー同時実行**: 異なるプロトコル（例: Modbus TCP + OPC UA）を同時に起動可能。各サーバーは独立したメモリ空間を持つ
 - **変数管理**: IEC 61131-3準拠のデータ型（スカラー、配列、構造体、STRING[n]）をサポート。OPC UA でノードとして公開可能
 - **スクリプト機能**: JavaScriptで周期処理を記述。const/let対応（IIFE wrapping）、結果とエラーはコンソールに表示
@@ -21,7 +21,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **プロトコルマッピング**: 変数を複数プロトコルのメモリアドレスにマッピング可能
 - **アプリ全体のログ**: サーバーの起動・停止、クライアントの通信エラーなどを、どのページからも画面の下の欄で見られる
 - **REST HTTP API**: アプリをネットワーク経由で外部から操作可能（デフォルトポート 8765）。サーバー管理・レジスタ読み書き・変数管理・プロジェクトエクスポート/インポートに対応
-- **クライアント機能**: Karakuri から外部の機器（Modbus TCP・Modbus RTU・Modbus ASCII・OPC UA・FINS・SLMP のサーバー）につないで、コマンドを送る。コマンド（Modbus はファンクションコード、OPC UA は Read / Write / Browse）を選んで組み立てる方式と、16 進（Modbus は PDU、OPC UA はサービスのリクエスト本体）で直接入れる方式がある。送受信のバイト列・応答の解釈・履歴を表示する。読み取り項目を周期的に読むポーリングもできる。OPC UA は、サブスクリプション（値が変わったときに機器の側から知らせが届く）にも対応する。変数を接続先のアドレスにマッピングすると、ポーリング中に変数と同期する（通信エラー・書き込み未反映の状態を表示。Modbus TCP・Modbus RTU・Modbus ASCII・FINS・SLMP）
+- **クライアント機能**: Karakuri から外部の機器（Modbus TCP・Modbus RTU・Modbus ASCII・OPC UA・FINS・FINS（Host Link）・SLMP のサーバー）につないで、コマンドを送る。コマンド（Modbus はファンクションコード、OPC UA は Read / Write / Browse）を選んで組み立てる方式と、16 進（Modbus は PDU、OPC UA はサービスのリクエスト本体）で直接入れる方式がある。送受信のバイト列・応答の解釈・履歴を表示する。読み取り項目を周期的に読むポーリングもできる。OPC UA は、サブスクリプション（値が変わったときに機器の側から知らせが届く）にも対応する。変数を接続先のアドレスにマッピングすると、ポーリング中に変数と同期する（通信エラー・書き込み未反映の状態を表示。Modbus TCP・Modbus RTU・Modbus ASCII・FINS・FINS（Host Link）・SLMP）
 
 ## Build and Development Commands
 
@@ -97,7 +97,7 @@ go build ./...
 
 `frontend/e2e/` に、ブラウザで画面を操作して確認するテストがある。`task dev` が立てる開発用サーバー（`http://localhost:34115`）に接続するため、Go 側の API とプロトコルの実装を含めた動作を確認できる。手順と注意は `frontend/e2e/README.md` を参照。
 
-- 画面ごとのテスト: 画面の外枠（タイトル・左の帯・HTTP API の表示）`app-shell.spec.ts`、通信画面の右側の配置 `pane-layout.spec.ts`、アプリ全体のログ `app-log.spec.ts`、アドレスの範囲 `register-range.spec.ts`、FINS（「ワード.ビット」のアドレス・項目の表示条件）`fins.spec.ts`、SLMP（16 進のアドレス）`slmp.spec.ts`、通信画面（サーバー）`server-panel.spec.ts`、変数画面 `variable-dialogs.spec.ts` / `node-publishing.spec.ts`、サーバーの「レジスタ」「モニタリング」のタブ `register-panel.spec.ts` / `monitoring.spec.ts`、スクリプト画面 `script-panel.spec.ts`、通信画面（クライアント）`client-panel.spec.ts` / `client-polling.spec.ts` / `client-mapping.spec.ts` / `client-saved-commands.spec.ts` / `client-opcua.spec.ts` / `client-serial.spec.ts`（実機の確認は、テストを流す側で `KARAKURI_SERIAL_PAIR` を設定したときだけ）
+- 画面ごとのテスト: 画面の外枠（タイトル・左の帯・HTTP API の表示）`app-shell.spec.ts`、通信画面の右側の配置 `pane-layout.spec.ts`、アプリ全体のログ `app-log.spec.ts`、アドレスの範囲 `register-range.spec.ts`、FINS（「ワード.ビット」のアドレス・項目の表示条件）`fins.spec.ts`、SLMP（16 進のアドレス）`slmp.spec.ts`、通信画面（サーバー）`server-panel.spec.ts`、変数画面 `variable-dialogs.spec.ts` / `node-publishing.spec.ts`、サーバーの「レジスタ」「モニタリング」のタブ `register-panel.spec.ts` / `monitoring.spec.ts`、スクリプト画面 `script-panel.spec.ts`、通信画面（クライアント）`client-panel.spec.ts` / `client-polling.spec.ts` / `client-mapping.spec.ts` / `client-saved-commands.spec.ts` / `client-opcua.spec.ts` / `client-serial.spec.ts`（Modbus RTU / ASCII と FINS の Host Link。実機の確認は、テストを流す側で `KARAKURI_SERIAL_PAIR` を設定したときだけ）
 - 画面を変更したら、該当するテストを実行する（なければ追加する）。`shot()` で撮ったスクリーンショット（`frontend/e2e/.screenshots/`）で見た目も確認する
 - データの準備は `api(page, "メソッド名", ...)` で Go 側の API を直接呼び、確認したい操作だけを画面で行う
 - **テストはアプリのサーバー・変数・モニタリング項目・スクリプトをすべて削除する。** 開発サーバーは `KARAKURI_CONFIG_DIR` を一時フォルダに向けて起動する
@@ -182,7 +182,7 @@ internal/
 │   │   ├── client_ascii.go # ASCIIClientFactory と ASCII のフレーム（':'〜CR LF・LRC）
 │   │   ├── client_mapping.go # 変数マッピング用のエリアと読み書きのリクエスト（MappableClientFactory。pduClient で TCP と RTU に共通）
 │   │   └── rtu/            # RTU / ASCII のフレーム処理（Processor は RTU と ASCII で共通）
-│   ├── fins/             # FINS（オムロン。FINS/UDP と FINS/TCP）
+│   ├── fins/             # FINS（オムロン。FINS/UDP と FINS/TCP、シリアルの Host Link）
 │   │   ├── fins.go         # フレームのヘッダー・コマンドコード・終了コード
 │   │   ├── area.go         # エリアの定義（種別コード・大きさ）と、エリアの中の場所（target）
 │   │   ├── factory.go      # Factory / Config（アドレス・ポート・通信方式・ノードアドレス）
@@ -191,7 +191,11 @@ internal/
 │   │   ├── datastore.go    # DataStore（ワードのエリアと、同じメモリをビットで見るエリア）
 │   │   ├── client.go       # ClientFactory（接続先の設定・コマンドの定義・リクエストの組み立てと応答の解釈）
 │   │   ├── client_conn.go  # Client（UDP / TCP の送受信）
-│   │   └── client_mapping.go # 変数マッピング用のリクエスト（MappableClientFactory）
+│   │   ├── client_mapping.go # 変数マッピング用のリクエスト（MappableClientFactory）
+│   │   ├── hostlink.go     # Host Link のフレーム（'@' 号機番号 FA … FCS '*' CR）の組み立てと読み取り
+│   │   ├── hostlink_server.go # HostLinkFactory / HostLinkServer（シリアルで待ち受け、handler で処理する）
+│   │   └── hostlink_client.go # HostLinkClientFactory / HostLinkClient（シリアルで送る。コマンドとマッピングは ClientFactory のもの）
+│   ├── serialport/       # シリアルポートの共通の部品（Port・Opener・サーバーの読み取りのループ Loop・テスト用の仮想のヌルモデムケーブル Line）。Modbus RTU / ASCII と FINS の Host Link で使う
 │   ├── slmp/             # SLMP（三菱電機。3E / 4E フレーム、TCP と UDP）
 │   │   ├── slmp.go         # フレーム（サブヘッダー・要求先の指定・データ長）・コマンド・終了コード
 │   │   ├── device.go       # デバイスの定義（デバイスコード・ビットかワードか・番号を 16 進で書くか）
@@ -631,11 +635,11 @@ JavaScript（goja）でPLC動作を記述。
 - **FINS**（`internal/protocols/fins/`）: `fins_test.go` / `area_test.go` はフレームのバイト列と、自分のサーバーへの接続で確認する。`client_test.go` は、応答を決められるフェイクの相手（UDP のソケット・TCP の待ち受け）で、遅れて届いた応答・壊れた応答・FINS/TCP のエラー・タイムアウト後のつなぎ直しを確認する
 - **SLMP**（`internal/protocols/slmp/slmp_test.go`）: 要求のフレームのバイト列と応答（マニュアルの例を含む）、自分のサーバーへの接続（TCP / UDP × 3E / 4E）、全デバイスの最後の番号の読み書き、フェイクの相手（遅れた応答・壊れた応答・タイムアウト）
 - **Modbus**（`internal/protocols/modbus/`）: `tcp_transport_test.go` は実際に TCP でつないで確認する。`rtu/rtu_test.go` は仕様書の既知のフレームで CRC / LRC を確認し、同じリクエストを RTU と ASCII の両方で処理して結果が一致することを確認する
-  - `rtu/serial_test.go` は、COM ポートなしでシリアルの送受信を確かめる。サーバーはポートを `PortOpener`（`rtu/port.go`）で開くので、テストではメモリ上のフェイクのポート（`fakePort`。実際のポートと同じく、タイムアウトしたら `Read` が `(0, nil)`、閉じたら error）を渡す（`newRTUServer` / `newASCIIServer`）。フレームの区切り・壊れたフレーム・Stop → Start を確認する
+  - `rtu/serial_test.go` は、COM ポートなしでシリアルの送受信を確かめる。サーバーはポートを `PortOpener`（`rtu/port.go`。中身は `internal/protocols/serialport` の別名）で開くので、テストではメモリ上のフェイクのポート（`fakePort`。実際のポートと同じく、タイムアウトしたら `Read` が `(0, nil)`、閉じたら error）を渡す（`newRTUServer` / `newASCIIServer`）。フレームの区切り・壊れたフレーム・Stop → Start を確認する
   - RTU のフレームの区切り（`SerialManager.ReadFrame()`）: ファンクションコードからリクエストの長さがわかるとき（FC01〜06・0F・10）は、その長さが届いて CRC が合った時点で 1 つのフレームにする（後ろに続けて届いたバイトは次に回す）。わからないときは、バイトが届かなくなった時点まで。無音の時間（3.5 文字時間）だけで厳密に区切らないのは、USB シリアル変換器が受信したバイトをまとめて渡し、フレームの途中に間が空くことがあるため
   - **ポートが使えなくなったとき**（USB シリアル変換器を抜いたなど）: 読み取りがエラーになったら、ポートを閉じて、1 秒おきに開き直す（`rtu/reconnect.go`。ログに「使えなくなりました」「開き直しました」を 1 回ずつ出す）。ライブラリは通信エラー（フレーミング・パリティ）では読み取りを失敗にしないので、`Read` のエラーは「ポートが使えなくなった」として扱う。閉じずに読み直すと、エラーがすぐ返り続けて CPU を 1 コア使い切り、挿し直しても同じハンドルでは読めない
   - **Stop は、待っている読み取りが終わってからポートを閉じる**（最長で 1 回の読み取りの時間。RTU も ASCII も 100ms）。読み取りの途中で閉じると、Windows ではポートが 50〜200ms ほど使用中のまま残り、止めてすぐの Start が「Serial port busy」で失敗する（実機で確認）。フェイクのポートは、読み取りの途中で閉じられたかを記録する
-  - 実際の COM ポートでの試験: `rtu/serial_hw_test.go`（配線・RTU と ASCII の読み書き・応答の時間）と `rtu/serial_hw_unplug_test.go`（手で抜き差しする）、`internal/protocols/integration_serial_hw_test.go`（Karakuri の RTU / ASCII サーバーに RTU / ASCII クライアントからつなぐ。ポーリングと変数マッピングも）。COM ポートを取り合うので、パッケージをまたいで流すときは `go test -p 1` にする。2 つのポートをクロスでつなぎ、環境変数 `KARAKURI_SERIAL_PAIR`（`COM4,COM6` の形。サーバー側, マスター側）を設定したときだけ動く（CI では飛ばす）。抜き差しは `KARAKURI_SERIAL_UNPLUG=1` も要る。CPU の使い方は OS の側（`Get-Process rtu.test` の `TotalProcessorTime`）で見る（Go の `runtime/metrics` の CPU 時間は、システムコールの中の時間を数えない）
+  - 実際の COM ポートでの試験: `rtu/serial_hw_test.go`（配線・RTU と ASCII の読み書き・応答の時間）と `rtu/serial_hw_unplug_test.go`（手で抜き差しする）、`internal/protocols/integration_serial_hw_test.go`（Karakuri の Modbus RTU / ASCII・FINS の Host Link のサーバーに、同じプロトコルのクライアントからつなぐ。ポーリングと変数マッピングも）。COM ポートを取り合うので、パッケージをまたいで流すときは `go test -p 1` にする。2 つのポートをクロスでつなぎ、環境変数 `KARAKURI_SERIAL_PAIR`（`COM4,COM6` の形。サーバー側, マスター側）を設定したときだけ動く（CI では飛ばす）。抜き差しは `KARAKURI_SERIAL_UNPLUG=1` も要る。CPU の使い方は OS の側（`Get-Process rtu.test` の `TotalProcessorTime`）で見る（Go の `runtime/metrics` の CPU 時間は、システムコールの中の時間を数えない）
 - **OPC UA**（`internal/protocols/opcua/`）: 実際の OPC UA クライアントでつなぐ。`host_integration_test.go` は実際の変数ストアを使う（他のテストはフェイクの変数ストアを使うため、変数ストアが持つ値の型や型変換を通らない）
 - 設定フォルダに書き込むパッケージのテストは、`TestMain` で `KARAKURI_CONFIG_DIR` を一時フォルダに向ける
 
@@ -655,6 +659,7 @@ JavaScript（goja）でPLC動作を記述。
    - 読み取りのコマンドには `Pollable: true` を付ける（ポーリングに使える）。読み取った値をビット・ワードで返すなら `ResultValue.Bit` / `Word` にも入れ、コマンドに `WordValues: true` を付ける（画面で 10 進・16 進などの表示形式を選べる。付けなければ `Value` の文字列をそのまま出す）
    - 16 進で直接入れる欄に出す説明と入力例は、`protocol.RequestHelpProvider`（`RequestHelp()`）で返す
    - 項目の値を読む関数（数値・ワードやビットの並び）は `internal/domain/protocol/fields` のものを使う（プロトコルの実装同士は import しない）
+   - シリアルポートを使うなら、`internal/protocols/serialport` の部品を使う（`Opener` でポートを開く処理を差し替えられるようにする。サーバーの読み取りは `Loop`。テストは仮想のヌルモデムケーブル `Line` でサーバーとクライアントをつなぐ）。プロトコルをまたいで使うシリアルの部品は、ここに置く
    - ほかの項目の値によって出し分ける項目には `ConfigField.Condition` を指定する
    - `ConfigField.Type` に `"password"` を使うと、入力を隠す欄になる（閉じた設定の要約にも出さない）。`"textarea"` は複数行の欄
    - 入力欄の値を機器のアドレスの一覧から選べるようにするなら、クライアントで `protocol.BrowsableClient`（`Browse(parent)`: 子の一覧）を実装し、選ばせたい項目の `ConfigField.Browse` に `protocol.BrowseValues`（値を持つアドレスだけ）か `protocol.BrowseAll`（どれでも）を指定する。`BrowseEntry.Fields` に、選んだときに入力欄に入れる内容を項目の名前ごとに入れる（なければ `Address` を入れる）
@@ -907,9 +912,33 @@ JavaScript（goja）でPLC動作を記述。
   - 宛先のノードアドレスは確かめない（どのノード宛てでも応答する）。ICF で応答不要のリクエストには応答しない
 - **クライアント**: リクエストは「コマンドコード 2 バイト + パラメーター」。FINS ヘッダー（宛先・送信元・SID）と FINS/TCP のヘッダーはクライアントが付ける。ノードアドレスは 0 なら自動（UDP は IP アドレスの最後の数字、TCP はやりとりで決まった値）
   - 終了コードが 0 以外なら `exception`（接続は閉じない）。SID が違う応答（遅れて届いたもの）は読み捨てる
-- **未実装**: タイマ・カウンタの動作（現在値とアップフラグは、書かれた値を持つだけ。時間で進まない）、EM のカレントバンクの切り替え、運転モードの切り替え、ネットワークをまたぐ中継、シリアル（Host Link）
+- **未実装**: タイマ・カウンタの動作（現在値とアップフラグは、書かれた値を持つだけ。時間で進まない）、EM のカレントバンクの切り替え、運転モードの切り替え、ネットワークをまたぐ中継
 - **確認していないこと**: 実機・他社製の FINS クライアントとの接続（テストは、Karakuri のクライアントとサーバーの組み合わせと、フレームのバイト列）
 - **テスト**: `internal/protocols/fins/fins_test.go` / `area_test.go`（全エリアをクライアントから読み書きする）、`integration_test.go` の `TestFINS_*` / `TestFINSClient_VariableMapping`、画面は `fins.spec.ts`
+
+#### Host Link（シリアル）
+
+FINS のコマンドを Host Link（SYSMAC WAY）に載せて、シリアルで運ぶ形（ヘッダーコード `FA`）。FINS/UDP・TCP とは別のプロトコル（`fins-hostlink`、表示名「FINS（Host Link）」）にしている。サーバーもクライアントも、Ethernet の FINS と同時に使える（メモリは別）。
+
+- **フレーム**（`hostlink.go`）: 文字（ASCII）で、数値は 16 進の大文字
+  - コマンド: `@` 号機番号（10 進 2 桁）`FA` 応答待ち時間（1 桁）FINS（16 進）FCS（2 桁）`*` CR
+  - 応答: `@` 号機番号 `FA` 終了コード（2 桁。`00` が正常）FINS FCS `*` CR
+  - FCS は、`@` から FCS の直前までの文字の XOR
+  - FINS の部分は、ICF の最上位ビットで 2 つの形がある: 0 なら短い形（ICF DA2 SA2 SID の 4 バイト。シリアルでつながった CPU 宛て）、1 ならヘッダー 10 バイトすべて。応答はコマンドと同じ形（短い形の応答の ICF は `40`）。`finsToHostLink()` / `finsFromHostLink()` で、ヘッダー 10 バイトの形と行き来する（処理と解釈は Ethernet の FINS と同じものを使うため）
+  - 長い応答は、複数のフレームに分けて送られることがある（途中のフレームは `*` なしで FCS CR で終わり、受け取った側が CR を送ると続きが来る）
+- **確かめた資料**: 実機の通信の例（MrPLC のフォーラム。ヘッダー 10 バイトの形のコマンドと応答）と、公開されている実装（zgwit/go-plc の hostlink.go。短い形）。オムロンのマニュアル（W342）は暗号化された PDF で、中身と突き合わせていない
+  - 実機の例のコマンドを Karakuri のサーバーに送ると、実機と 1 文字も違わない応答を返す（`TestHostLink_ServerAnswersExampleLikeTheRealPLC`）
+  - 未定義のコマンドへの応答 `@00IC4A*` は、よく知られた形と FCS が合う
+  - 確かめていないもの: Host Link の終了コード（`13` FCS の誤り・`14` 形式の誤り）を返す形、分けて送る応答の形、短い形のコマンドの ICF の値（`00` にしている）
+- **サーバー**（`hostlink_server.go`）: 設定はシリアル（既定は CS / CJ の Host Link と同じ 9600bps・7E2）と号機番号（0〜31、既定 0）
+  - 号機番号の違うフレームには応答しない。FCS が合わなければ終了コード `13`、形が違えば `14`、`FA` 以外のヘッダーコードには `IC` で応答する。`@` より前の文字は読み飛ばす
+  - 応答は、長くても 1 つのフレームで返す（分けて送らない）。応答待ち時間は使わない（すぐ応答する）。分けて送られたコマンドには対応しない（形式の誤り）
+  - 読み取りは `serialport.Loop`（抜いたらつなぎ直す・Stop は読み取りを待ってから閉じる）
+- **クライアント**（`hostlink_client.go`）: `ClientFactory`（Ethernet の FINS）を埋め込み、コマンドの定義・組み立て・要約・応答の解釈・変数マッピングは同じものを使う。FINS のヘッダーは短い形（ICF 00・DA2 00・SA2 00・SID）で送る
+  - 接続先の設定: シリアル・号機番号・タイムアウト
+  - 分けて届いた応答は、CR を送って続きをもらい、つないで読む（`receive()`）。Karakuri のサーバーは分けて送らないので、テストはフェイクの相手で確かめている
+  - ポートの開閉は Modbus RTU / ASCII のクライアントと同じ（タイムアウト・壊れた応答で閉じ、次の送信で開き直す）。Host Link の終了コードが `00` 以外・`IC` の応答は `exception`。SID・号機番号が違う応答はエラー
+- **テスト**: `hostlink_test.go`（フレーム。実機の例）、`hostlink_conn_test.go`（サーバーとクライアントを仮想のヌルモデムケーブル `serialport.Line` でつなぐ。誤りの応答・分けて届く応答・壊れた応答・Stop → Start）、`internal/protocols/integration_serial_hw_test.go` の `TestHW_FINSHostLink_*`（実機。`KARAKURI_SERIAL_PAIR`）、画面は `client-serial.spec.ts`
 
 ### SLMP 実装
 
