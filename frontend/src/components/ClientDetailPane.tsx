@@ -44,10 +44,10 @@ interface ClientDetailPaneProps {
   onClientsChanged: () => Promise<unknown>;
   onLogsChanged: () => Promise<void>;
   onRemove: (id: string) => void;
+  // 接続先の設定の「シリアルポート」の欄（Modbus RTU）に出すポートの一覧と、一覧の読み直し（サーバーの設定と同じもの）
+  serialPorts: string[];
+  onRefreshPorts: () => void;
 }
-
-const noPorts: string[] = [];
-const noop = () => {};
 
 // 見出しに出す、接続先の設定の 1 行の要約（例: "ホスト: 127.0.0.1 / ポート: 502"）。パスワードと、空の項目は出さない。
 // 設定のタブを開いていなくても、どこへ送るのかが見えるようにする
@@ -81,6 +81,8 @@ export const ClientDetailPane = forwardRef<
     onClientsChanged,
     onLogsChanged,
     onRemove,
+    serialPorts,
+    onRefreshPorts,
   },
   ref,
 ) {
@@ -334,8 +336,8 @@ export const ClientDetailPane = forwardRef<
                 value={settings[field.name]}
                 onChange={(v) => handleSettingChange(field.name, v)}
                 disabled={false}
-                serialPorts={noPorts}
-                onRefreshPorts={noop}
+                serialPorts={serialPorts}
+                onRefreshPorts={onRefreshPorts}
               />
             ))}
           </>

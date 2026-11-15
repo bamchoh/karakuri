@@ -30,6 +30,11 @@ type fakePort struct {
 	// unplugged なら、Read はすぐエラーを返す（実際のポートで USB 変換器を抜いたときと同じ）
 	unplugged bool
 	reads     int // Read が呼ばれた回数
+
+	// reading は、いま待っている Read の数。closedWhileReading は、Read の途中で Close されたか
+	// （実際のポートでは、読み取りの途中で閉じると、しばらく使用中のまま残って開き直せない）
+	reading            int
+	closedWhileReading bool
 }
 
 func newFakePort() *fakePort {
@@ -49,6 +54,8 @@ func (p *fakePort) Read(b []byte) (int, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	p.reads++
+	p.reading++
+	defer func() { p.reading-- }()
 	deadline := time.Now().Add(p.timeout)
 	for {
 		if p.closed {
@@ -98,9 +105,18 @@ func (p *fakePort) Close() error {
 	defer p.mu.Unlock()
 	if !p.closed {
 		p.closed = true
+		if p.reading > 0 {
+			p.closedWhileReading = true
+		}
 		p.notifyLocked()
 	}
 	return nil
+}
+
+func (p *fakePort) wasClosedWhileReading() bool {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return p.closedWhileReading
 }
 
 func (p *fakePort) isClosed() bool {
@@ -424,6 +440,8 @@ func TestRTUServer_DisabledUnitID(t *testing.T) {
 func TestRTUServer_StopAndRestart(t *testing.T) {
 	srv, line := startRTU(t, 9600, newMemHandler())
 	first := line.port(t)
+	// 読み取りを待っている最中に止める
+	waitFor(t, "読み取りを待つ", func() bool { return first.readCount() > 0 })
 
 	stopped := make(chan struct{})
 	go func() {
@@ -434,6 +452,9 @@ func TestRTUServer_StopAndRestart(t *testing.T) {
 	case <-stopped:
 	case <-time.After(2 * time.Second):
 		t.Fatal("Stop が戻らない")
+	}
+	if first.wasClosedWhileReading() {
+		t.Error("読み取りの途中でポートを閉じた（実際のポートでは、すぐ開き直せない）")
 	}
 	if !first.isClosed() {
 		t.Error("Stop のあと、ポートが閉じていない")
@@ -584,6 +605,8 @@ func TestASCIIServer_ReconnectsAfterUnplug(t *testing.T) {
 func TestASCIIServer_StopAndRestart(t *testing.T) {
 	srv, line := startASCII(t, newMemHandler())
 	first := line.port(t)
+	// 読み取りを待っている最中に止める
+	waitFor(t, "読み取りを待つ", func() bool { return first.readCount() > 0 })
 
 	stopped := make(chan struct{})
 	go func() {
@@ -594,6 +617,9 @@ func TestASCIIServer_StopAndRestart(t *testing.T) {
 	case <-stopped:
 	case <-time.After(2 * time.Second):
 		t.Fatal("Stop が戻らない")
+	}
+	if first.wasClosedWhileReading() {
+		t.Error("読み取りの途中でポートを閉じた（実際のポートでは、すぐ開き直せない）")
 	}
 	if !first.isClosed() {
 		t.Error("Stop のあと、ポートが閉じていない")

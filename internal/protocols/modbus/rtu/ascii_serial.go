@@ -16,6 +16,9 @@ type ASCIISerialManager struct {
 	closed      bool
 }
 
+// asciiReadSlice は、1 回の読み取りで待つ時間の上限
+const asciiReadSlice = 100 * time.Millisecond
+
 // NewASCIISerialManager は新しいASCIISerialManagerを作成する
 func NewASCIISerialManager(config SerialConfig) *ASCIISerialManager {
 	return newASCIISerialManager(config, OpenSerialPort)
@@ -84,6 +87,13 @@ func (sm *ASCIISerialManager) PortName() string {
 	return sm.config.Port
 }
 
+// Shutdown は読み取りをやめさせる（ReadFrame は、待っている読み取りが終わったところで戻る）。ポートは閉じない（Close で閉じる）
+func (sm *ASCIISerialManager) Shutdown() {
+	sm.mu.Lock()
+	defer sm.mu.Unlock()
+	sm.closed = true
+}
+
 // Close はシリアルポートを閉じる
 func (sm *ASCIISerialManager) Close() error {
 	sm.mu.Lock()
@@ -113,7 +123,8 @@ func (sm *ASCIISerialManager) ReadFrame() ([]byte, error) {
 	}
 
 	// 読み取りタイムアウトを設定
-	sm.port.SetReadTimeout(sm.readTimeout)
+	// 1 回の読み取りは短くする（Stop が、待っている読み取りの終わりを待つため）。フレームのタイムアウトは readTimeout
+	sm.port.SetReadTimeout(min(sm.readTimeout, asciiReadSlice))
 	port := sm.port
 	sm.mu.Unlock()
 

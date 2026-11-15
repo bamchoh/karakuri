@@ -145,7 +145,7 @@ func TestFactories(t *testing.T) {
 		}
 	}
 	// 並びは、登録した順（最初のものが、接続先を追加するときの既定になる）
-	if want := []string{"modbus-tcp", "opcua", "fins", "slmp"}; !reflect.DeepEqual(clientTypes, want) {
+	if want := []string{"modbus-tcp", "modbus-rtu", "opcua", "fins", "slmp"}; !reflect.DeepEqual(clientTypes, want) {
 		t.Errorf("クライアントのプロトコル = %v, want %v", clientTypes, want)
 	}
 

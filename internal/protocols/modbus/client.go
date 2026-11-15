@@ -34,8 +34,10 @@ const (
 	defaultClientTimeoutMs = 1000
 )
 
-// TCPClientFactory は Modbus TCP クライアントのファクトリー
-type TCPClientFactory struct{}
+// TCPClientFactory は Modbus TCP クライアントのファクトリー。コマンドとマッピングは pduClient（RTU と共通）
+type TCPClientFactory struct {
+	pduClient
+}
 
 // ProtocolType はクライアントのプロトコルの種類を返す
 func (f *TCPClientFactory) ProtocolType() protocol.ProtocolType {
@@ -146,7 +148,7 @@ func countField(max int) protocol.ConfigField {
 }
 
 // Commands は組み立てられるコマンドの一覧を返す
-func (f *TCPClientFactory) Commands() []protocol.CommandDefinition {
+func (f pduClient) Commands() []protocol.CommandDefinition {
 	def := func(fc byte, fields ...protocol.ConfigField) protocol.CommandDefinition {
 		return protocol.CommandDefinition{
 			ID:          strconv.Itoa(int(fc)),
@@ -176,7 +178,7 @@ func (f *TCPClientFactory) Commands() []protocol.CommandDefinition {
 }
 
 // DescribeRequest はリクエスト（PDU）の内容を 1 行の要約にする
-func (f *TCPClientFactory) DescribeRequest(pdu []byte) string {
+func (f pduClient) DescribeRequest(pdu []byte) string {
 	return describeRequest(pdu)
 }
 
@@ -196,7 +198,7 @@ func pollable(c protocol.CommandDefinition) protocol.CommandDefinition {
 }
 
 // BuildRequest は、コマンドと項目の値から PDU を作る
-func (f *TCPClientFactory) BuildRequest(commandID string, params map[string]interface{}) ([]byte, error) {
+func (f pduClient) BuildRequest(commandID string, params map[string]interface{}) ([]byte, error) {
 	fcInt, err := strconv.Atoi(commandID)
 	if err != nil {
 		return nil, fmt.Errorf("不明なコマンドです: %s", commandID)
@@ -626,3 +628,7 @@ func hexBytes(b []byte) string {
 	}
 	return strings.Join(parts, " ")
 }
+
+// pduClient は、Modbus TCP と Modbus RTU のクライアントで共通の部分（コマンドの定義、PDU の組み立てと要約、
+// 変数マッピングのリクエスト）。どちらも、リクエストは PDU で受け取り、送るときにプロトコルの枠（MBAP ヘッダー・CRC）を付ける
+type pduClient struct{}

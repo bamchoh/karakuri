@@ -118,6 +118,13 @@ func (sm *SerialManager) PortName() string {
 	return sm.config.Port
 }
 
+// Shutdown は読み取りをやめさせる（ReadFrame は、待っている読み取りが終わったところで戻る）。ポートは閉じない（Close で閉じる）
+func (sm *SerialManager) Shutdown() {
+	sm.mu.Lock()
+	defer sm.mu.Unlock()
+	sm.closed = true
+}
+
 // Close はシリアルポートを閉じる
 func (sm *SerialManager) Close() error {
 	sm.mu.Lock()

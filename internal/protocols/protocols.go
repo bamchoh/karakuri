@@ -29,6 +29,7 @@ func Factories() []protocol.ServerFactory {
 func ClientFactories() []protocol.ClientFactory {
 	return []protocol.ClientFactory{
 		&modbus.TCPClientFactory{},
+		&modbus.RTUClientFactory{},
 		&opcua.ClientFactory{},
 		&fins.ClientFactory{},
 		&slmp.ClientFactory{},
