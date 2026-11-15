@@ -247,3 +247,120 @@ func TestHW_FINSHostLink_VariableMapping(t *testing.T) {
 	_ = svc.StopClientPolling(c.ID)
 	svc.Shutdown()
 }
+
+const mcSerial = "mc-serial"
+
+// startMCSerialPair は、MC プロトコル（シリアル）のサーバーと接続先を、形式とサムチェックをそろえて用意する
+func startMCSerialPair(t *testing.T, svc *application.PLCService, format int, baud int) application.ClientDTO {
+	t.Helper()
+	serverPort, clientPort := serialPair(t)
+	must(t, svc.AddServer(mcSerial, ""))
+	cfg := svc.GetServerConfig(mcSerial)
+	cfg.Settings["serialPort"] = serverPort
+	cfg.Settings["baudRate"] = baud
+	cfg.Settings["format"] = format
+	cfg.Settings["station"] = 5
+	must(t, svc.UpdateServerConfig(cfg))
+	must(t, svc.StartServer(mcSerial))
+	t.Cleanup(func() { _ = svc.StopServer(mcSerial) })
+
+	c, err := svc.AddClient(mcSerial, "MC", map[string]interface{}{
+		"serialPort": clientPort, "baudRate": baud, "format": format, "station": 5, "timeoutMs": 2000,
+	})
+	must(t, err)
+	t.Cleanup(func() { _ = svc.DisconnectClient(c.ID) })
+	return *c
+}
+
+// MC プロトコル（シリアル）: Karakuri のサーバー（C24 のつもり）に、Karakuri のクライアントからつなぐ
+func TestHW_MCSerial_AgainstOwnServer(t *testing.T) {
+	for _, format := range []int{4, 5} {
+		for _, baud := range []int{9600, 115200} {
+			t.Run(fmt.Sprintf("形式%d/%dbps", format, baud), func(t *testing.T) {
+				svc := newService(t)
+				c := startMCSerialPair(t, svc, format, baud)
+
+				send := func(hex string) application.ClientCommandLogDTO {
+					t.Helper()
+					r, err := svc.SendClientRequest(c.ID, hex)
+					must(t, err)
+					return *r
+				}
+
+				// D100 から 3 ワード書いて（1401）、サーバーのメモリに入る（16 = 10H は、形式 5 では DLE を重ねて送る）
+				if r := send("01 14 00 00 64 00 00 A8 03 00 10 00 10 10 34 12"); r.Status != "ok" {
+					t.Fatalf("書き込み: %s %s", r.Status, r.Error)
+				}
+				if w, _ := svc.ReadWords(mcSerial, "D", 100, 3); !reflect.DeepEqual(w, []int{16, 0x1010, 0x1234}) {
+					t.Errorf("サーバーの D = %v", w)
+				}
+				// 読み出し（0401）
+				must(t, svc.WriteWord(mcSerial, "D", 200, 4321))
+				r := send("01 04 00 00 C8 00 00 A8 01 00")
+				if r.Status != "ok" || len(r.Values) != 1 || r.Values[0].Word == nil || *r.Values[0].Word != 4321 {
+					t.Fatalf("読み出し: %+v", r)
+				}
+				// 長い応答（9600bps では 960 ワードに 2 秒以上かかり、タイムアウトを超えるので、100 ワードにする）
+				count := 960
+				if baud == 9600 {
+					count = 100
+				}
+				r = send(fmt.Sprintf("01 04 00 00 00 00 00 A8 %02X %02X", count&0xFF, count>>8))
+				if r.Status != "ok" || len(r.Values) != count {
+					t.Fatalf("%d ワード: %s %s（%d 個）", count, r.Status, r.Error, len(r.Values))
+				}
+				// 異常（扱えないコマンド。形式 4 は送る前にクライアントが断るので、形式 5 だけ）
+				if format == 5 {
+					if r := send("01 08 00 00"); r.Status != "exception" {
+						t.Errorf("扱えないコマンド: %s %s", r.Status, r.Error)
+					}
+				}
+				start := time.Now()
+				for range 30 {
+					if r := send("01 04 00 00 00 00 00 A8 01 00"); r.Status != "ok" {
+						t.Fatalf("連続: %s %s", r.Status, r.Error)
+					}
+				}
+				t.Logf("0401（1 ワード）30 回 平均 %v", time.Since(start)/30)
+				svc.Shutdown()
+			})
+		}
+	}
+}
+
+func TestHW_MCSerial_VariableMapping(t *testing.T) {
+	for _, format := range []int{4, 5} {
+		t.Run(fmt.Sprintf("形式%d", format), func(t *testing.T) {
+			svc := newService(t)
+			c := startMCSerialPair(t, svc, format, 115200)
+			must(t, svc.SetClientPollInterval(c.ID, 100))
+			key := "client:" + c.ID
+
+			must(t, svc.WriteWord(mcSerial, "D", 50, 0x0010)) // 10H を含む値
+			must(t, svc.WriteWord(mcSerial, "D", 51, 0))
+			v, err := svc.CreateVariable("remote", "DINT", 0)
+			must(t, err)
+			must(t, svc.UpdateVariableMappings(v.ID, []application.ProtocolMappingDTO{{ProtocolType: key, MemoryArea: "D", Address: 50, Endianness: "little"}}))
+			must(t, svc.StartClientPolling(c.ID))
+
+			waitUntil := func(what string, cond func() bool) {
+				t.Helper()
+				deadline := time.Now().Add(5 * time.Second)
+				for !cond() {
+					if time.Now().After(deadline) {
+						t.Fatalf("待っても %s にならない（値 %s、状態 %+v）", what, variableValue(t, svc, v.ID), svc.VariableDeviceStatus(v.ID))
+					}
+					time.Sleep(20 * time.Millisecond)
+				}
+			}
+			waitUntil("機器の値を読む", func() bool { return variableValue(t, svc, v.ID) == "16" })
+			must(t, svc.UpdateVariableValue(v.ID, 70000))
+			waitUntil("書く", func() bool {
+				w, _ := svc.ReadWords(mcSerial, "D", 50, 2)
+				return reflect.DeepEqual(w, []int{70000 - 65536, 1})
+			})
+			_ = svc.StopClientPolling(c.ID)
+			svc.Shutdown()
+		})
+	}
+}

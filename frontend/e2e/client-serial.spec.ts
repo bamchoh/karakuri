@@ -245,3 +245,75 @@ test("実機: Karakuri の FINS（Host Link）サーバーから読み取れる"
   );
   await shot(page, "client-hostlink-read");
 });
+
+test("MC プロトコル（シリアル）の接続先は、形式 4・サムチェックありが既定", async ({
+  page,
+}) => {
+  await page.getByTitle("Connections", { exact: true }).click();
+  await addClientFromDialog(page, { protocol: "mc-serial", name: "MC" });
+  await expect(setting(page, "シリアルポート")).toBeVisible();
+  await expect(setting(page, "形式")).toHaveValue("4");
+  await expect(setting(page, "サムチェック")).toHaveValue("on");
+  await expect(setting(page, "局番")).toHaveValue("0");
+  // 形式を 5 にして保存できる
+  await setting(page, "形式").selectOption("5");
+  await page.getByRole("button", { name: "保存", exact: true }).click();
+  await expect(page.getByText("保存していない変更があります")).toBeHidden();
+  const clients = await api<any[]>(page, "GetClients");
+  expect(clients[0].settings.format).toBe(5);
+  await shot(page, "client-mc-settings");
+});
+
+// 実機で、Karakuri の MC プロトコル（シリアル）のサーバーから読む。形式 4 は送ったものが ENQ "F8" で始まる
+for (const mc of [
+  { format: 4, sentHead: "05 46 38" },
+  { format: 5, sentHead: "10 02" },
+]) {
+  test(`実機: Karakuri の MC プロトコル（シリアル、形式 ${mc.format}）サーバーから読み取れる`, async ({
+    page,
+  }) => {
+    test.skip(
+      serialPair.length !== 2,
+      "KARAKURI_SERIAL_PAIR（例: COM4,COM6）が設定されていない",
+    );
+    const [serverPort, clientPort] = serialPair;
+
+    await api(page, "AddServer", "mc-serial", "");
+    const cfg = await api<any>(page, "GetServerConfig", "mc-serial");
+    cfg.settings.serialPort = serverPort;
+    cfg.settings.format = mc.format;
+    cfg.settings.station = 2;
+    await api(page, "UpdateServerConfig", cfg);
+    await api(page, "StartServer", "mc-serial");
+    await api(page, "WriteWord", "mc-serial", "D", 101, 1234);
+
+    const c = await api<{ id: string }>(page, "AddClient", "mc-serial", "MC");
+    await api(page, "UpdateClient", c.id, "MC", {
+      serialPort: clientPort,
+      format: mc.format,
+      station: 2,
+      timeoutMs: 1000,
+    });
+    await openClient(page, "MC");
+    await selectClientTab(page, "コマンド");
+    await page.getByRole("button", { name: "新しいコマンド" }).click();
+    await expect(composer(page)).toBeVisible();
+    await setting(composer(page), "コマンド").selectOption({
+      label: "0401 一括読み出し",
+    });
+    await setting(composer(page), "デバイス番号").fill("100");
+    await setting(composer(page), "点数").fill("2");
+    await composer(page)
+      .getByRole("button", { name: "送信", exact: true })
+      .click();
+
+    await expect(result(page).locator(".client-status")).toHaveText("正常");
+    const values = result(page).locator(".client-values tr");
+    await expect(values).toHaveCount(2);
+    await expect(values.nth(1)).toContainText("1234 (0x04D2)");
+    await expect(result(page).locator(".client-bytes")).toContainText(
+      mc.sentHead,
+    );
+    await shot(page, `client-mc-f${mc.format}-read`);
+  });
+}

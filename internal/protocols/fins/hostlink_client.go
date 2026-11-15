@@ -51,7 +51,7 @@ func (f *HostLinkClientFactory) DisplayName() string                 { return "F
 // ConnectionFields は接続先の設定項目を返す
 func (f *HostLinkClientFactory) ConnectionFields() []protocol.ConfigField {
 	def := DefaultHostLinkConfig()
-	return append(serialFields(def.Serial, "接続先の PLC につながっているシリアルポート（例: COM1、COM3）。"),
+	return append(serialport.ConfigFields(def.Serial, "接続先の PLC につながっているシリアルポート（例: COM1、COM3）。"),
 		protocol.ConfigField{Name: "unit", Label: "号機番号", Description: "送り先の PLC の Host Link の号機番号（0〜31）。", Type: "number", Required: true, Default: def.Unit, Min: fields.IntPtr(0), Max: fields.IntPtr(maxHostLinkUnit)},
 		protocol.ConfigField{Name: "timeoutMs", Label: "タイムアウト（ms）", Description: "応答を待つ時間。過ぎるとタイムアウトにしてポートを閉じます（次の送信で開き直します）。", Type: "number", Required: true, Default: defaultHostLinkTimeoutMs, Min: fields.IntPtr(10), Max: fields.IntPtr(60000)},
 	)
@@ -66,10 +66,10 @@ type hostLinkClientSettings struct {
 func parseHostLinkClientSettings(settings map[string]interface{}) (hostLinkClientSettings, error) {
 	def := DefaultHostLinkConfig()
 	s := hostLinkClientSettings{serial: def.Serial, Unit: def.Unit, TimeoutMs: defaultHostLinkTimeoutMs}
-	applySerial(settings, &s.serial)
+	serialport.ApplySettings(settings, &s.serial)
 	fields.SetInt(settings, "unit", &s.Unit)
 	fields.SetInt(settings, "timeoutMs", &s.TimeoutMs)
-	if err := validateSerial(s.serial); err != nil {
+	if err := serialport.Validate(s.serial); err != nil {
 		return s, err
 	}
 	switch {
@@ -87,7 +87,7 @@ func (f *HostLinkClientFactory) NormalizeSettings(settings map[string]interface{
 	if err != nil {
 		return nil, err
 	}
-	return serialToMap(s.serial, map[string]interface{}{"unit": s.Unit, "timeoutMs": s.TimeoutMs}), nil
+	return serialport.ToMap(s.serial, map[string]interface{}{"unit": s.Unit, "timeoutMs": s.TimeoutMs}), nil
 }
 
 // NewClient は接続先の設定からクライアントを作る。ポートを開くのは最初の送信のとき

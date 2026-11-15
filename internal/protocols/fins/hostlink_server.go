@@ -5,7 +5,6 @@ import (
 	"context"
 	"fmt"
 	"strconv"
-	"strings"
 	"sync"
 
 	"karakuri/internal/domain/protocol"
@@ -48,7 +47,7 @@ func (c *HostLinkConfig) ProtocolType() protocol.ProtocolType { return ProtocolF
 func (c *HostLinkConfig) Variant() string                     { return variantHostLink }
 
 func (c *HostLinkConfig) Validate() error {
-	if err := validateSerial(c.Serial); err != nil {
+	if err := serialport.Validate(c.Serial); err != nil {
 		return err
 	}
 	if c.Unit < 0 || c.Unit > maxHostLinkUnit {
@@ -60,70 +59,6 @@ func (c *HostLinkConfig) Validate() error {
 func (c *HostLinkConfig) Clone() protocol.ProtocolConfig {
 	clone := *c
 	return &clone
-}
-
-func validateSerial(s serialport.Config) error {
-	switch {
-	case strings.TrimSpace(s.Port) == "":
-		return fmt.Errorf("シリアルポートを選んでください")
-	case s.BaudRate < 300 || s.BaudRate > 921600:
-		return fmt.Errorf("ボーレートは 300〜921600 で指定してください")
-	case s.DataBits != 7 && s.DataBits != 8:
-		return fmt.Errorf("データビットは 7 か 8 にしてください")
-	case s.StopBits != 1 && s.StopBits != 2:
-		return fmt.Errorf("ストップビットは 1 か 2 にしてください")
-	case s.Parity != "N" && s.Parity != "E" && s.Parity != "O":
-		return fmt.Errorf("パリティは N / E / O のどれかにしてください")
-	}
-	return nil
-}
-
-// serialFields は、シリアルポートの設定項目（サーバーと接続先で共通）
-func serialFields(def serialport.Config, portDescription string) []protocol.ConfigField {
-	return []protocol.ConfigField{
-		{Name: "serialPort", Label: "シリアルポート", Description: portDescription, Type: "serialport", Required: true, Default: def.Port},
-		{Name: "baudRate", Label: "ボーレート", Description: "シリアル通信の速度（bps）。相手と一致させてください。", Type: "select", Required: true, Default: def.BaudRate, Options: []protocol.FieldOption{
-			{Value: "4800", Label: "4800"},
-			{Value: "9600", Label: "9600"},
-			{Value: "19200", Label: "19200"},
-			{Value: "38400", Label: "38400"},
-			{Value: "57600", Label: "57600"},
-			{Value: "115200", Label: "115200"},
-		}},
-		{Name: "dataBits", Label: "データビット", Description: "1 文字のデータビット数。Host Link は通常 7 ビットです。", Type: "select", Required: true, Default: def.DataBits, Options: []protocol.FieldOption{
-			{Value: "7", Label: "7"},
-			{Value: "8", Label: "8"},
-		}},
-		{Name: "stopBits", Label: "ストップビット", Description: "1 文字の終わりのストップビット数。Host Link は通常 2 ビットです。", Type: "select", Required: true, Default: def.StopBits, Options: []protocol.FieldOption{
-			{Value: "1", Label: "1"},
-			{Value: "2", Label: "2"},
-		}},
-		{Name: "parity", Label: "パリティ", Description: "誤り検出のパリティ。Host Link は通常 Even です。", Type: "select", Required: true, Default: def.Parity, Options: []protocol.FieldOption{
-			{Value: "N", Label: "None"},
-			{Value: "E", Label: "Even"},
-			{Value: "O", Label: "Odd"},
-		}},
-	}
-}
-
-// applySerial は、map にあるシリアルの設定を s に入れる
-func applySerial(settings map[string]interface{}, s *serialport.Config) {
-	fields.SetString(settings, "serialPort", &s.Port)
-	fields.SetInt(settings, "baudRate", &s.BaudRate)
-	fields.SetInt(settings, "dataBits", &s.DataBits)
-	fields.SetInt(settings, "stopBits", &s.StopBits)
-	fields.SetString(settings, "parity", &s.Parity)
-	s.Port = strings.TrimSpace(s.Port)
-	s.Parity = strings.ToUpper(strings.TrimSpace(s.Parity))
-}
-
-func serialToMap(s serialport.Config, m map[string]interface{}) map[string]interface{} {
-	m["serialPort"] = s.Port
-	m["baudRate"] = s.BaudRate
-	m["dataBits"] = s.DataBits
-	m["stopBits"] = s.StopBits
-	m["parity"] = s.Parity
-	return m
 }
 
 // HostLinkFactory は FINS の Host Link のサーバーのファクトリー。メモリエリアは FINS/UDP・TCP と同じ
@@ -155,7 +90,7 @@ func (f *HostLinkFactory) CreateConfigFromVariant(_ string) protocol.ProtocolCon
 
 func (f *HostLinkFactory) GetConfigFields(_ string) []protocol.ConfigField {
 	def := DefaultHostLinkConfig()
-	return append(serialFields(def.Serial, "通信に使うシリアルポート（例: COM1、COM3）。"),
+	return append(serialport.ConfigFields(def.Serial, "通信に使うシリアルポート（例: COM1、COM3）。"),
 		protocol.ConfigField{Name: "unit", Label: "号機番号", Description: "この PLC の Host Link の号機番号（0〜31）。違う号機番号宛てのコマンドには応答しません。", Type: "number", Required: true, Default: def.Unit, Min: fields.IntPtr(0), Max: fields.IntPtr(maxHostLinkUnit)},
 	)
 }
@@ -169,13 +104,13 @@ func (f *HostLinkFactory) ConfigToMap(config protocol.ProtocolConfig) map[string
 	if !ok {
 		return nil
 	}
-	return serialToMap(c.Serial, map[string]interface{}{"unit": c.Unit})
+	return serialport.ToMap(c.Serial, map[string]interface{}{"unit": c.Unit})
 }
 
 // MapToConfig は map から設定を作る（map にない項目は既定値のまま）
 func (f *HostLinkFactory) MapToConfig(_ string, settings map[string]interface{}) (protocol.ProtocolConfig, error) {
 	c := DefaultHostLinkConfig()
-	applySerial(settings, &c.Serial)
+	serialport.ApplySettings(settings, &c.Serial)
 	fields.SetInt(settings, "unit", &c.Unit)
 	return c, nil
 }
