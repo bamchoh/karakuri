@@ -158,3 +158,22 @@ func ParseBitList(s string) ([]bool, error) {
 	}
 	return bits, nil
 }
+
+// Rows は、"rows"（行を足せる表）の項目の値を、行の並びとして読む。
+// 画面から来た値は []interface{}（中身は map[string]interface{}）、Go のコードから来た値は []map[string]interface{}。
+// どちらでもなければ、行はない
+func Rows(values map[string]interface{}, key string) []map[string]interface{} {
+	switch v := values[key].(type) {
+	case []map[string]interface{}:
+		return v
+	case []interface{}:
+		rows := make([]map[string]interface{}, 0, len(v))
+		for _, r := range v {
+			if m, ok := r.(map[string]interface{}); ok {
+				rows = append(rows, m)
+			}
+		}
+		return rows
+	}
+	return nil
+}

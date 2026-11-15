@@ -117,6 +117,9 @@ func toFieldDTOs(fields []protocol.ConfigField) []FieldDTO {
 		if f.Condition != nil {
 			dtos[j].ShowWhen = &ConditionDTO{Field: f.Condition.Field, Value: f.Condition.Value}
 		}
+		if len(f.Columns) > 0 {
+			dtos[j].Columns = toFieldDTOs(f.Columns)
+		}
 	}
 	return dtos
 }

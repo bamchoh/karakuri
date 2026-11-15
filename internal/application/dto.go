@@ -32,6 +32,8 @@ type FieldDTO struct {
 	Category    string        `json:"category,omitempty"` // カテゴリ名（空の場合はカテゴリなし）
 	// クライアントの入力項目で、値を機器のアドレスの一覧から選べる（"values": 値を持つアドレスだけ / "all": どれでも。空なら選べない）
 	Browse string `json:"browse,omitempty"`
+	// "rows"（行を足せる表）の項目の列。値は行の並び（列の name をキーにしたオブジェクトの配列）
+	Columns []FieldDTO `json:"columns,omitempty"`
 }
 
 // OptionDTO はセレクトフィールドのオプション
