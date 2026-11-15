@@ -21,8 +21,13 @@ type RTUServer struct {
 
 // NewRTUServer は新しいRTUServerを作成する
 func NewRTUServer(config SerialConfig, handler RequestHandler) *RTUServer {
+	return newRTUServer(config, handler, OpenSerialPort)
+}
+
+// newRTUServer は、ポートを open で開く RTUServer を作る（テストではフェイクのポートを開く）
+func newRTUServer(config SerialConfig, handler RequestHandler, open PortOpener) *RTUServer {
 	return &RTUServer{
-		serial:    NewSerialManager(config),
+		serial:    newSerialManager(config, open),
 		processor: NewProcessor(handler),
 	}
 }

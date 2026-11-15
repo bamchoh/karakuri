@@ -628,6 +628,8 @@ JavaScript（goja）でPLC動作を記述。
 - **FINS**（`internal/protocols/fins/`）: `fins_test.go` / `area_test.go` はフレームのバイト列と、自分のサーバーへの接続で確認する。`client_test.go` は、応答を決められるフェイクの相手（UDP のソケット・TCP の待ち受け）で、遅れて届いた応答・壊れた応答・FINS/TCP のエラー・タイムアウト後のつなぎ直しを確認する
 - **SLMP**（`internal/protocols/slmp/slmp_test.go`）: 要求のフレームのバイト列と応答（マニュアルの例を含む）、自分のサーバーへの接続（TCP / UDP × 3E / 4E）、全デバイスの最後の番号の読み書き、フェイクの相手（遅れた応答・壊れた応答・タイムアウト）
 - **Modbus**（`internal/protocols/modbus/`）: `tcp_transport_test.go` は実際に TCP でつないで確認する。`rtu/rtu_test.go` は仕様書の既知のフレームで CRC / LRC を確認し、同じリクエストを RTU と ASCII の両方で処理して結果が一致することを確認する
+  - `rtu/serial_test.go` は、COM ポートなしでシリアルの送受信を確かめる。サーバーはポートを `PortOpener`（`rtu/port.go`）で開くので、テストではメモリ上のフェイクのポート（`fakePort`。実際のポートと同じく、タイムアウトしたら `Read` が `(0, nil)`、閉じたら error）を渡す（`newRTUServer` / `newASCIIServer`）。フレームの区切り・壊れたフレーム・Stop → Start を確認する
+  - RTU のフレームの区切り（`SerialManager.ReadFrame()`）: ファンクションコードからリクエストの長さがわかるとき（FC01〜06・0F・10）は、その長さが届いて CRC が合った時点で 1 つのフレームにする（後ろに続けて届いたバイトは次に回す）。わからないときは、バイトが届かなくなった時点まで。無音の時間（3.5 文字時間）だけで厳密に区切らないのは、USB シリアル変換器が受信したバイトをまとめて渡し、フレームの途中に間が空くことがあるため
 - **OPC UA**（`internal/protocols/opcua/`）: 実際の OPC UA クライアントでつなぐ。`host_integration_test.go` は実際の変数ストアを使う（他のテストはフェイクの変数ストアを使うため、変数ストアが持つ値の型や型変換を通らない）
 - 設定フォルダに書き込むパッケージのテストは、`TestMain` で `KARAKURI_CONFIG_DIR` を一時フォルダに向ける
 

@@ -20,8 +20,13 @@ type ASCIIServer struct {
 
 // NewASCIIServer は新しいASCIIServerを作成する
 func NewASCIIServer(config SerialConfig, handler RequestHandler) *ASCIIServer {
+	return newASCIIServer(config, handler, OpenSerialPort)
+}
+
+// newASCIIServer は、ポートを open で開く ASCIIServer を作る（テストではフェイクのポートを開く）
+func newASCIIServer(config SerialConfig, handler RequestHandler, open PortOpener) *ASCIIServer {
 	return &ASCIIServer{
-		serial:    NewASCIISerialManager(config),
+		serial:    newASCIISerialManager(config, open),
 		processor: NewProcessor(handler),
 	}
 }

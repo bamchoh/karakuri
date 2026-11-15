@@ -4,14 +4,13 @@ import (
 	"fmt"
 	"sync"
 	"time"
-
-	"go.bug.st/serial"
 )
 
 // ASCIISerialManager はASCIIモード用のシリアルポート管理を行う
 type ASCIISerialManager struct {
 	mu          sync.Mutex
-	port        serial.Port
+	port        Port
+	open        PortOpener
 	config      SerialConfig
 	readTimeout time.Duration
 	closed      bool
@@ -19,7 +18,13 @@ type ASCIISerialManager struct {
 
 // NewASCIISerialManager は新しいASCIISerialManagerを作成する
 func NewASCIISerialManager(config SerialConfig) *ASCIISerialManager {
+	return newASCIISerialManager(config, OpenSerialPort)
+}
+
+// newASCIISerialManager は、ポートを open で開く ASCIISerialManager を作る（テストではフェイクのポートを開く）
+func newASCIISerialManager(config SerialConfig, open PortOpener) *ASCIISerialManager {
 	return &ASCIISerialManager{
+		open:        open,
 		config:      config,
 		readTimeout: 1000 * time.Millisecond,
 	}
@@ -34,43 +39,14 @@ func (sm *ASCIISerialManager) Open() error {
 		return nil
 	}
 
-	// パリティの変換
-	var parity serial.Parity
-	switch sm.config.Parity {
-	case "N", "none":
-		parity = serial.NoParity
-	case "E", "even":
-		parity = serial.EvenParity
-	case "O", "odd":
-		parity = serial.OddParity
-	default:
-		parity = serial.NoParity
-	}
-
-	// ストップビットの変換
-	var stopBits serial.StopBits
-	switch sm.config.StopBits {
-	case 1:
-		stopBits = serial.OneStopBit
-	case 2:
-		stopBits = serial.TwoStopBits
-	default:
-		stopBits = serial.OneStopBit
-	}
-
-	mode := &serial.Mode{
-		BaudRate: sm.config.BaudRate,
-		DataBits: sm.config.DataBits,
-		Parity:   parity,
-		StopBits: stopBits,
-	}
-
-	port, err := serial.Open(sm.config.Port, mode)
+	port, err := sm.open(sm.config)
 	if err != nil {
-		return fmt.Errorf("failed to open serial port: %w", err)
+		return err
 	}
 
 	sm.port = port
+	// Close のあとにもう一度開いたとき（サーバーの Stop → Start）も読めるようにする
+	sm.closed = false
 	return nil
 }
 
