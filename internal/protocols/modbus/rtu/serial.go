@@ -6,15 +6,6 @@ import (
 	"time"
 )
 
-// SerialConfig はシリアルポートの設定を表す
-type SerialConfig struct {
-	Port     string
-	BaudRate int
-	DataBits int
-	StopBits int
-	Parity   string
-}
-
 // SerialManager はシリアルポートの管理を行う
 type SerialManager struct {
 	mu          sync.Mutex

@@ -176,3 +176,72 @@ for (const hc of hardwareCases) {
     await shot(page, `client-${hc.name.toLowerCase()}-read`);
   });
 }
+
+test("FINS（Host Link）の接続先は、9600bps・7E2・号機番号 0 が既定", async ({
+  page,
+}) => {
+  await page.getByTitle("Connections", { exact: true }).click();
+  await addClientFromDialog(page, {
+    protocol: "fins-hostlink",
+    name: "HostLink",
+  });
+  await expect(setting(page, "シリアルポート")).toBeVisible();
+  await expect(setting(page, "ボーレート")).toHaveValue("9600");
+  await expect(setting(page, "データビット")).toHaveValue("7");
+  await expect(setting(page, "ストップビット")).toHaveValue("2");
+  await expect(setting(page, "パリティ")).toHaveValue("E");
+  await expect(setting(page, "号機番号")).toHaveValue("0");
+  await shot(page, "client-hostlink-settings");
+});
+
+test("実機: Karakuri の FINS（Host Link）サーバーから読み取れる", async ({
+  page,
+}) => {
+  test.skip(
+    serialPair.length !== 2,
+    "KARAKURI_SERIAL_PAIR（例: COM4,COM6）が設定されていない",
+  );
+  const [serverPort, clientPort] = serialPair;
+
+  await api(page, "AddServer", "fins-hostlink", "");
+  const cfg = await api<any>(page, "GetServerConfig", "fins-hostlink");
+  cfg.settings.serialPort = serverPort;
+  cfg.settings.unit = 7;
+  await api(page, "UpdateServerConfig", cfg);
+  await api(page, "StartServer", "fins-hostlink");
+  await api(page, "WriteWord", "fins-hostlink", "DM", 101, 1234);
+
+  const c = await api<{ id: string }>(
+    page,
+    "AddClient",
+    "fins-hostlink",
+    "HostLink",
+  );
+  await api(page, "UpdateClient", c.id, "HostLink", {
+    serialPort: clientPort,
+    unit: 7,
+    timeoutMs: 1000,
+  });
+  await openClient(page, "HostLink");
+  await selectClientTab(page, "コマンド");
+  await page.getByRole("button", { name: "新しいコマンド" }).click();
+  await expect(composer(page)).toBeVisible();
+  await setting(composer(page), "コマンド").selectOption({
+    label: "0101 メモリエリアの読み出し",
+  });
+  await setting(composer(page), "アドレス").fill("100");
+  await setting(composer(page), "個数").fill("2");
+  await composer(page)
+    .getByRole("button", { name: "送信", exact: true })
+    .click();
+
+  await expect(result(page).locator(".client-status")).toHaveText("正常");
+  const values = result(page).locator(".client-values tr");
+  await expect(values).toHaveCount(2);
+  await expect(values.nth(1)).toContainText("1234 (0x04D2)");
+  // Host Link のフレームの先頭 "@07FA0"（文字コードで 40 30 37 46 41 30）
+  await expect(result(page).locator(".client-bytes")).toContainText(
+    "40 30 37 46 41 30",
+  );
+  await shot(page, "client-hostlink-read");
+});

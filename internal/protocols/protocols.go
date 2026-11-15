@@ -21,6 +21,7 @@ func Factories() []protocol.ServerFactory {
 		&modbus.ASCIIFactory{},
 		&opcua.Factory{},
 		&fins.Factory{},
+		&fins.HostLinkFactory{},
 		&slmp.Factory{},
 	}
 }
@@ -33,6 +34,7 @@ func ClientFactories() []protocol.ClientFactory {
 		&modbus.ASCIIClientFactory{},
 		&opcua.ClientFactory{},
 		&fins.ClientFactory{},
+		&fins.HostLinkClientFactory{},
 		&slmp.ClientFactory{},
 	}
 }
