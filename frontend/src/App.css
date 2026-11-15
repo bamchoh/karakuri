@@ -1326,6 +1326,25 @@ button:disabled {
   text-overflow: ellipsis;
 }
 
+/* 一覧の行: 名前を先に縮めない（長すぎる名前だけ省略する）。プロトコルのバッジは折り返さず、
+   入りきらない分を省略する（「MC プロトコル（シリアル）」のような長いプロトコル名で、行が 2 行になり名前が隠れないように） */
+.server-tab-left .server-tab-name {
+  flex-shrink: 0;
+  max-width: 65%;
+}
+
+.server-tab-left .server-instance-variant {
+  flex: 0 1 auto;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.server-tab-left .client-polling-badge {
+  flex-shrink: 0;
+}
+
 .server-tab-variant {
   font-size: 0.7rem;
   color: #9ca3af;

@@ -408,12 +408,18 @@ export const ServerPanel = forwardRef<ServerPanelHandle, ServerPanelProps>(
                       className={`server-status-dot ${statusClass}`}
                       title={instance.status}
                     />
-                    <span className="server-tab-name">
+                    <span
+                      className="server-tab-name"
+                      title={instance.displayName}
+                    >
                       {instance.displayName}
                     </span>
                     {/* バリアントは、選べるプロトコル（2 つ以上ある）のときだけ出す */}
                     {instance.variant && hasVariantChoice(instance) && (
-                      <span className="server-instance-variant">
+                      <span
+                        className="server-instance-variant"
+                        title={instance.variant}
+                      >
                         {instance.variant}
                       </span>
                     )}
@@ -473,8 +479,13 @@ export const ServerPanel = forwardRef<ServerPanelHandle, ServerPanelProps>(
                     className={`server-status-dot ${c.connected ? "running" : "stopped"}`}
                     title={c.connected ? "接続中" : "未接続"}
                   />
-                  <span className="server-tab-name">{c.name}</span>
-                  <span className="server-instance-variant">
+                  <span className="server-tab-name" title={c.name}>
+                    {c.name}
+                  </span>
+                  <span
+                    className="server-instance-variant"
+                    title={c.displayName}
+                  >
                     {c.displayName}
                   </span>
                   {c.polling && (
