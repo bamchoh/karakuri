@@ -82,6 +82,42 @@ func (sm *SerialManager) Open() error {
 	return nil
 }
 
+// Reopen は、読めなくなって閉じたポートを開き直す。Close したあとは開かない
+func (sm *SerialManager) Reopen() error {
+	sm.mu.Lock()
+	defer sm.mu.Unlock()
+
+	if sm.closed {
+		return fmt.Errorf("serial port closed")
+	}
+	if sm.port != nil {
+		return nil
+	}
+	port, err := sm.open(sm.config)
+	if err != nil {
+		return err
+	}
+	sm.port = port
+	sm.pending = nil
+	return nil
+}
+
+// lose は、読めなくなったポートを閉じる（Reopen で開き直す）
+func (sm *SerialManager) lose(port Port) {
+	sm.mu.Lock()
+	defer sm.mu.Unlock()
+	if sm.port == port {
+		sm.port.Close()
+		sm.port = nil
+		sm.pending = nil
+	}
+}
+
+// PortName は、設定のポートの名前（COM4 など）
+func (sm *SerialManager) PortName() string {
+	return sm.config.Port
+}
+
 // Close はシリアルポートを閉じる
 func (sm *SerialManager) Close() error {
 	sm.mu.Lock()
@@ -181,14 +217,9 @@ func (sm *SerialManager) ReadFrame() ([]byte, error) {
 			}
 			sm.mu.Unlock()
 
-			// タイムアウトの場合
-			if len(frame) > 0 {
-				// 既にデータがある場合は、3.5文字時間経過でフレーム完了とみなす
-				if time.Since(lastReadTime) >= silenceTime {
-					return frame, nil
-				}
-			}
-			continue
+			// ポートが使えなくなった（変換器を抜いたなど）。閉じて、開き直すのはサーバーに任せる
+			sm.lose(port)
+			return nil, fmt.Errorf("%w: %v", errPortLost, err)
 		}
 
 		if n > 0 {

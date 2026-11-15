@@ -14,15 +14,22 @@ import (
 //   - Read は、届いているバイトがあればすぐ返す。何も届かないまま読み取りのタイムアウトが過ぎたら (0, nil)
 //   - Close のあとの Read / Write は error（Read の待ちも、すぐ戻る）
 
-var errFakePortClosed = errors.New("fake port closed")
+var (
+	errFakePortClosed = errors.New("fake port closed")
+	errFakeUnplugged  = errors.New("fake port unplugged")
+)
 
 type fakePort struct {
 	mu      sync.Mutex
 	rx      []byte        // サーバーがまだ読んでいないバイト（相手から届いたもの）
-	changed chan struct{} // rx か closed が変わったら close する
+	changed chan struct{} // rx・closed・unplugged が変わったら close する
 	timeout time.Duration
 	closed  bool
 	written chan []byte // サーバーが書いたバイト列（Write 1 回ごと）
+
+	// unplugged なら、Read はすぐエラーを返す（実際のポートで USB 変換器を抜いたときと同じ）
+	unplugged bool
+	reads     int // Read が呼ばれた回数
 }
 
 func newFakePort() *fakePort {
@@ -41,10 +48,14 @@ func (p *fakePort) notifyLocked() {
 func (p *fakePort) Read(b []byte) (int, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
+	p.reads++
 	deadline := time.Now().Add(p.timeout)
 	for {
 		if p.closed {
 			return 0, errFakePortClosed
+		}
+		if p.unplugged {
+			return 0, errFakeUnplugged
 		}
 		if len(p.rx) > 0 {
 			n := copy(b, p.rx)
@@ -96,6 +107,12 @@ func (p *fakePort) isClosed() bool {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	return p.closed
+}
+
+func (p *fakePort) readCount() int {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return p.reads
 }
 
 // feed は、相手（マスター）からバイトが届いたことにする
@@ -163,6 +180,73 @@ func (l *fakeLine) openCount() int {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	return len(l.ports)
+}
+
+// openAttempts は、開こうとした回数（開けなかったものも含む）
+func (l *fakeLine) openAttempts() int {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return len(l.configs)
+}
+
+// unplug は、USB 変換器を抜いたことにする。いまのポートは読めなくなり、挿し直すまで開けない
+func (l *fakeLine) unplug(t *testing.T) *fakePort {
+	t.Helper()
+	p := l.port(t)
+	l.mu.Lock()
+	l.openErr = errors.New("ポートがない")
+	l.mu.Unlock()
+	p.mu.Lock()
+	p.unplugged = true
+	p.notifyLocked()
+	p.mu.Unlock()
+	return p
+}
+
+// replug は、USB 変換器を挿し直したことにする（次から開ける）
+func (l *fakeLine) replug() {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	l.openErr = nil
+}
+
+// waitFor は、cond が true になるまで待つ
+func waitFor(t *testing.T, what string, cond func() bool) {
+	t.Helper()
+	deadline := time.Now().Add(2 * time.Second)
+	for !cond() {
+		if time.Now().After(deadline) {
+			t.Fatalf("%s にならない", what)
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+}
+
+// testReopenInterval は、テストでポートを開き直す間隔
+const testReopenInterval = 20 * time.Millisecond
+
+// checkReconnect は、変換器を抜くとポートを閉じて CPU を使わずに待ち、挿し直すと開き直して応答することを確かめる。
+// request と expect は、開き直したあとに送るリクエストと、応答の確かめ方
+func checkReconnect(t *testing.T, line *fakeLine, request []byte, expect func(*testing.T, *fakePort)) {
+	t.Helper()
+	lost := line.unplug(t)
+	waitFor(t, "抜いたポートが閉じる", lost.isClosed)
+
+	// 開けない間は、間隔をあけて開き直そうとする（読めないポートを読み続けない）
+	before := line.openAttempts()
+	time.Sleep(10 * testReopenInterval)
+	if tries := line.openAttempts() - before; tries < 3 || tries > 15 {
+		t.Errorf("抜いている間に開こうとした回数 = %d（%v おきなら 10 回ほど）", tries, testReopenInterval)
+	}
+	if reads := lost.readCount(); reads > 3 {
+		t.Errorf("抜いたポートを %d 回読んだ（読み続けている）", reads)
+	}
+
+	line.replug()
+	waitFor(t, "挿し直したポートが開く", func() bool { return line.openCount() == 2 })
+	again := line.port(t)
+	again.feed(request)
+	expect(t, again)
 }
 
 func serialConfig(baud int) SerialConfig {
@@ -369,6 +453,56 @@ func TestRTUServer_StopAndRestart(t *testing.T) {
 	expectRTUResponse(t, second, "01 03 02 00 00")
 }
 
+// 動いている間に変換器を抜いても、挿し直せばまた応答する
+func TestRTUServer_ReconnectsAfterUnplug(t *testing.T) {
+	line := &fakeLine{}
+	srv := newRTUServer(serialConfig(9600), newMemHandler(), line.open)
+	srv.reopenInterval = testReopenInterval
+	if err := srv.Start(); err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+	t.Cleanup(func() { srv.Stop() })
+
+	p := line.port(t)
+	p.feed(rtuFrame(t, "01 06 00 01 00 0A"))
+	expectRTUResponse(t, p, "01 06 00 01 00 0A")
+
+	// レジスタの値は、つなぎ直しても残る
+	checkReconnect(t, line, rtuFrame(t, "01 03 00 01 00 01"), func(t *testing.T, p *fakePort) {
+		expectRTUResponse(t, p, "01 03 02 00 0A")
+	})
+}
+
+// 開き直すのを待っている間に Stop しても、すぐ戻り、それ以上開こうとしない
+func TestRTUServer_StopWhileReconnecting(t *testing.T) {
+	line := &fakeLine{}
+	srv := newRTUServer(serialConfig(9600), newMemHandler(), line.open)
+	srv.reopenInterval = time.Hour
+	if err := srv.Start(); err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+	lost := line.unplug(t)
+	waitFor(t, "抜いたポートが閉じる", lost.isClosed)
+
+	stopped := make(chan struct{})
+	go func() {
+		srv.Stop()
+		close(stopped)
+	}()
+	select {
+	case <-stopped:
+	case <-time.After(2 * time.Second):
+		t.Fatal("開き直すのを待っている間の Stop が戻らない")
+	}
+	line.replug()
+	if err := srv.serial.Reopen(); err == nil {
+		t.Error("Stop のあとに Reopen でポートが開いた")
+	}
+	if line.openCount() != 1 {
+		t.Errorf("Stop のあとにポートを開いた（%d 回）", line.openCount())
+	}
+}
+
 func TestRTUServer_OpenError(t *testing.T) {
 	line := &fakeLine{openErr: errors.New("ポートがない")}
 	srv := newRTUServer(serialConfig(9600), newMemHandler(), line.open)
@@ -431,6 +565,20 @@ func TestASCIIServer_IgnoresBrokenFrame(t *testing.T) {
 
 	p.feed(BuildASCIIFrame(unhex(t, "01 03 00 00 00 01")))
 	expectASCIIResponse(t, p, "01 03 02 00 00")
+}
+
+func TestASCIIServer_ReconnectsAfterUnplug(t *testing.T) {
+	line := &fakeLine{}
+	srv := newASCIIServer(serialConfig(9600), newMemHandler(), line.open)
+	srv.reopenInterval = testReopenInterval
+	if err := srv.Start(); err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+	t.Cleanup(func() { srv.Stop() })
+
+	checkReconnect(t, line, BuildASCIIFrame(unhex(t, "01 03 00 00 00 01")), func(t *testing.T, p *fakePort) {
+		expectASCIIResponse(t, p, "01 03 02 00 00")
+	})
 }
 
 func TestASCIIServer_StopAndRestart(t *testing.T) {

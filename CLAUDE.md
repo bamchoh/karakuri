@@ -630,6 +630,8 @@ JavaScript（goja）でPLC動作を記述。
 - **Modbus**（`internal/protocols/modbus/`）: `tcp_transport_test.go` は実際に TCP でつないで確認する。`rtu/rtu_test.go` は仕様書の既知のフレームで CRC / LRC を確認し、同じリクエストを RTU と ASCII の両方で処理して結果が一致することを確認する
   - `rtu/serial_test.go` は、COM ポートなしでシリアルの送受信を確かめる。サーバーはポートを `PortOpener`（`rtu/port.go`）で開くので、テストではメモリ上のフェイクのポート（`fakePort`。実際のポートと同じく、タイムアウトしたら `Read` が `(0, nil)`、閉じたら error）を渡す（`newRTUServer` / `newASCIIServer`）。フレームの区切り・壊れたフレーム・Stop → Start を確認する
   - RTU のフレームの区切り（`SerialManager.ReadFrame()`）: ファンクションコードからリクエストの長さがわかるとき（FC01〜06・0F・10）は、その長さが届いて CRC が合った時点で 1 つのフレームにする（後ろに続けて届いたバイトは次に回す）。わからないときは、バイトが届かなくなった時点まで。無音の時間（3.5 文字時間）だけで厳密に区切らないのは、USB シリアル変換器が受信したバイトをまとめて渡し、フレームの途中に間が空くことがあるため
+  - **ポートが使えなくなったとき**（USB シリアル変換器を抜いたなど）: 読み取りがエラーになったら、ポートを閉じて、1 秒おきに開き直す（`rtu/reconnect.go`。ログに「使えなくなりました」「開き直しました」を 1 回ずつ出す）。ライブラリは通信エラー（フレーミング・パリティ）では読み取りを失敗にしないので、`Read` のエラーは「ポートが使えなくなった」として扱う。閉じずに読み直すと、エラーがすぐ返り続けて CPU を 1 コア使い切り、挿し直しても同じハンドルでは読めない
+  - 実際の COM ポートでの試験: `rtu/serial_hw_test.go`（配線・RTU と ASCII の読み書き・応答の時間）と `rtu/serial_hw_unplug_test.go`（手で抜き差しする）。2 つのポートをクロスでつなぎ、環境変数 `KARAKURI_SERIAL_PAIR`（`COM4,COM6` の形。サーバー側, マスター側）を設定したときだけ動く（CI では飛ばす）。抜き差しは `KARAKURI_SERIAL_UNPLUG=1` も要る。CPU の使い方は OS の側（`Get-Process rtu.test` の `TotalProcessorTime`）で見る（Go の `runtime/metrics` の CPU 時間は、システムコールの中の時間を数えない）
 - **OPC UA**（`internal/protocols/opcua/`）: 実際の OPC UA クライアントでつなぐ。`host_integration_test.go` は実際の変数ストアを使う（他のテストはフェイクの変数ストアを使うため、変数ストアが持つ値の型や型変換を通らない）
 - 設定フォルダに書き込むパッケージのテストは、`TestMain` で `KARAKURI_CONFIG_DIR` を一時フォルダに向ける
 
