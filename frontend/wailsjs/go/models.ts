@@ -103,6 +103,7 @@ export namespace application {
 	    showWhen?: ConditionDTO;
 	    category?: string;
 	    browse?: string;
+	    columns?: FieldDTO[];
 	
 	    static createFrom(source: any = {}) {
 	        return new FieldDTO(source);
@@ -122,6 +123,7 @@ export namespace application {
 	        this.showWhen = this.convertValues(source["showWhen"], ConditionDTO);
 	        this.category = source["category"];
 	        this.browse = source["browse"];
+	        this.columns = this.convertValues(source["columns"], FieldDTO);
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {

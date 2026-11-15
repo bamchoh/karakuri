@@ -2633,10 +2633,12 @@ input.address-invalid:focus,
 
 .client-poll-value {
   display: flex;
+  flex-wrap: wrap; /* 長い値（ダブルワードなど）は、見出しの下の行に回す */
   justify-content: space-between;
-  gap: 0.5rem;
+  gap: 0 0.5rem;
   border-bottom: 1px solid var(--border-subtle);
   padding: 1px 0;
+  min-width: 0;
 }
 
 .client-poll-value-label {
@@ -2646,6 +2648,9 @@ input.address-invalid:focus,
 
 .client-poll-value-text {
   font-family: "Consolas", "Courier New", monospace;
+  margin-left: auto;
+  text-align: right;
+  overflow-wrap: anywhere; /* それでも欄より長ければ、欄の中で折り返す（はみ出して切れないように） */
 }
 
 /* ----- 変数と接続先の同期の状態 ----- */
@@ -2962,4 +2967,44 @@ input.address-invalid:focus,
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* 行を足せる表（項目の種類 "rows"。FieldControl の RowsField）。MC プロトコルのランダム読み出し・書き込みのデバイスなど */
+.vscode-setting-control.rows-control {
+  max-width: 720px;
+}
+
+.rows-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.rows-table th {
+  text-align: left;
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--text-muted);
+  padding: 0 0.25rem 0.25rem 0;
+}
+
+.rows-table td {
+  padding: 0 0.25rem 0.25rem 0;
+  vertical-align: middle;
+}
+
+.rows-table .rows-action-col {
+  width: 1%;
+  white-space: nowrap;
+}
+
+.rows-footer {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-top: 0.25rem;
+}
+
+.rows-count {
+  font-size: 0.75rem;
+  color: var(--text-muted);
 }

@@ -331,3 +331,234 @@ test.describe("SLMP", () => {
     ).toBeDisabled();
   });
 });
+
+test.describe("SLMP クライアントのランダム読み出し・書き込み", () => {
+  test.beforeEach(async ({ page }) => {
+    const client = await api<{ id: string }>(page, "AddClient", "slmp", "PLC");
+    await api(page, "UpdateClient", client.id, "PLC", {
+      host: "127.0.0.1",
+      port: SLMP_PORT,
+      transport: "tcp",
+      frame: "4e",
+      timeoutMs: 500,
+    });
+    await openClient(page, "PLC");
+  });
+
+  // コマンドのダイアログと、その中の表（"rows"）
+  async function openDialog(page: Page, command: string) {
+    await page.getByRole("button", { name: "新しいコマンド" }).click();
+    const dialog = page.locator(".dialog").last();
+    await expect(dialog).toBeVisible();
+    await dialog
+      .locator(".vscode-setting-item", {
+        has: page.locator(".vscode-setting-label", { hasText: /^コマンド$/ }),
+      })
+      .locator("select")
+      .selectOption({ label: command });
+    const table = dialog.locator(".rows-table");
+    await expect(table).toBeVisible();
+    return { dialog, table };
+  }
+
+  // 表の i 行目のセル（列のラベルで選ぶ）
+  const cell = (table: ReturnType<Page["locator"]>, i: number, label: string) =>
+    table.locator("tbody tr").nth(i).getByLabel(label, { exact: true });
+
+  test("0403: 行を足してデバイスを並べ、ワードとダブルワードを読む", async ({
+    page,
+  }) => {
+    await api(page, "WriteWord", "slmp", "D", 100, 0x1234);
+    await api(page, "WriteWord", "slmp", "D", 200, 0x1170); // D200〜D201 = 70000
+    await api(page, "WriteWord", "slmp", "D", 201, 0x0001);
+    await api(page, "WriteBit", "slmp", "M", 3, true);
+
+    const { dialog, table } = await openDialog(page, "0403 ランダム読み出し");
+    // 最初は 1 行
+    await expect(table.locator("tbody tr")).toHaveCount(1);
+    await cell(table, 0, "デバイス番号").fill("100");
+
+    // 行を足すと、最後の行を写した行が増える
+    await dialog.getByRole("button", { name: "行を追加" }).click();
+    await expect(table.locator("tbody tr")).toHaveCount(2);
+    await expect(cell(table, 1, "デバイス番号")).toHaveValue("100");
+    await cell(table, 1, "デバイス番号").fill("200");
+    await cell(table, 1, "単位").selectOption("dword");
+
+    await dialog.getByRole("button", { name: "行を追加" }).click();
+    await cell(table, 2, "デバイス").selectOption("M");
+    await cell(table, 2, "デバイス番号").fill("0");
+    await cell(table, 2, "単位").selectOption("word");
+    await expect(dialog).toContainText("3 行 / 最大 192");
+    await shot(page, "slmp-random-read-rows");
+
+    await dialog.getByRole("button", { name: "送信", exact: true }).click();
+    const result = dialog.getByTestId("client-dialog-result");
+    await expect(result.locator(".client-status")).toHaveText("正常");
+    await expect(result).toContainText(
+      "0403 ランダム読み出し ワード 2 点・ダブルワード 1 点",
+    );
+    const values = result.locator(".client-poll-value");
+    await expect(values).toHaveCount(3);
+    await expect(values.nth(0)).toContainText("D100");
+    await expect(values.nth(0)).toContainText("4660 (0x1234)");
+    await expect(values.nth(1)).toContainText("M0 から 16 点");
+    await expect(values.nth(1)).toContainText("8 (0x0008)");
+    await expect(values.nth(2)).toContainText("D200（ダブルワード）");
+    await expect(values.nth(2)).toContainText("70000 (0x00011170)");
+    // ダブルワードの長い値も、欄からはみ出さない（切れずに全部見える）
+    const overflow = await values
+      .nth(2)
+      .locator(".client-poll-value-text")
+      .evaluate((el) => {
+        const cell = el.parentElement!.getBoundingClientRect();
+        const text = el.getBoundingClientRect();
+        return text.right - cell.right;
+      });
+    expect(overflow).toBeLessThanOrEqual(1);
+
+    // 行を消せる
+    await table.getByRole("button", { name: "1 行目を削除" }).click();
+    await expect(table.locator("tbody tr")).toHaveCount(2);
+    await expect(cell(table, 0, "デバイス番号")).toHaveValue("200");
+    await shot(page, "slmp-random-read-result");
+  });
+
+  test("1402: ワード・ダブルワードと、ビットを書く。混ぜると理由が出る", async ({
+    page,
+  }) => {
+    const { dialog, table } = await openDialog(page, "1402 ランダム書き込み");
+    await cell(table, 0, "デバイス番号").fill("10");
+    await cell(table, 0, "値").fill("0x1234");
+    await dialog.getByRole("button", { name: "行を追加" }).click();
+    await cell(table, 1, "デバイス番号").fill("20");
+    await cell(table, 1, "単位").selectOption("dword");
+    await cell(table, 1, "値").fill("-2");
+    await dialog.getByRole("button", { name: "送信", exact: true }).click();
+    await expect(
+      dialog.getByTestId("client-dialog-result").locator(".client-status"),
+    ).toHaveText("正常");
+    expect(await api(page, "ReadWords", "slmp", "D", 10, 1)).toEqual([0x1234]);
+    expect(await api(page, "ReadWords", "slmp", "D", 20, 2)).toEqual([
+      0xfffe, 0xffff,
+    ]);
+
+    // ビットとワードを混ぜると、理由を出して送れない
+    await dialog.getByRole("button", { name: "行を追加" }).click();
+    await cell(table, 2, "デバイス").selectOption("M");
+    await cell(table, 2, "単位").selectOption("bit");
+    await cell(table, 2, "値").fill("1");
+    await expect(dialog).toContainText("同じコマンドで書けません");
+    await expect(
+      dialog.getByRole("button", { name: "送信", exact: true }),
+    ).toBeDisabled();
+
+    // ビットだけにすれば書ける
+    await table.getByRole("button", { name: "1 行目を削除" }).click();
+    await table.getByRole("button", { name: "1 行目を削除" }).click();
+    await expect(table.locator("tbody tr")).toHaveCount(1);
+    await dialog.getByRole("button", { name: "送信", exact: true }).click();
+    await expect(
+      dialog.getByTestId("client-dialog-result").locator(".client-status"),
+    ).toHaveText("正常");
+    expect(await api(page, "ReadBits", "slmp", "M", 20, 1)).toEqual([true]);
+    await shot(page, "slmp-random-write");
+  });
+});
+
+test.describe("SLMP クライアントの表（行を足せる項目）を、ポーリングと保存したコマンドで使う", () => {
+  test.beforeEach(async ({ page }) => {
+    const client = await api<{ id: string }>(page, "AddClient", "slmp", "PLC");
+    await api(page, "UpdateClient", client.id, "PLC", {
+      host: "127.0.0.1",
+      port: SLMP_PORT,
+      transport: "tcp",
+      frame: "4e",
+      timeoutMs: 500,
+    });
+    await openClient(page, "PLC");
+  });
+
+  test("0403 をポーリングの読み取り項目にすると、デバイスごとの値が周期的に出る", async ({
+    page,
+  }) => {
+    await api(page, "WriteWord", "slmp", "D", 5, 7);
+    await api(page, "WriteWord", "slmp", "W", 0x10, 0x1170);
+    await api(page, "WriteWord", "slmp", "W", 0x11, 0x0001);
+    await page.locator(".sub-tab-button", { hasText: "ポーリング" }).click();
+    const view = page.locator(".client-polling");
+    await expect(view).toBeVisible();
+
+    await view
+      .locator(".vscode-setting-item", {
+        has: page.locator(".vscode-setting-label", { hasText: /^コマンド$/ }),
+      })
+      .locator("select")
+      .selectOption({ label: "0403 ランダム読み出し" });
+    const table = view.locator(".rows-table");
+    await table.getByLabel("デバイス番号", { exact: true }).fill("5");
+    await view.getByRole("button", { name: "行を追加" }).click();
+    const second = table.locator("tbody tr").nth(1);
+    await second.getByLabel("デバイス", { exact: true }).selectOption("W");
+    await second.getByLabel("デバイス番号", { exact: true }).fill("10");
+    await second.getByLabel("単位", { exact: true }).selectOption("dword");
+    await view.getByRole("button", { name: "項目を追加" }).click();
+
+    const item = page.getByTestId("client-poll-item").first();
+    await expect(item).toContainText(
+      "0403 ランダム読み出し ワード 1 点・ダブルワード 1 点（D5, W10）",
+    );
+    await view.getByLabel("周期（ms）").fill("100");
+    await view.getByLabel("周期（ms）").press("Enter");
+    await view.getByRole("button", { name: /開始/ }).click();
+    const values = item.locator(".client-poll-value-text");
+    await expect(values).toHaveText(["7", "70000 (0x00011170)"]);
+
+    // サーバーの値を変えると、次の周期で変わる
+    await api(page, "WriteWord", "slmp", "D", 5, 8);
+    await expect(values.first()).toHaveText("8");
+    await shot(page, "slmp-random-read-polling");
+    await view.getByRole("button", { name: /停止/ }).click();
+  });
+
+  test("表のあるコマンドを保存して、編集で開くと行が戻る", async ({ page }) => {
+    await page.getByRole("button", { name: "新しいコマンド" }).click();
+    const dialog = page.locator(".dialog").last();
+    await dialog
+      .locator(".vscode-setting-item", {
+        has: page.locator(".vscode-setting-label", { hasText: /^コマンド$/ }),
+      })
+      .locator("select")
+      .selectOption({ label: "1402 ランダム書き込み" });
+    const table = dialog.locator(".rows-table");
+    await table.getByLabel("デバイス番号", { exact: true }).fill("30");
+    await table.getByLabel("値", { exact: true }).fill("99");
+    await dialog.getByRole("button", { name: "行を追加" }).click();
+    const second = table.locator("tbody tr").nth(1);
+    await second.getByLabel("デバイス番号", { exact: true }).fill("31");
+    await second.getByLabel("値", { exact: true }).fill("100");
+    await dialog.getByPlaceholder("例: 速度を読む").fill("2 か所に書く");
+    await dialog.getByRole("button", { name: "保存して閉じる" }).click();
+    await expect(dialog).toBeHidden();
+
+    // 保存したコマンドを送ると、書ける
+    const saved = page.locator("tr", { hasText: "2 か所に書く" });
+    await saved.getByRole("button", { name: "送信" }).click();
+    await expect
+      .poll(() => api(page, "ReadWords", "slmp", "D", 30, 2))
+      .toEqual([99, 100]);
+
+    // 編集で開くと、2 行が戻る
+    await saved.getByRole("button", { name: "編集" }).click();
+    const edit = page.locator(".dialog").last();
+    const rows = edit.locator(".rows-table tbody tr");
+    await expect(rows).toHaveCount(2);
+    await expect(
+      rows.nth(1).getByLabel("デバイス番号", { exact: true }),
+    ).toHaveValue("31");
+    await expect(rows.nth(1).getByLabel("値", { exact: true })).toHaveValue(
+      "100",
+    );
+    await shot(page, "slmp-random-write-saved-edit");
+  });
+});

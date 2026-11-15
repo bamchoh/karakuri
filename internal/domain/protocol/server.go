@@ -138,6 +138,9 @@ type ConfigField struct {
 	// BrowseValues なら値を持つアドレス（BrowseEntry.Selectable）だけ、BrowseAll ならどのアドレスも選べる。空なら選べない。
 	// "textarea" の項目は選んだものを 1 行ずつ足し、ほかの項目は選んだ 1 つで置き換える
 	Browse string `json:"browse,omitempty"`
+	// Columns は、Type が "rows"（行を足せる表）の項目の列。値は行の並び（[]map[string]interface{}。キーは列の Name）。
+	// 列には "text" / "number" / "select" を使う。Default は行の並び（空なら、列の既定値で 1 行）。Max は行の数の上限
+	Columns []ConfigField `json:"columns,omitempty"`
 }
 
 // ConfigField.Browse の値

@@ -1,5 +1,6 @@
 import { application } from "../../wailsjs/go/models";
 import { FolderTree } from "lucide-react";
+import { FieldControl } from "./FieldControl";
 
 // 表示条件（field.showWhen）を満たす項目だけを返す。
 // 条件は「別の項目の値が、決まった値のとき」。まだ入力していない項目は、既定値で判定する
@@ -17,7 +18,7 @@ export function visibleFields(
   });
 }
 
-// サーバー設定の 1 項目。プロトコルの実装が返す項目の定義（種類・選択肢・範囲）に合わせて入力欄を出す
+// サーバー設定の 1 項目（ラベル・説明・入力欄）。入力欄は FieldControl（項目の種類ごと）
 interface DynamicFieldProps {
   field: application.FieldDTO;
   value: any;
@@ -38,110 +39,22 @@ export function DynamicField({
   onRefreshPorts,
   onBrowse,
 }: DynamicFieldProps) {
-  const displayValue = value ?? field.default;
+  const control = (
+    <FieldControl
+      field={field}
+      value={value}
+      onChange={onChange}
+      disabled={disabled}
+      serialPorts={serialPorts}
+      onRefreshPorts={onRefreshPorts}
+    />
+  );
 
-  const renderControl = () => {
-    switch (field.type) {
-      case "text":
-        return (
-          <input
-            type="text"
-            value={displayValue || ""}
-            onChange={(e) => onChange(e.target.value)}
-            disabled={disabled}
-          />
-        );
-      case "password":
-        return (
-          <input
-            type="password"
-            value={displayValue || ""}
-            onChange={(e) => onChange(e.target.value)}
-            disabled={disabled}
-            autoComplete="off"
-          />
-        );
-      case "textarea":
-        return (
-          <textarea
-            rows={3}
-            value={displayValue || ""}
-            onChange={(e) => onChange(e.target.value)}
-            disabled={disabled}
-            spellCheck={false}
-          />
-        );
-      case "number":
-        return (
-          <input
-            type="number"
-            min={field.min ?? undefined}
-            max={field.max ?? undefined}
-            value={displayValue ?? 0}
-            onChange={(e) => onChange(parseInt(e.target.value))}
-            disabled={disabled}
-          />
-        );
-      case "select":
-        return (
-          <select
-            value={String(displayValue ?? "")}
-            onChange={(e) => {
-              const val = e.target.value;
-              const numVal = parseInt(val);
-              onChange(isNaN(numVal) ? val : numVal);
-            }}
-            disabled={disabled}
-          >
-            {field.options?.map((opt) => (
-              <option key={opt.value} value={opt.value}>
-                {opt.label}
-              </option>
-            ))}
-          </select>
-        );
-      case "serialport":
-        return (
-          <div className="serial-port-field">
-            <select
-              className="serial-port-select"
-              value={displayValue || ""}
-              onChange={(e) => onChange(e.target.value)}
-              disabled={disabled}
-            >
-              {serialPorts.length === 0 && (
-                <option value="">ポートが見つかりません</option>
-              )}
-              {serialPorts.map((port) => (
-                <option key={port} value={port}>
-                  {port}
-                </option>
-              ))}
-              {displayValue && !serialPorts.includes(displayValue) && (
-                <option value={displayValue}>{displayValue} (未検出)</option>
-              )}
-            </select>
-            <button
-              onClick={onRefreshPorts}
-              disabled={disabled}
-              className="btn-secondary serial-port-refresh"
-              title="ポート一覧を更新"
-            >
-              ↻
-            </button>
-          </div>
-        );
-      default:
-        return (
-          <input
-            type="text"
-            value={displayValue || ""}
-            onChange={(e) => onChange(e.target.value)}
-            disabled={disabled}
-          />
-        );
-    }
-  };
+  // 表（"rows"）は幅が要るので、入力欄の幅の上限を広げる
+  const controlClass =
+    field.type === "rows"
+      ? "vscode-setting-control rows-control"
+      : "vscode-setting-control";
 
   return (
     <div className="vscode-setting-item">
@@ -150,8 +63,8 @@ export function DynamicField({
         <div className="vscode-setting-description">{field.description}</div>
       )}
       {field.browse && onBrowse ? (
-        <div className="vscode-setting-control field-with-browse">
-          {renderControl()}
+        <div className={`${controlClass} field-with-browse`}>
+          {control}
           <button
             className="btn-secondary btn-small"
             onClick={onBrowse}
@@ -164,7 +77,7 @@ export function DynamicField({
           </button>
         </div>
       ) : (
-        <div className="vscode-setting-control">{renderControl()}</div>
+        <div className={controlClass}>{control}</div>
       )}
     </div>
   );

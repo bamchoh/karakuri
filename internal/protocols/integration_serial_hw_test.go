@@ -364,3 +364,55 @@ func TestHW_MCSerial_VariableMapping(t *testing.T) {
 		})
 	}
 }
+
+// MC プロトコル（シリアル）: 表から組み立てた 0403 / 1402（ダブルワードを含む）を、形式 4（ASCII）と形式 5 で送る
+func TestHW_MCSerial_RandomCommands(t *testing.T) {
+	rows := func(r ...map[string]interface{}) map[string]interface{} {
+		items := make([]interface{}, len(r))
+		for i := range r {
+			items[i] = r[i]
+		}
+		return map[string]interface{}{"items": items}
+	}
+	for _, format := range []int{4, 5} {
+		t.Run(fmt.Sprintf("形式%d", format), func(t *testing.T) {
+			svc := newService(t)
+			c := startMCSerialPair(t, svc, format, 115200)
+			send := func(command string, params map[string]interface{}) application.ClientCommandLogDTO {
+				t.Helper()
+				hex, err := svc.BuildClientRequest(mcSerial, command, params)
+				must(t, err)
+				r, err := svc.SendClientRequest(c.ID, hex)
+				must(t, err)
+				return *r
+			}
+
+			r := send("randomWrite", rows(
+				map[string]interface{}{"device": "D", "address": "10", "unit": "word", "value": "16"},
+				map[string]interface{}{"device": "D", "address": "20", "unit": "dword", "value": "70000"},
+			))
+			if r.Status != "ok" {
+				t.Fatalf("1402: %s %s", r.Status, r.Error)
+			}
+			if w, _ := svc.ReadWords(mcSerial, "D", 20, 2); !reflect.DeepEqual(w, []int{0x1170, 1}) {
+				t.Errorf("D20〜D21 = %v", w)
+			}
+			r = send("randomWrite", rows(map[string]interface{}{"device": "M", "address": "3", "unit": "bit", "value": "1"}))
+			if r.Status != "ok" {
+				t.Fatalf("1402 ビット: %s %s", r.Status, r.Error)
+			}
+			r = send("randomRead", rows(
+				map[string]interface{}{"device": "D", "address": "20", "unit": "dword"},
+				map[string]interface{}{"device": "D", "address": "10", "unit": "word"},
+				map[string]interface{}{"device": "M", "address": "0", "unit": "word"},
+			))
+			if r.Status != "ok" || len(r.Values) != 3 {
+				t.Fatalf("0403: %+v", r)
+			}
+			if *r.Values[0].Word != 16 || *r.Values[1].Word != 8 || r.Values[2].Value != "70000 (0x00011170)" {
+				t.Errorf("0403 の値: %+v", r.Values)
+			}
+			svc.Shutdown()
+		})
+	}
+}

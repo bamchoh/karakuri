@@ -187,7 +187,7 @@ func commandTitle(cmd uint16) string {
 
 // Commands は組み立てられるコマンドの一覧を返す
 func (f *ClientFactory) Commands() []protocol.CommandDefinition {
-	return []protocol.CommandDefinition{
+	cmds := []protocol.CommandDefinition{
 		{ID: commandRead, DisplayName: commandTitle(cmdBatchRead), Pollable: true, WordValues: true, Fields: []protocol.ConfigField{
 			deviceField(), addressField(),
 			{Name: "count", Label: "点数", Description: fmt.Sprintf("読み出す点数（ワードデバイスは 1〜%d、ビットデバイスは 1〜%d）。", maxWordPoints, maxBitPoints), Type: "number", Required: true, Default: 1, Min: fields.IntPtr(1), Max: fields.IntPtr(maxBitPoints)},
@@ -196,11 +196,14 @@ func (f *ClientFactory) Commands() []protocol.CommandDefinition {
 			deviceField(), addressField(),
 			{Name: "values", Label: "値", Description: fmt.Sprintf("値をカンマか空白で区切って並べる（ワードの例: 100, 0x10, -1。ビットの例: 1,0,1）。ワードは 1〜%d 個、ビットは 1〜%d 個。", maxWordPoints, maxBitPoints), Type: "text", Required: true, Default: "0"},
 		}},
-		{ID: commandTypeName, DisplayName: commandTitle(cmdTypeName)},
-		{ID: commandSelfTest, DisplayName: commandTitle(cmdSelfTest), Fields: []protocol.ConfigField{
+	}
+	cmds = append(cmds, randomCommands()...) // 0403 ランダム読み出し・1402 ランダム書き込み（client_random.go）
+	return append(cmds,
+		protocol.CommandDefinition{ID: commandTypeName, DisplayName: commandTitle(cmdTypeName)},
+		protocol.CommandDefinition{ID: commandSelfTest, DisplayName: commandTitle(cmdSelfTest), Fields: []protocol.ConfigField{
 			{Name: "data", Label: "データ", Description: "送る文字（英数字。1〜960 文字）。同じものが返れば正常です。", Type: "text", Required: true, Default: "ABCDE"},
 		}},
-	}
+	)
 }
 
 // parseDeviceNumber は、デバイス番号の入力を読む（16 進で書くデバイスは 16 進、ほかは 10 進）
@@ -283,6 +286,12 @@ func (f *ClientFactory) BuildRequest(commandID string, params map[string]interfa
 			return nil, fmt.Errorf("値: %w", err)
 		}
 		return writeRequest(t, words, nil)
+
+	case commandRandomRead:
+		return buildRandomRead(params)
+
+	case commandRandomWrite:
+		return buildRandomWrite(params)
 
 	case commandTypeName:
 		return appendCommand(nil, cmdTypeName, 0), nil
@@ -399,6 +408,10 @@ func describeRequest(req []byte) string {
 			unit = "ビット単位"
 		}
 		return fmt.Sprintf("%s %s から %d 点（%s）", head, t.label(0), count, unit)
+	case cmdRandomRead:
+		return describeRandomRead(req)
+	case cmdRandomWrite:
+		return describeRandomWrite(req)
 	}
 	return head
 }
@@ -469,6 +482,14 @@ func decodeResponse(req []byte, resp frame) (protocol.CommandStatus, []protocol.
 			values[i] = protocol.ResultValue{Label: label, Value: wordText(w), Word: &w}
 		}
 		return protocol.CommandOK, values, ""
+
+	case cmdRandomRead:
+		if values, msg, ok := decodeRandomRead(req, data); ok {
+			if msg != "" {
+				return protocol.CommandError, nil, msg
+			}
+			return protocol.CommandOK, values, ""
+		}
 
 	case cmdBatchWrite, cmdRandomWrite:
 		return protocol.CommandOK, []protocol.ResultValue{{Label: "結果", Value: "正常終了"}}, ""
