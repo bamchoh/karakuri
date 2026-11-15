@@ -21,7 +21,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **プロトコルマッピング**: 変数を複数プロトコルのメモリアドレスにマッピング可能
 - **アプリ全体のログ**: サーバーの起動・停止、クライアントの通信エラーなどを、どのページからも画面の下の欄で見られる
 - **REST HTTP API**: アプリをネットワーク経由で外部から操作可能（デフォルトポート 8765）。サーバー管理・レジスタ読み書き・変数管理・プロジェクトエクスポート/インポートに対応
-- **クライアント機能**: Karakuri から外部の機器（Modbus TCP・Modbus RTU・OPC UA・FINS・SLMP のサーバー）につないで、コマンドを送る。コマンド（Modbus はファンクションコード、OPC UA は Read / Write / Browse）を選んで組み立てる方式と、16 進（Modbus は PDU、OPC UA はサービスのリクエスト本体）で直接入れる方式がある。送受信のバイト列・応答の解釈・履歴を表示する。読み取り項目を周期的に読むポーリングもできる。OPC UA は、サブスクリプション（値が変わったときに機器の側から知らせが届く）にも対応する。変数を接続先のアドレスにマッピングすると、ポーリング中に変数と同期する（通信エラー・書き込み未反映の状態を表示。Modbus TCP・Modbus RTU・FINS・SLMP）
+- **クライアント機能**: Karakuri から外部の機器（Modbus TCP・Modbus RTU・Modbus ASCII・OPC UA・FINS・SLMP のサーバー）につないで、コマンドを送る。コマンド（Modbus はファンクションコード、OPC UA は Read / Write / Browse）を選んで組み立てる方式と、16 進（Modbus は PDU、OPC UA はサービスのリクエスト本体）で直接入れる方式がある。送受信のバイト列・応答の解釈・履歴を表示する。読み取り項目を周期的に読むポーリングもできる。OPC UA は、サブスクリプション（値が変わったときに機器の側から知らせが届く）にも対応する。変数を接続先のアドレスにマッピングすると、ポーリング中に変数と同期する（通信エラー・書き込み未反映の状態を表示。Modbus TCP・Modbus RTU・Modbus ASCII・FINS・SLMP）
 
 ## Build and Development Commands
 
@@ -97,7 +97,7 @@ go build ./...
 
 `frontend/e2e/` に、ブラウザで画面を操作して確認するテストがある。`task dev` が立てる開発用サーバー（`http://localhost:34115`）に接続するため、Go 側の API とプロトコルの実装を含めた動作を確認できる。手順と注意は `frontend/e2e/README.md` を参照。
 
-- 画面ごとのテスト: 画面の外枠（タイトル・左の帯・HTTP API の表示）`app-shell.spec.ts`、通信画面の右側の配置 `pane-layout.spec.ts`、アプリ全体のログ `app-log.spec.ts`、アドレスの範囲 `register-range.spec.ts`、FINS（「ワード.ビット」のアドレス・項目の表示条件）`fins.spec.ts`、SLMP（16 進のアドレス）`slmp.spec.ts`、通信画面（サーバー）`server-panel.spec.ts`、変数画面 `variable-dialogs.spec.ts` / `node-publishing.spec.ts`、サーバーの「レジスタ」「モニタリング」のタブ `register-panel.spec.ts` / `monitoring.spec.ts`、スクリプト画面 `script-panel.spec.ts`、通信画面（クライアント）`client-panel.spec.ts` / `client-polling.spec.ts` / `client-mapping.spec.ts` / `client-saved-commands.spec.ts` / `client-opcua.spec.ts` / `client-rtu.spec.ts`（実機の確認は、テストを流す側で `KARAKURI_SERIAL_PAIR` を設定したときだけ）
+- 画面ごとのテスト: 画面の外枠（タイトル・左の帯・HTTP API の表示）`app-shell.spec.ts`、通信画面の右側の配置 `pane-layout.spec.ts`、アプリ全体のログ `app-log.spec.ts`、アドレスの範囲 `register-range.spec.ts`、FINS（「ワード.ビット」のアドレス・項目の表示条件）`fins.spec.ts`、SLMP（16 進のアドレス）`slmp.spec.ts`、通信画面（サーバー）`server-panel.spec.ts`、変数画面 `variable-dialogs.spec.ts` / `node-publishing.spec.ts`、サーバーの「レジスタ」「モニタリング」のタブ `register-panel.spec.ts` / `monitoring.spec.ts`、スクリプト画面 `script-panel.spec.ts`、通信画面（クライアント）`client-panel.spec.ts` / `client-polling.spec.ts` / `client-mapping.spec.ts` / `client-saved-commands.spec.ts` / `client-opcua.spec.ts` / `client-serial.spec.ts`（実機の確認は、テストを流す側で `KARAKURI_SERIAL_PAIR` を設定したときだけ）
 - 画面を変更したら、該当するテストを実行する（なければ追加する）。`shot()` で撮ったスクリーンショット（`frontend/e2e/.screenshots/`）で見た目も確認する
 - データの準備は `api(page, "メソッド名", ...)` で Go 側の API を直接呼び、確認したい操作だけを画面で行う
 - **テストはアプリのサーバー・変数・モニタリング項目・スクリプトをすべて削除する。** 開発サーバーは `KARAKURI_CONFIG_DIR` を一時フォルダに向けて起動する
@@ -177,7 +177,9 @@ internal/
 │   │   ├── datastore.go    # ModbusDataStore（4 つのメモリエリア）
 │   │   ├── datastore_adapter.go # リクエスト → DataStore の読み書き
 │   │   ├── client.go       # TCPClientFactory / TCPClient（Modbus TCP クライアント。リクエストの組み立て・送受信・応答の解釈）。pduClient（TCP と RTU で共通のコマンドの定義・PDU の組み立てと解釈）
-│   │   ├── client_rtu.go   # RTUClientFactory / RTUClient（Modbus RTU クライアント。シリアルポートでの送受信）
+│   │   ├── client_serial.go # Modbus RTU / ASCII クライアントの共通の部分（serialClient: シリアルポートでの送受信・設定）
+│   │   ├── client_rtu.go   # RTUClientFactory と RTU のフレーム（CRC・応答の長さ）
+│   │   ├── client_ascii.go # ASCIIClientFactory と ASCII のフレーム（':'〜CR LF・LRC）
 │   │   ├── client_mapping.go # 変数マッピング用のエリアと読み書きのリクエスト（MappableClientFactory。pduClient で TCP と RTU に共通）
 │   │   └── rtu/            # RTU / ASCII のフレーム処理（Processor は RTU と ASCII で共通）
 │   ├── fins/             # FINS（オムロン。FINS/UDP と FINS/TCP）
@@ -633,7 +635,7 @@ JavaScript（goja）でPLC動作を記述。
   - RTU のフレームの区切り（`SerialManager.ReadFrame()`）: ファンクションコードからリクエストの長さがわかるとき（FC01〜06・0F・10）は、その長さが届いて CRC が合った時点で 1 つのフレームにする（後ろに続けて届いたバイトは次に回す）。わからないときは、バイトが届かなくなった時点まで。無音の時間（3.5 文字時間）だけで厳密に区切らないのは、USB シリアル変換器が受信したバイトをまとめて渡し、フレームの途中に間が空くことがあるため
   - **ポートが使えなくなったとき**（USB シリアル変換器を抜いたなど）: 読み取りがエラーになったら、ポートを閉じて、1 秒おきに開き直す（`rtu/reconnect.go`。ログに「使えなくなりました」「開き直しました」を 1 回ずつ出す）。ライブラリは通信エラー（フレーミング・パリティ）では読み取りを失敗にしないので、`Read` のエラーは「ポートが使えなくなった」として扱う。閉じずに読み直すと、エラーがすぐ返り続けて CPU を 1 コア使い切り、挿し直しても同じハンドルでは読めない
   - **Stop は、待っている読み取りが終わってからポートを閉じる**（最長で 1 回の読み取りの時間。RTU も ASCII も 100ms）。読み取りの途中で閉じると、Windows ではポートが 50〜200ms ほど使用中のまま残り、止めてすぐの Start が「Serial port busy」で失敗する（実機で確認）。フェイクのポートは、読み取りの途中で閉じられたかを記録する
-  - 実際の COM ポートでの試験: `rtu/serial_hw_test.go`（配線・RTU と ASCII の読み書き・応答の時間）と `rtu/serial_hw_unplug_test.go`（手で抜き差しする）、`internal/protocols/integration_serial_hw_test.go`（Karakuri の RTU サーバーに RTU クライアントからつなぐ。ポーリングと変数マッピングも）。COM ポートを取り合うので、パッケージをまたいで流すときは `go test -p 1` にする。2 つのポートをクロスでつなぎ、環境変数 `KARAKURI_SERIAL_PAIR`（`COM4,COM6` の形。サーバー側, マスター側）を設定したときだけ動く（CI では飛ばす）。抜き差しは `KARAKURI_SERIAL_UNPLUG=1` も要る。CPU の使い方は OS の側（`Get-Process rtu.test` の `TotalProcessorTime`）で見る（Go の `runtime/metrics` の CPU 時間は、システムコールの中の時間を数えない）
+  - 実際の COM ポートでの試験: `rtu/serial_hw_test.go`（配線・RTU と ASCII の読み書き・応答の時間）と `rtu/serial_hw_unplug_test.go`（手で抜き差しする）、`internal/protocols/integration_serial_hw_test.go`（Karakuri の RTU / ASCII サーバーに RTU / ASCII クライアントからつなぐ。ポーリングと変数マッピングも）。COM ポートを取り合うので、パッケージをまたいで流すときは `go test -p 1` にする。2 つのポートをクロスでつなぎ、環境変数 `KARAKURI_SERIAL_PAIR`（`COM4,COM6` の形。サーバー側, マスター側）を設定したときだけ動く（CI では飛ばす）。抜き差しは `KARAKURI_SERIAL_UNPLUG=1` も要る。CPU の使い方は OS の側（`Get-Process rtu.test` の `TotalProcessorTime`）で見る（Go の `runtime/metrics` の CPU 時間は、システムコールの中の時間を数えない）
 - **OPC UA**（`internal/protocols/opcua/`）: 実際の OPC UA クライアントでつなぐ。`host_integration_test.go` は実際の変数ストアを使う（他のテストはフェイクの変数ストアを使うため、変数ストアが持つ値の型や型変換を通らない）
 - 設定フォルダに書き込むパッケージのテストは、`TestMain` で `KARAKURI_CONFIG_DIR` を一時フォルダに向ける
 
@@ -827,13 +829,15 @@ JavaScript（goja）でPLC動作を記述。
   - リクエストは PDU（ファンクションコード + データ）。MBAP ヘッダー（トランザクション ID・UnitID）はクライアントが付ける。アドレスは PDU の値（0 始まり）
   - 組み立てられるコマンドは FC01〜06・15・16。16 進で入れれば、ほかのファンクションコードや異常なリクエストも送れる（応答はデータをそのまま表示する）
   - 接続は最初の送信でつなぐ。タイムアウト・通信エラーでは閉じ、例外応答では閉じない。トランザクション ID が違う応答（前のリクエストへの遅れた応答）は読み捨てる
-- **Modbus RTU**（`internal/protocols/modbus/client_rtu.go`）: シリアルポートの先の機器（スレーブ）へ送るマスター
-  - コマンドの定義・PDU の組み立てと解釈・変数マッピングは TCP と共通（`pduClient`）。リクエストは同じ PDU で、送るときに UnitID（スレーブアドレス）と CRC を付ける。結果の送受信のバイト列は、UnitID から CRC まで
-  - 接続先の設定: シリアルポート・ボーレート・データビット・ストップビット・パリティ（項目はサーバーと同じ `serialConfigFields()`）・UnitID・タイムアウト。画面のシリアルポートの欄は、通信画面が読んだ PC のポートの一覧（`GetSerialPorts()`）から選ぶ
-  - ポートは最初の送信で開く。タイムアウト・通信エラー（CRC が合わない・UnitID が違う・ポートが使えなくなった）では閉じ、次の送信で開き直す（閉じると、遅れて届いた応答と途中のバイトが捨てられるので、次の応答と取り違えない）。例外応答では閉じない
-  - 応答の終わりは、ファンクションコードから決まる長さで判断する（`rtuResponseLength()`。例外応答は 5 バイト）。長さの決まらないもの（16 進で入れたほかのファンクションコード）は、最後のバイトから 50ms 届かなければ終わり。無音の時間だけで区切らないのは、USB シリアル変換器がバイトをまとめて渡すため
-  - 前のフレームから 3.5 文字時間（19200bps より速ければ 1.75ms）を空けてから送る。UnitID 0（ブロードキャスト）は応答を待たない
-  - 応答までの時間: FTDI の USB シリアル変換器は、受け取ったバイトを最大 16ms ためてから PC に渡す（latency timer）。送る側と受ける側で 1 回ずつ待つので、実機（FTDI 2 本）では 115200bps でも 1 回およそ 32ms。速くしたいときは、デバイスマネージャーのポートの詳細設定で latency timer を短くする
+- **Modbus RTU / Modbus ASCII**（`internal/protocols/modbus/client_serial.go` が共通の部分、フレームの形は `client_rtu.go` / `client_ascii.go`）: シリアルポートの先の機器（スレーブ）へ送るマスター
+  - コマンドの定義・PDU の組み立てと解釈・変数マッピングは TCP と共通（`pduClient`）。リクエストは同じ PDU で、送るときに UnitID（スレーブアドレス）と、RTU は CRC、ASCII は LRC を付ける。結果の送受信のバイト列は、送ったフレームそのもの（ASCII は ':' から CR LF までの文字）
+  - RTU と ASCII で違うのはフレームの形だけで、`serialFramer`（作る・応答の長さ・検査して UnitID と PDU を取り出す・前のフレームから空ける時間）が受け持つ。既定値などの違いは `serialVariant`（`rtuVariant` / `asciiVariant`）。ポートの開閉・送受信・タイムアウト・設定の検証は `serialClient` で共通
+  - 接続先の設定: シリアルポート・ボーレート・データビット・ストップビット・パリティ（項目はサーバーと同じ `serialConfigFields()`）・UnitID・タイムアウト。既定はサーバーと同じ（RTU は 115200bps・8N1、ASCII は 9600bps・7E1）。画面のシリアルポートの欄は、通信画面が読んだ PC のポートの一覧（`GetSerialPorts()`）から選ぶ
+  - ポートは最初の送信で開く。タイムアウト・通信エラー（CRC / LRC が合わない・UnitID が違う・ポートが使えなくなった）では閉じ、次の送信で開き直す（閉じると、遅れて届いた応答と途中のバイトが捨てられるので、次の応答と取り違えない）。例外応答では閉じない
+  - RTU の応答の終わりは、ファンクションコードから決まる長さで判断する（`rtuResponseLength()`。例外応答は 5 バイト）。長さの決まらないもの（16 進で入れたほかのファンクションコード）は、最後のバイトから 50ms 届かなければ終わり。無音の時間だけで区切らないのは、USB シリアル変換器がバイトをまとめて渡すため
+  - ASCII の応答の終わりは CR LF。':' より前に届いたバイトは読み飛ばす。16 進は小文字でも読む
+  - RTU は、前のフレームから 3.5 文字時間（19200bps より速ければ 1.75ms）を空けてから送る（ASCII は空けない）。UnitID 0（ブロードキャスト）は応答を待たない
+  - 応答までの時間: FTDI の USB シリアル変換器は、受け取ったバイトを最大 16ms ためてから PC に渡す（latency timer）。送る側と受ける側で 1 回ずつ待つので、実機（FTDI 2 本）では 115200bps でも 1 回およそ 32ms（ASCII の 9600bps は文字が倍になるので 64ms）。速くしたいときは、デバイスマネージャーのポートの詳細設定で latency timer を短くする
 - **OPC UA**（`internal/protocols/opcua/client.go` / `client_conn.go`、bamchoh/uastack の `client` を使用）
   - リクエストは「サービスのリクエスト本体」の UA Binary（型の NodeId + 構造体。`encodeMessage()` / `decodeRequest()`）。セキュアチャネル・セッション・リクエストヘッダー（認証トークン・ハンドル・時刻）はクライアントが受け持つ。結果の送信・受信のバイト列も同じ形（リクエスト本体・応答本体）で、チャネルのヘッダーや暗号化は含まない
   - 組み立てられるコマンドは Read（NodeId と属性。ポーリングに使える）・Write（NodeId・データ型・スカラー / 配列・値）・Write（複数のノード）・Browse（子ノードの一覧）。16 進で入れれば、ほかのサービスのリクエストも送れる（解釈を持たない応答は、応答の型の名前だけ出す）。リクエストとして読めないバイト列は、送らずにエラーにする
@@ -876,7 +880,7 @@ JavaScript（goja）でPLC動作を記述。
   - 止めるときは、ロックの中で取り消しだけして、ゴルーチンの終わりはロックの外で待つ（ゴルーチンは結果を入れるときに `clientManager.mu` を取るため）。接続先の削除・プロジェクトの読み込み・終了でも止める
   - 読み取り項目・周期・表示形式（`format`。画面が決める値で、ホストは意味を持たない）はプロジェクトに保存する。ポーリング中かどうかは保存しない（読み込んだら停止中）
   - 値の表示形式を変えられるよう、`ResultValue` は表示用の文字列に加えて元の値（`Bit` / `Word`）を持つ
-- **テスト**: `internal/protocols/modbus/client_test.go`（フェイクの TCP サーバー）・`client_mapping_test.go`、`internal/infrastructure/adapter/device_sync_test.go`（同期の決まり）、`internal/application/plc_service_clients_test.go` / `plc_service_client_polling_test.go`（`protocoltest.ClientFactory`）・`plc_service_client_sync_test.go`（`protocoltest.DeviceClientFactory`: フェイクの機器つき。`Device.Down` でタイムアウトにできる）、`internal/protocols/integration_test.go` の `TestModbusClient_AgainstOwnServer` / `TestModbusClient_Polling` / `TestModbusClient_VariableMapping`（Karakuri 自身の Modbus TCP サーバーにつなぐ）、画面は `client-panel.spec.ts` / `client-polling.spec.ts` / `client-mapping.spec.ts`。Modbus RTU は `internal/protocols/modbus/client_rtu_test.go`（フェイクの機器: 応答は Karakuri の RTU サーバーと同じ `rtu.Processor`。分かれて届く応答・遅れた応答・壊れた応答・ポートが使えなくなったとき）、`integration_serial_hw_test.go`（実機。`KARAKURI_SERIAL_PAIR`）、画面は `client-rtu.spec.ts`。OPC UA は `internal/protocols/opcua/client_test.go`（Karakuri の OPC UA サーバー、セキュリティポリシーとユーザー名を使う uastack のサーバー、応答しないサーバー）、`integration_test.go` の `TestOPCUAClient_AgainstOwnServer`、画面は `client-opcua.spec.ts`。サブスクリプションのホスト側は `internal/application/plc_service_client_subscription_test.go`（`protocoltest.ClientFactory` の監視は、テストから `Subscription.Emit()` で知らせを送れる）
+- **テスト**: `internal/protocols/modbus/client_test.go`（フェイクの TCP サーバー）・`client_mapping_test.go`、`internal/infrastructure/adapter/device_sync_test.go`（同期の決まり）、`internal/application/plc_service_clients_test.go` / `plc_service_client_polling_test.go`（`protocoltest.ClientFactory`）・`plc_service_client_sync_test.go`（`protocoltest.DeviceClientFactory`: フェイクの機器つき。`Device.Down` でタイムアウトにできる）、`internal/protocols/integration_test.go` の `TestModbusClient_AgainstOwnServer` / `TestModbusClient_Polling` / `TestModbusClient_VariableMapping`（Karakuri 自身の Modbus TCP サーバーにつなぐ）、画面は `client-panel.spec.ts` / `client-polling.spec.ts` / `client-mapping.spec.ts`。Modbus RTU / ASCII は `internal/protocols/modbus/client_rtu_test.go` / `client_ascii_test.go`（フェイクの機器: 応答は Karakuri の RTU / ASCII サーバーと同じ `rtu.Processor`。送受信の共通の部分は RTU のテストで確かめる。分かれて届く応答・遅れた応答・壊れた応答・ポートが使えなくなったとき）、`integration_serial_hw_test.go`（実機。`KARAKURI_SERIAL_PAIR`）、画面は `client-serial.spec.ts`。OPC UA は `internal/protocols/opcua/client_test.go`（Karakuri の OPC UA サーバー、セキュリティポリシーとユーザー名を使う uastack のサーバー、応答しないサーバー）、`integration_test.go` の `TestOPCUAClient_AgainstOwnServer`、画面は `client-opcua.spec.ts`。サブスクリプションのホスト側は `internal/application/plc_service_client_subscription_test.go`（`protocoltest.ClientFactory` の監視は、テストから `Subscription.Emit()` で知らせを送れる）
 - **変数とのマッピング**（`plc_service_client_sync.go`、状態は `adapter.DeviceSync`）: 変数をサーバーのレジスタと同じ形（`ProtocolMapping`、`protocolType` は `client:<接続先の ID>`）で接続先のアドレスにマッピングする。同期はポーリング中だけ行う
   - 周期ごとに、書き込み未反映の変数を書く → 読み取り項目を読む → マッピングした範囲を読む。変数が変わって書き込み未反映が増えたら（周期の変更も）、待たずにポーリングのゴルーチンを起こす（`clientInstance.wake`）
   - 読む範囲は、エリアごとに重なるか隣り合うものだけまとめる。1 回で読める個数（`MaxReadCount`）より大きければ分けて読み、全部読めたら反映する（一部だけの範囲では変数を変えない）

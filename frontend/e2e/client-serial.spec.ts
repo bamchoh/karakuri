@@ -10,7 +10,9 @@ import {
   selectClientTab,
 } from "./helpers";
 
-// Modbus RTU のクライアント（マスター）の画面を確認する。
+// Modbus RTU / Modbus ASCII のクライアント（マスター）の画面を確認する。
+// 画面は RTU と ASCII で同じ（接続先の設定の項目はプロトコルの定義から作る）なので、画面の操作は RTU で確かめ、
+// ASCII は既定の設定と、実機で読めることを確かめる。
 // 実際の COM ポートで送る確認は、2 つのポートをクロスでつなぎ、テストを流す側で環境変数
 // KARAKURI_SERIAL_PAIR（"COM4,COM6" の形。サーバー側, クライアント側）を設定したときだけ動く。
 
@@ -107,39 +109,70 @@ const serialPair = (process.env.KARAKURI_SERIAL_PAIR || "")
   .map((s) => s.trim())
   .filter(Boolean);
 
-test("実機: Karakuri の Modbus RTU サーバーから読み取れる", async ({
+test("Modbus ASCII の接続先は、サーバーと同じ 9600bps・7E1 が既定", async ({
   page,
 }) => {
-  test.skip(
-    serialPair.length !== 2,
-    "KARAKURI_SERIAL_PAIR（例: COM4,COM6）が設定されていない",
+  await page.getByTitle("Connections", { exact: true }).click();
+  await addClientFromDialog(page, { protocol: "modbus-ascii", name: "ASCII" });
+  await expect(setting(page, "シリアルポート")).toBeVisible();
+  await expect(setting(page, "ボーレート")).toHaveValue("9600");
+  await expect(setting(page, "データビット")).toHaveValue("7");
+  await expect(setting(page, "パリティ")).toHaveValue("E");
+  await expect(page.locator(".server-config-pane")).toContainText(
+    "クライアント（Modbus ASCII）",
   );
-  const [serverPort, clientPort] = serialPair;
-
-  await api(page, "AddServer", "modbus-rtu", "");
-  const cfg = await api<any>(page, "GetServerConfig", "modbus-rtu");
-  cfg.settings.serialPort = serverPort;
-  await api(page, "UpdateServerConfig", cfg);
-  await api(page, "StartServer", "modbus-rtu");
-  await api(page, "WriteWord", "modbus-rtu", "holdingRegisters", 5, 1234);
-
-  const c = await api<{ id: string }>(page, "AddClient", "modbus-rtu", "RTU");
-  await api(page, "UpdateClient", c.id, "RTU", {
-    serialPort: clientPort,
-    baudRate: 115200,
-    unitId: 1,
-    timeoutMs: 500,
-  });
-  await openClient(page, "RTU");
-  await sendReadHolding(page, 4, 2);
-
-  await expect(result(page).locator(".client-status")).toHaveText("正常");
-  const values = result(page).locator(".client-values tr");
-  await expect(values).toHaveCount(2);
-  await expect(values.nth(1)).toContainText("1234 (0x04D2)");
-  // UnitID と CRC 付きの送受信バイト列
-  await expect(result(page).locator(".client-bytes")).toContainText(
-    "01 03 00 04 00 02",
-  );
-  await shot(page, "client-rtu-read");
 });
+
+// 実機で、Karakuri のサーバーから読む。送ったバイト列の先頭（UnitID から。ASCII は ':' から文字のまま）も確かめる
+const hardwareCases = [
+  { protocol: "modbus-rtu", name: "RTU", sentHead: "01 03 00 04 00 02" },
+  {
+    protocol: "modbus-ascii",
+    name: "ASCII",
+    // ":010300040002" の文字コード
+    sentHead: "3A 30 31 30 33 30 30 30 34 30 30 30 32",
+  },
+];
+
+for (const hc of hardwareCases) {
+  test(`実機: Karakuri の ${hc.protocol} サーバーから読み取れる`, async ({
+    page,
+  }) => {
+    test.skip(
+      serialPair.length !== 2,
+      "KARAKURI_SERIAL_PAIR（例: COM4,COM6）が設定されていない",
+    );
+    const [serverPort, clientPort] = serialPair;
+
+    await api(page, "AddServer", hc.protocol, "");
+    const cfg = await api<any>(page, "GetServerConfig", hc.protocol);
+    cfg.settings.serialPort = serverPort;
+    await api(page, "UpdateServerConfig", cfg);
+    await api(page, "StartServer", hc.protocol);
+    await api(page, "WriteWord", hc.protocol, "holdingRegisters", 5, 1234);
+
+    // ボーレートなどは、クライアントの既定（サーバーの既定と同じ）のまま
+    const c = await api<{ id: string }>(
+      page,
+      "AddClient",
+      hc.protocol,
+      hc.name,
+    );
+    await api(page, "UpdateClient", c.id, hc.name, {
+      serialPort: clientPort,
+      unitId: 1,
+      timeoutMs: 1000,
+    });
+    await openClient(page, hc.name);
+    await sendReadHolding(page, 4, 2);
+
+    await expect(result(page).locator(".client-status")).toHaveText("正常");
+    const values = result(page).locator(".client-values tr");
+    await expect(values).toHaveCount(2);
+    await expect(values.nth(1)).toContainText("1234 (0x04D2)");
+    await expect(result(page).locator(".client-bytes")).toContainText(
+      hc.sentHead,
+    );
+    await shot(page, `client-${hc.name.toLowerCase()}-read`);
+  });
+}
