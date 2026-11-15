@@ -15,9 +15,6 @@ import (
 	"github.com/dop251/goja"
 )
 
-// jsMaxSafeInt はJavaScriptのNumber型が正確に表現できる整数の最大値（2^53）
-const jsMaxSafeInt = int64(1) << 53 // 9007199254740992
-
 const maxConsoleLogs = 500
 
 // コンソールログの種類
@@ -170,12 +167,11 @@ func (e *ScriptEngine) createVM(scriptID, scriptName string) *goja.Runtime {
 		return s.SendRequest(scriptName, client, requestHex)
 	})
 
-	// addConsoleWarn はコンソールログに警告を追加するヘルパー
-	addConsoleWarn := func(msg string) {
-		e.addLog(scriptID, scriptName, LogLevelWarn, msg)
-	}
-
 	// --- 変数へのアクセス ---
+	//
+	// LINT / ULINT の値は、いつも BigInt で読む（桁の制限なく、64 ビットの全範囲を正しく扱うため）。
+	// 構造体のフィールド・配列の要素にある LINT / ULINT も同じ。書き込みは BigInt と Number のどちらでもよい。
+	// BigInt は Number と混ぜて計算できないので、スクリプトでは `x + 1n` のように書く。
 	//
 	// どの関数も、失敗したらスクリプトのエラー（例外）にする: 変数がない・フィールドや要素がない・
 	// 型に合わない値を書こうとした、など。黙って null を返したり、何もしなかったりはしない
@@ -209,6 +205,15 @@ func (e *ScriptEngine) createVM(scriptID, scriptName string) *goja.Runtime {
 			mustVariable(fn, baseName)
 			throw("plc.%s(%q): %v", fn, name, err)
 		}
+		// fromJS は、スクリプトから書く値を、変数ストアが受け付ける形にする（BigInt を 64 ビットの整数に）。
+		// 64 ビットに収まらない BigInt は、スクリプトのエラーにする
+		fromJS := func(fn, name string, value any) any {
+			out, err := jsToStore(value)
+			if err != nil {
+				throw("plc.%s(%q): %v", fn, name, err)
+			}
+			return out
+		}
 
 		// hasVariable(name) - 変数があるかどうか
 		plc.Set("hasVariable", func(name string) bool {
@@ -226,22 +231,6 @@ func (e *ScriptEngine) createVM(scriptID, scriptName string) *goja.Runtime {
 				return toJSCompatibleValue(val)
 			}
 			v := mustVariable("readVariable", name)
-			// LINT/ULINT が safe integer 範囲を超えた場合は精度損失の警告を出す
-			switch val := v.Value.(type) {
-			case int64:
-				if val > jsMaxSafeInt || val < -jsMaxSafeInt {
-					addConsoleWarn(fmt.Sprintf(
-						"readVariable('%s'): LINT値 %d はJSのsafe integer範囲(±2^53)を超えています。精度損失が発生します。plc.readLintBig() を使用してください。",
-						name, val))
-				}
-			case uint64:
-				if val > uint64(jsMaxSafeInt) {
-					addConsoleWarn(fmt.Sprintf(
-						"readVariable('%s'): ULINT値 %d はJSのsafe integer範囲(2^53)を超えています。精度損失が発生します。plc.readUlintBig() を使用してください。",
-						name, val))
-				}
-			}
-			// gojaがJavaScript numberとして扱えるようGoの標準型に変換
 			return toJSCompatibleValue(v.Value)
 		})
 
@@ -266,6 +255,7 @@ func (e *ScriptEngine) createVM(scriptID, scriptName string) *goja.Runtime {
 		// writeVariable(name, value) - 変数名で値を書く
 		// name は "VarName", "Array[2]", "Struct.field", "Array[1].field" など
 		plc.Set("writeVariable", func(name string, value any) {
+			value = fromJS("writeVariable", name, value)
 			baseName, fieldPath := splitNameAndPath(name)
 			if fieldPath != "" {
 				// ないフィールド・範囲外の添字は、読んでみて確かめる（書き込みだけでは、エラーにならないことがある）
@@ -288,6 +278,7 @@ func (e *ScriptEngine) createVM(scriptID, scriptName string) *goja.Runtime {
 		// writeArrayElement(name, index, value) - 配列要素書き込み（外部インデックス：表示ベース）
 		// 例: ARRAY[1..10] の場合、index=1 が最初の要素
 		plc.Set("writeArrayElement", func(name string, index int, value any) {
+			value = fromJS("writeArrayElement", name, value)
 			// 配列でない変数・範囲外の添字は、読んでみて確かめる（書き込みだけでは区別がつかないため）
 			_, err := e.variableStore.ReadArrayElement(name, index)
 			check("writeArrayElement", name, err)
@@ -315,6 +306,7 @@ func (e *ScriptEngine) createVM(scriptID, scriptName string) *goja.Runtime {
 
 		// writeStructField(name, fieldName, value) - 構造体フィールド書き込み
 		plc.Set("writeStructField", func(name string, fieldName string, value any) {
+			value = fromJS("writeStructField", name, value)
 			structField("writeStructField", name, fieldName)
 			check("writeStructField", name, e.variableStore.WriteFieldValueByName(name, "."+fieldName, value))
 		})
@@ -327,62 +319,6 @@ func (e *ScriptEngine) createVM(scriptID, scriptName string) *goja.Runtime {
 				names[i] = v.Name
 			}
 			return names
-		})
-
-		// --- LINT/ULINT BigInt API（精度損失なく64ビット整数を読み書きするための専用関数） ---
-		// JavaScriptのBigIntリテラル（例: 9007199254740993n）を使った演算が可能
-
-		// readLintBig(name) -> BigInt - LINT変数をBigIntとして読む（精度損失なし）
-		plc.Set("readLintBig", func(name string) goja.Value {
-			v := mustVariable("readLintBig", name)
-			val, ok := v.Value.(int64)
-			if !ok {
-				throw("plc.readLintBig: 変数 %q は LINT ではありません（%v）", name, v.DataType)
-			}
-			return vm.ToValue(new(big.Int).SetInt64(val))
-		})
-
-		// writeLintBig(name, value) - BigIntまたはNumberをLINT変数に書く（精度損失なし）
-		// 例: plc.writeLintBig("myVar", plc.readLintBig("myVar") + 1n)
-		plc.Set("writeLintBig", func(name string, val goja.Value) {
-			var int64Val int64
-			if goja.IsBigInt(val) {
-				if bigInt, ok := val.Export().(*big.Int); ok {
-					int64Val = bigInt.Int64()
-				}
-			} else {
-				int64Val = val.ToInteger()
-			}
-			check("writeLintBig", name, e.variableStore.UpdateValueByName(name, int64Val))
-		})
-
-		// readUlintBig(name) -> BigInt - ULINT変数をBigIntとして読む（精度損失なし）
-		plc.Set("readUlintBig", func(name string) goja.Value {
-			v := mustVariable("readUlintBig", name)
-			val, ok := v.Value.(uint64)
-			if !ok {
-				throw("plc.readUlintBig: 変数 %q は ULINT ではありません（%v）", name, v.DataType)
-			}
-			return vm.ToValue(new(big.Int).SetUint64(val))
-		})
-
-		// writeUlintBig(name, value) - BigIntまたはNumberをULINT変数に書く（精度損失なし）
-		// 例: plc.writeUlintBig("myVar", plc.readUlintBig("myVar") + 1n)
-		plc.Set("writeUlintBig", func(name string, val goja.Value) {
-			var uint64Val uint64
-			if goja.IsBigInt(val) {
-				if bigInt, ok := val.Export().(*big.Int); ok {
-					if bigInt.Sign() >= 0 {
-						uint64Val = bigInt.Uint64()
-					}
-				}
-			} else {
-				f := val.ToFloat()
-				if f >= 0 {
-					uint64Val = uint64(f)
-				}
-			}
-			check("writeUlintBig", name, e.variableStore.UpdateValueByName(name, uint64Val))
 		})
 
 		// --- TIME/DATE型シンタックスシュガー（変数の読み書きをワンステップで） ---
@@ -517,11 +453,24 @@ func splitNameAndPath(name string) (baseName, fieldPath string) {
 	return name[:idx], name[idx:]
 }
 
-// toJSCompatibleValue はGoの型をgojaが扱えるJavaScript互換の型に変換する
-// int8/int16/int32 → int64, uint8/uint16/uint32 → int64, float32 → float64
-// int64/uint64はそのまま返す（JavaScriptのNumber精度: ±2^53以内なら正確）
+// toJSCompatibleValue は、変数ストアの値を、スクリプトに渡す値にする。
+//   - LINT（int64）・ULINT（uint64）は BigInt（*big.Int）。Number では ±2^53 を超えると桁が落ちるため
+//   - ほかの整数（int8〜int32・uint8〜uint32）は Number（int64 で渡す）、REAL（float32）は Number（float64）
+//   - 構造体（map）・配列（slice）は、中の値も同じように変換した新しいものにする
 func toJSCompatibleValue(value any) any {
 	switch v := value.(type) {
+	case map[string]any:
+		out := make(map[string]any, len(v))
+		for k, f := range v {
+			out[k] = toJSCompatibleValue(f)
+		}
+		return out
+	case []any:
+		out := make([]any, len(v))
+		for i, el := range v {
+			out[i] = toJSCompatibleValue(el)
+		}
+		return out
 	case int8:
 		return int64(v)
 	case int16:
@@ -535,14 +484,50 @@ func toJSCompatibleValue(value any) any {
 	case uint32:
 		return int64(v)
 	case int64:
-		return v // LINT型（2^53超の値はJSで精度損失あり）
+		return new(big.Int).SetInt64(v) // LINT
 	case uint64:
-		return v // ULINT型（2^53超の値はJSで精度損失あり）
+		return new(big.Int).SetUint64(v) // ULINT
 	case float32:
 		return float64(v)
 	default:
 		return value
 	}
+}
+
+// jsToStore は、スクリプトから書く値を、変数ストアが受け付ける形にする。
+// BigInt（*big.Int）は int64 か uint64 にする（どちらにも収まらなければエラー）。構造体・配列の中も同じ
+func jsToStore(value any) (any, error) {
+	switch v := value.(type) {
+	case *big.Int:
+		switch {
+		case v.IsInt64():
+			return v.Int64(), nil
+		case v.IsUint64():
+			return v.Uint64(), nil
+		}
+		return nil, fmt.Errorf("BigInt %s は 64 ビットの整数の範囲（-9223372036854775808〜18446744073709551615）を超えています", v.String())
+	case map[string]any:
+		out := make(map[string]any, len(v))
+		for k, f := range v {
+			c, err := jsToStore(f)
+			if err != nil {
+				return nil, fmt.Errorf("%s: %w", k, err)
+			}
+			out[k] = c
+		}
+		return out, nil
+	case []any:
+		out := make([]any, len(v))
+		for i, el := range v {
+			c, err := jsToStore(el)
+			if err != nil {
+				return nil, fmt.Errorf("[%d]: %w", i, err)
+			}
+			out[i] = c
+		}
+		return out, nil
+	}
+	return value, nil
 }
 
 // StartScript はスクリプトを開始する。

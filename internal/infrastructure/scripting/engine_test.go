@@ -202,10 +202,8 @@ func TestScriptEngine_VariableFunctionsFailLoudly(t *testing.T) {
 		{"readStructField: 構造体でない変数", `plc.readStructField("Count", "speed")`, `は構造体ではありません`},
 		{"readStructField: ないフィールド", `plc.readStructField("M1", "nope")`, `フィールド "nope" がありません`},
 		{"writeStructField: ないフィールド", `plc.writeStructField("M1", "nope", 1)`, `フィールド "nope" がありません`},
-		{"readLintBig: ない変数", `plc.readLintBig("Nope")`, `変数 "Nope" がありません`},
-		{"readLintBig: LINT でない変数", `plc.readLintBig("Count")`, `は LINT ではありません`},
-		{"readUlintBig: ULINT でない変数", `plc.readUlintBig("Big")`, `は ULINT ではありません`},
-		{"writeLintBig: ない変数", `plc.writeLintBig("Nope", 1n)`, `変数 "Nope" がありません`},
+		{"64 ビットを超える BigInt を書く", `plc.writeVariable("Big", 2n ** 64n)`, `64 ビットの整数の範囲`},
+		{"構造体の中の 64 ビットを超える BigInt", `plc.writeVariable("M1", {speed: -(2n ** 63n) - 1n})`, `speed: BigInt`},
 		{"readTimeMs: ない変数", `plc.readTimeMs("Nope")`, `変数 "Nope" がありません`},
 		{"readTimeMs: TIME でない変数", `plc.readTimeMs("Count")`, `は TIME ではありません`},
 		{"readDateSec: DATE でない値", `plc.readDateSec("Wait")`, `DATE として読めません`},
@@ -610,19 +608,111 @@ func TestScriptEngine_StartScript_CompileError_Logged(t *testing.T) {
 	}
 }
 
-// 警告（2^53 を超える LINT の読み取り）も、コンソールへの追加が通知される
+// 警告も、[WARN] を付けてコンソールに足され、通知される
 func TestScriptEngine_Warn_Notified(t *testing.T) {
-	engine, vs := newTestEngine()
+	engine, _ := newTestEngine()
 	rec := recordLogs(engine)
-	if _, err := vs.CreateVariable("Big", variable.TypeLINT, int64(1)<<60); err != nil {
+	engine.addLog("s-1", "s", LogLevelWarn, "注意")
+	warns := rec.messages(LogLevelWarn)
+	if len(warns) != 1 || warns[0] != "[WARN] 注意" {
+		t.Errorf("警告のログ = %q", warns)
+	}
+}
+
+// LINT / ULINT は、いつも BigInt で読み書きする（64 ビットの全範囲を、桁を落とさずに）。ほかの整数は Number
+func TestScriptEngine_LintUlintAreBigInt(t *testing.T) {
+	engine, vs := newTestEngine()
+	mustCreate := func(name string, dt variable.DataType, value any) {
+		t.Helper()
+		if _, err := vs.CreateVariable(name, dt, value); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := vs.RegisterStructType(&variable.StructTypeDef{Name: "Counter", Fields: []variable.StructField{
+		{Name: "total", DataType: variable.TypeLINT},
+		{Name: "count", DataType: variable.TypeDINT},
+	}}); err != nil {
 		t.Fatal(err)
+	}
+	mustCreate("L", variable.TypeLINT, int64(1)<<60+1)
+	mustCreate("U", variable.TypeULINT, uint64(18446744073709551615))
+	mustCreate("D", variable.TypeDINT, int32(7))
+	mustCreate("C", variable.DataType("Counter"), nil)
+	mustCreate("Arr", variable.DataType("ARRAY[1..2] OF ULINT"), nil)
+
+	run := func(code string) any {
+		t.Helper()
+		v, err := engine.RunOnce(code)
+		if err != nil {
+			t.Fatalf("%s: %v", code, err)
+		}
+		return v
+	}
+	read := func(name string) any {
+		t.Helper()
+		v, err := vs.GetVariableByName(name)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return v.Value
 	}
 
-	if _, err := engine.RunOnce(`plc.readVariable("Big"); undefined`); err != nil {
-		t.Fatal(err)
+	// 読むと BigInt。ほかの整数は Number のまま
+	if got := run(`typeof plc.readVariable("L") + "," + typeof plc.readVariable("D")`); got != "bigint,number" {
+		t.Errorf("型 = %v", got)
 	}
-	warns := rec.messages(LogLevelWarn)
-	if len(warns) != 1 || !strings.HasPrefix(warns[0], "[WARN] ") {
-		t.Errorf("警告のログ = %q", warns)
+	// 2^53 を超える値も、桁を落とさずに計算して書ける
+	run(`plc.writeVariable("L", plc.readVariable("L") + 1n)`)
+	if got := read("L"); got != int64(1)<<60+2 {
+		t.Errorf("L = %v", got)
+	}
+	// ULINT の最大値（2^64 - 1）も、そのまま読める
+	if got := run(`String(plc.readVariable("U"))`); got != "18446744073709551615" {
+		t.Errorf("U = %v", got)
+	}
+	run(`plc.writeVariable("U", plc.readVariable("U") - 5n)`)
+	if got := read("U"); got != uint64(18446744073709551610) {
+		t.Errorf("U = %v", got)
+	}
+	// Number でも書ける
+	run(`plc.writeVariable("L", 5)`)
+	if got := read("L"); got != int64(5) {
+		t.Errorf("Number を書いた L = %v", got)
+	}
+
+	// 構造体のフィールド: 読むと BigInt、書くのは BigInt でも Number でも
+	if got := run(`typeof plc.readVariable("C").total + "," + typeof plc.readStructField("C", "total") + "," + typeof plc.readVariable("C.count")`); got != "bigint,bigint,number" {
+		t.Errorf("構造体の型 = %v", got)
+	}
+	run(`plc.writeVariable("C.total", 2n ** 62n)`)
+	run(`plc.writeStructField("C", "count", 3)`)
+	run(`plc.writeVariable("C", {total: plc.readVariable("C").total + 1n, count: 4})`)
+	if got := read("C").(map[string]any); got["total"] != int64(1)<<62+1 || got["count"] != int32(4) {
+		t.Errorf("C = %v", got)
+	}
+
+	// 配列の要素
+	if got := run(`typeof plc.readVariable("Arr")[0] + "," + typeof plc.readArrayElement("Arr", 2)`); got != "bigint,bigint" {
+		t.Errorf("配列の型 = %v", got)
+	}
+	run(`plc.writeArrayElement("Arr", 2, 2n ** 63n)`)
+	run(`plc.writeVariable("Arr[1]", 9n)`)
+	if got := read("Arr").([]any); got[0] != uint64(9) || got[1] != uint64(1)<<63 {
+		t.Errorf("Arr = %v", got)
+	}
+
+	// BigInt と Number は混ぜて計算できない（JS の決まり）。比較は混ぜてよい
+	if _, err := engine.RunOnce(`plc.readVariable("L") + 1`); err == nil || !strings.Contains(err.Error(), "TypeError") {
+		t.Errorf("混ぜた計算のエラー = %v", err)
+	}
+	if got := run(`plc.readVariable("L") > 4`); got != true {
+		t.Errorf("比較 = %v", got)
+	}
+
+	// console.log には、そのままの桁で出る
+	rec := recordLogs(engine)
+	run(`console.log(plc.readVariable("U"))`)
+	if logs := rec.messages(LogLevelLog); len(logs) == 0 || !strings.Contains(logs[0], "18446744073709551610") {
+		t.Errorf("console.log = %q", logs)
 	}
 }
