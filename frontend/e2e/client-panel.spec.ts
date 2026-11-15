@@ -362,3 +362,30 @@ test("接続先を追加した直後は、設定のタブが開く", async ({ pa
   ).toHaveText("設定");
   await expect(setting(page, "ホスト")).toBeVisible();
 });
+
+test("プロトコルの名前が長くても、一覧の行は 1 行で、接続先の名前が見える", async ({
+  page,
+}) => {
+  await api(page, "AddClient", "mc-serial", "ライン1-PLC");
+  await api(page, "AddClient", "fins-hostlink", "検査装置");
+  await openClients(page);
+
+  for (const name of ["ライン1-PLC", "検査装置"]) {
+    const row = page.locator(".client-tab-item", { hasText: name });
+    const nameEl = row.locator(".server-tab-name");
+    const badge = row.locator(".server-instance-variant");
+    // 名前は省略されずに全部見える
+    const clipped = await nameEl.evaluate(
+      (el) => el.scrollWidth > el.clientWidth || el.clientWidth === 0,
+    );
+    expect(clipped, `${name} の名前が見えない`).toBe(false);
+    // バッジは折り返さない（1 行の高さ）。入りきらない分は省略され、マウスを載せると全部が出る
+    const lines = await badge.evaluate((el) => {
+      const lh = parseFloat(getComputedStyle(el).lineHeight) || 16;
+      return Math.round(el.getBoundingClientRect().height / lh);
+    });
+    expect(lines, `${name} のバッジが折り返している`).toBeLessThanOrEqual(1);
+    await expect(badge).toHaveAttribute("title", /.+/);
+  }
+  await shot(page, "client-list-long-protocol");
+});
