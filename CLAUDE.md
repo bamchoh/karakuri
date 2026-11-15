@@ -8,11 +8,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-このプロジェクトは PLC シミュレーター です。Modbus（TCP/RTU/ASCII）・OPC UA・FINS（オムロン。Ethernet と Host Link）・SLMP（三菱電機）をサポートしています。
+このプロジェクトは PLC シミュレーター です。Modbus（TCP/RTU/ASCII）・OPC UA・FINS（オムロン。Ethernet と Host Link）・SLMP（三菱電機）・MC プロトコル（三菱電機。シリアルの 4C フレーム）をサポートしています。
 
 ### 主な機能
 
-- **マルチプロトコル対応**: Modbus TCP / Modbus RTU / Modbus ASCII / OPC UA / FINS / FINS（Host Link）/ SLMP を個別のサーバーとして起動可能
+- **マルチプロトコル対応**: Modbus TCP / Modbus RTU / Modbus ASCII / OPC UA / FINS / FINS（Host Link）/ SLMP / MC プロトコル（シリアル）を個別のサーバーとして起動可能
 - **複数サーバー同時実行**: 異なるプロトコル（例: Modbus TCP + OPC UA）を同時に起動可能。各サーバーは独立したメモリ空間を持つ
 - **変数管理**: IEC 61131-3準拠のデータ型（スカラー、配列、構造体、STRING[n]）をサポート。OPC UA でノードとして公開可能
 - **スクリプト機能**: JavaScriptで周期処理を記述。const/let対応（IIFE wrapping）、結果とエラーはコンソールに表示
@@ -21,7 +21,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **プロトコルマッピング**: 変数を複数プロトコルのメモリアドレスにマッピング可能
 - **アプリ全体のログ**: サーバーの起動・停止、クライアントの通信エラーなどを、どのページからも画面の下の欄で見られる
 - **REST HTTP API**: アプリをネットワーク経由で外部から操作可能（デフォルトポート 8765）。サーバー管理・レジスタ読み書き・変数管理・プロジェクトエクスポート/インポートに対応
-- **クライアント機能**: Karakuri から外部の機器（Modbus TCP・Modbus RTU・Modbus ASCII・OPC UA・FINS・FINS（Host Link）・SLMP のサーバー）につないで、コマンドを送る。コマンド（Modbus はファンクションコード、OPC UA は Read / Write / Browse）を選んで組み立てる方式と、16 進（Modbus は PDU、OPC UA はサービスのリクエスト本体）で直接入れる方式がある。送受信のバイト列・応答の解釈・履歴を表示する。読み取り項目を周期的に読むポーリングもできる。OPC UA は、サブスクリプション（値が変わったときに機器の側から知らせが届く）にも対応する。変数を接続先のアドレスにマッピングすると、ポーリング中に変数と同期する（通信エラー・書き込み未反映の状態を表示。Modbus TCP・Modbus RTU・Modbus ASCII・FINS・FINS（Host Link）・SLMP）
+- **クライアント機能**: Karakuri から外部の機器（Modbus TCP・Modbus RTU・Modbus ASCII・OPC UA・FINS・FINS（Host Link）・SLMP・MC プロトコル（シリアル）のサーバー）につないで、コマンドを送る。コマンド（Modbus はファンクションコード、OPC UA は Read / Write / Browse）を選んで組み立てる方式と、16 進（Modbus は PDU、OPC UA はサービスのリクエスト本体）で直接入れる方式がある。送受信のバイト列・応答の解釈・履歴を表示する。読み取り項目を周期的に読むポーリングもできる。OPC UA は、サブスクリプション（値が変わったときに機器の側から知らせが届く）にも対応する。変数を接続先のアドレスにマッピングすると、ポーリング中に変数と同期する（通信エラー・書き込み未反映の状態を表示。Modbus TCP・Modbus RTU・Modbus ASCII・FINS・FINS（Host Link）・SLMP・MC プロトコル（シリアル））
 
 ## Build and Development Commands
 
@@ -97,7 +97,7 @@ go build ./...
 
 `frontend/e2e/` に、ブラウザで画面を操作して確認するテストがある。`task dev` が立てる開発用サーバー（`http://localhost:34115`）に接続するため、Go 側の API とプロトコルの実装を含めた動作を確認できる。手順と注意は `frontend/e2e/README.md` を参照。
 
-- 画面ごとのテスト: 画面の外枠（タイトル・左の帯・HTTP API の表示）`app-shell.spec.ts`、通信画面の右側の配置 `pane-layout.spec.ts`、アプリ全体のログ `app-log.spec.ts`、アドレスの範囲 `register-range.spec.ts`、FINS（「ワード.ビット」のアドレス・項目の表示条件）`fins.spec.ts`、SLMP（16 進のアドレス）`slmp.spec.ts`、通信画面（サーバー）`server-panel.spec.ts`、変数画面 `variable-dialogs.spec.ts` / `node-publishing.spec.ts`、サーバーの「レジスタ」「モニタリング」のタブ `register-panel.spec.ts` / `monitoring.spec.ts`、スクリプト画面 `script-panel.spec.ts`、通信画面（クライアント）`client-panel.spec.ts` / `client-polling.spec.ts` / `client-mapping.spec.ts` / `client-saved-commands.spec.ts` / `client-opcua.spec.ts` / `client-serial.spec.ts`（Modbus RTU / ASCII と FINS の Host Link。実機の確認は、テストを流す側で `KARAKURI_SERIAL_PAIR` を設定したときだけ）
+- 画面ごとのテスト: 画面の外枠（タイトル・左の帯・HTTP API の表示）`app-shell.spec.ts`、通信画面の右側の配置 `pane-layout.spec.ts`、アプリ全体のログ `app-log.spec.ts`、アドレスの範囲 `register-range.spec.ts`、FINS（「ワード.ビット」のアドレス・項目の表示条件）`fins.spec.ts`、SLMP（16 進のアドレス）`slmp.spec.ts`、通信画面（サーバー）`server-panel.spec.ts`、変数画面 `variable-dialogs.spec.ts` / `node-publishing.spec.ts`、サーバーの「レジスタ」「モニタリング」のタブ `register-panel.spec.ts` / `monitoring.spec.ts`、スクリプト画面 `script-panel.spec.ts`、通信画面（クライアント）`client-panel.spec.ts` / `client-polling.spec.ts` / `client-mapping.spec.ts` / `client-saved-commands.spec.ts` / `client-opcua.spec.ts` / `client-serial.spec.ts`（Modbus RTU / ASCII・FINS の Host Link・MC プロトコル（シリアル）。実機の確認は、テストを流す側で `KARAKURI_SERIAL_PAIR` を設定したときだけ）
 - 画面を変更したら、該当するテストを実行する（なければ追加する）。`shot()` で撮ったスクリーンショット（`frontend/e2e/.screenshots/`）で見た目も確認する
 - データの準備は `api(page, "メソッド名", ...)` で Go 側の API を直接呼び、確認したい操作だけを画面で行う
 - **テストはアプリのサーバー・変数・モニタリング項目・スクリプトをすべて削除する。** 開発サーバーは `KARAKURI_CONFIG_DIR` を一時フォルダに向けて起動する
@@ -195,8 +195,8 @@ internal/
 │   │   ├── hostlink.go     # Host Link のフレーム（'@' 号機番号 FA … FCS '*' CR）の組み立てと読み取り
 │   │   ├── hostlink_server.go # HostLinkFactory / HostLinkServer（シリアルで待ち受け、handler で処理する）
 │   │   └── hostlink_client.go # HostLinkClientFactory / HostLinkClient（シリアルで送る。コマンドとマッピングは ClientFactory のもの）
-│   ├── serialport/       # シリアルポートの共通の部品（Port・Opener・サーバーの読み取りのループ Loop・テスト用の仮想のヌルモデムケーブル Line）。Modbus RTU / ASCII と FINS の Host Link で使う
-│   ├── slmp/             # SLMP（三菱電機。3E / 4E フレーム、TCP と UDP）
+│   ├── serialport/       # シリアルポートの共通の部品（Port・Opener・サーバーの読み取りのループ Loop・テスト用の仮想のヌルモデムケーブル Line・設定項目 ConfigFields）。Modbus RTU / ASCII・FINS の Host Link・MC プロトコル（シリアル）で使う
+│   ├── slmp/             # SLMP（三菱電機。3E / 4E フレーム、TCP と UDP）と MC プロトコル（シリアルの 4C フレーム）
 │   │   ├── slmp.go         # フレーム（サブヘッダー・要求先の指定・データ長）・コマンド・終了コード
 │   │   ├── device.go       # デバイスの定義（デバイスコード・ビットかワードか・番号を 16 進で書くか）
 │   │   ├── factory.go      # Factory / Config（アドレス・ポート・通信方式）
@@ -205,7 +205,11 @@ internal/
 │   │   ├── datastore.go    # DataStore（デバイスごとのメモリ。sparse を使う）
 │   │   ├── client.go       # ClientFactory（接続先の設定・コマンドの定義・リクエストの組み立てと応答の解釈）
 │   │   ├── client_conn.go  # Client（TCP / UDP の送受信）
-│   │   └── client_mapping.go # 変数マッピング用のリクエスト（MappableClientFactory）
+│   │   ├── client_mapping.go # 変数マッピング用のリクエスト（MappableClientFactory）
+│   │   ├── mc_ascii.go     # MC プロトコルの ASCII コードのコマンド ↔ バイナリの形（処理と組み立てを SLMP と共通にするため）
+│   │   ├── mc_serial.go    # 4C フレーム（形式 4 / 形式 5）の組み立てと読み取り・サムチェック・DLE の重ね
+│   │   ├── mc_serial_server.go # MCSerialFactory / MCSerialServer（シリアルで待ち受け、handler で処理する）
+│   │   └── mc_serial_client.go # MCSerialClientFactory / MCSerialClient（シリアルで送る。コマンドとマッピングは ClientFactory のもの）
 │   └── opcua/            # OPC UA（bamchoh/uastack 使用）
 │       ├── factory.go      # Factory（VariableStoreInjector 実装）
 │       ├── config.go       # Config（ネットワーク設定 + アプリケーション情報）
@@ -639,7 +643,7 @@ JavaScript（goja）でPLC動作を記述。
   - RTU のフレームの区切り（`SerialManager.ReadFrame()`）: ファンクションコードからリクエストの長さがわかるとき（FC01〜06・0F・10）は、その長さが届いて CRC が合った時点で 1 つのフレームにする（後ろに続けて届いたバイトは次に回す）。わからないときは、バイトが届かなくなった時点まで。無音の時間（3.5 文字時間）だけで厳密に区切らないのは、USB シリアル変換器が受信したバイトをまとめて渡し、フレームの途中に間が空くことがあるため
   - **ポートが使えなくなったとき**（USB シリアル変換器を抜いたなど）: 読み取りがエラーになったら、ポートを閉じて、1 秒おきに開き直す（`rtu/reconnect.go`。ログに「使えなくなりました」「開き直しました」を 1 回ずつ出す）。ライブラリは通信エラー（フレーミング・パリティ）では読み取りを失敗にしないので、`Read` のエラーは「ポートが使えなくなった」として扱う。閉じずに読み直すと、エラーがすぐ返り続けて CPU を 1 コア使い切り、挿し直しても同じハンドルでは読めない
   - **Stop は、待っている読み取りが終わってからポートを閉じる**（最長で 1 回の読み取りの時間。RTU も ASCII も 100ms）。読み取りの途中で閉じると、Windows ではポートが 50〜200ms ほど使用中のまま残り、止めてすぐの Start が「Serial port busy」で失敗する（実機で確認）。フェイクのポートは、読み取りの途中で閉じられたかを記録する
-  - 実際の COM ポートでの試験: `rtu/serial_hw_test.go`（配線・RTU と ASCII の読み書き・応答の時間）と `rtu/serial_hw_unplug_test.go`（手で抜き差しする）、`internal/protocols/integration_serial_hw_test.go`（Karakuri の Modbus RTU / ASCII・FINS の Host Link のサーバーに、同じプロトコルのクライアントからつなぐ。ポーリングと変数マッピングも）。COM ポートを取り合うので、パッケージをまたいで流すときは `go test -p 1` にする。2 つのポートをクロスでつなぎ、環境変数 `KARAKURI_SERIAL_PAIR`（`COM4,COM6` の形。サーバー側, マスター側）を設定したときだけ動く（CI では飛ばす）。抜き差しは `KARAKURI_SERIAL_UNPLUG=1` も要る。CPU の使い方は OS の側（`Get-Process rtu.test` の `TotalProcessorTime`）で見る（Go の `runtime/metrics` の CPU 時間は、システムコールの中の時間を数えない）
+  - 実際の COM ポートでの試験: `rtu/serial_hw_test.go`（配線・RTU と ASCII の読み書き・応答の時間）と `rtu/serial_hw_unplug_test.go`（手で抜き差しする）、`internal/protocols/integration_serial_hw_test.go`（Karakuri の Modbus RTU / ASCII・FINS の Host Link・MC プロトコル（シリアル）のサーバーに、同じプロトコルのクライアントからつなぐ。ポーリングと変数マッピングも）。COM ポートを取り合うので、パッケージをまたいで流すときは `go test -p 1` にする。2 つのポートをクロスでつなぎ、環境変数 `KARAKURI_SERIAL_PAIR`（`COM4,COM6` の形。サーバー側, マスター側）を設定したときだけ動く（CI では飛ばす）。抜き差しは `KARAKURI_SERIAL_UNPLUG=1` も要る。CPU の使い方は OS の側（`Get-Process rtu.test` の `TotalProcessorTime`）で見る（Go の `runtime/metrics` の CPU 時間は、システムコールの中の時間を数えない）
 - **OPC UA**（`internal/protocols/opcua/`）: 実際の OPC UA クライアントでつなぐ。`host_integration_test.go` は実際の変数ストアを使う（他のテストはフェイクの変数ストアを使うため、変数ストアが持つ値の型や型変換を通らない）
 - 設定フォルダに書き込むパッケージのテストは、`TestMain` で `KARAKURI_CONFIG_DIR` を一時フォルダに向ける
 
@@ -958,6 +962,27 @@ FINS のコマンドを Host Link（SYSMAC WAY）に載せて、シリアルで�
 - **未実装**: ASCII コードのフレーム、1E フレーム、複数ブロックの一括読み書き（0406 / 1406）、モニタの登録、リモート RUN / STOP、タイマ・カウンタの動作（値を持つだけ）、MELSEC iQ-R で増えたデバイス（長いタイマなど）
 - **確認していないこと**: 実機・他社製の SLMP クライアントとの接続（テストは、Karakuri のクライアントとサーバーの組み合わせと、フレームのバイト列）。形名コード（0x0268）は、資料と突き合わせていない
 - **テスト**: `internal/protocols/slmp/slmp_test.go`、`integration_test.go` の `TestSLMP_ServerAndVariableSync` / `TestSLMPClient_VariableMapping`、画面は `slmp.spec.ts`
+
+#### MC プロトコル（シリアル）
+
+シリアルコミュニケーションユニット（C24）などのシリアルで使う、MC プロトコルの 4C フレーム。形式 4（ASCII コード、CR LF で終わる）と形式 5（バイナリコード）に対応する。SLMP とは別のプロトコル（`mc-serial`、表示名「MC プロトコル（シリアル）」）で、デバイスの定義・処理（`handler`）・クライアントのコマンドとマッピングは SLMP と同じものを使う（メモリは別）。
+
+- **フレーム**（`mc_serial.go`）:
+  - 形式 4: 要求は ENQ `F8` アクセス経路（14 文字）要求データ [サムチェック] CR LF。応答は、データありが STX … ETX [サムチェック] CR LF、データなしが ACK、異常が NAK + エラーコード（4 文字）。ACK と NAK にサムチェックは付かない
+  - 形式 5: DLE STX データバイト数(2) F8 アクセス経路(7) 要求データ DLE ETX [サムチェック 2 文字]。応答は経路のあとに FFFF（応答 ID）と 0000 か エラーコード。データの中の 10H は 10H 10H と重ねて送る（データバイト数とサムチェックには、重ねた分を数えない）
+  - アクセス経路: 局番・ネットワーク番号・PC 番号・要求先ユニット I/O 番号(2)・要求先ユニット局番・自局番。自局は `局番 00 FF 03FF 00 00`（`hostRoute()`）
+  - サムチェック: 範囲のバイトを足した下位 1 バイトを 16 進 2 文字で。範囲は、形式 4 は ENQ / STX の次からサムチェックの直前まで（データありの応答では ETX を含む）、形式 5 はデータバイト数から DLE ETX の前まで。使うかどうかは設定（「サムチェック」あり / なし）
+- **ASCII のコマンド**（`mc_ascii.go`）: サーバーの処理とクライアントの組み立て・解釈は、SLMP のバイナリの形（コマンド + サブコマンド + データ）で動く。形式 4 では、ここで ASCII と行き来する（`requestToASCII()` / `requestFromASCII()` / `responseToASCII()` / `responseFromASCII()`）
+  - デバイスはコード 2 文字（1 文字の記号は `*` を足す: `D*`）+ 番号 6 桁（16 進のデバイスは 16 進）。点数 4 桁、ワード 4 桁、ダブルワード 8 桁、ビット単位は 1 点 1 文字、ランダム書き込み（ビット）の ON / OFF は 2 桁
+  - 扱えるのは 0401・1401・0403・1402・0101・0619 の、サブコマンド 0000 / 0001（MELSEC-Q / L の形）だけ。iQ-R の形（0002 / 0003）は ASCII では扱わない（クライアントは送る前にエラー、サーバーは C059）
+- **確かめた資料**: 三菱電機「MELSEC Communication Protocol Reference Manual」（SH-080008）。暗号化された PDF だが、閲覧用の暗号化（パスワードなし）なので、Go の PDF ライブラリ（ledongthuc/pdf）で文字を取り出して読んだ
+  - 形式 5 の例（`10 02 12 00 F8 05 07 03 04 00 01 00 01 04 01 00 40 00 00 9C 05 00 10 03 30 35`）を、バイト単位で同じに作れ、読める（`TestMCSerial_Format5ManualExample`）
+  - ASCII の通信例（0401 の M100・T100、0403、1402 のビット、0619）を、要求も応答も同じに作れる（`mc_ascii_test.go`）
+  - 確かめていないもの: 形式 4 の応答のサムチェックの範囲に ETX を含むこと（本文から読み取れず、記憶による）、サーバーが返すエラーコード（SLMP と同じ C0xx にしている。実際の C24 は 7xxx などを返す）、C24 の既定の伝送仕様（既定は 9600bps・8N1 にしている）
+- **サーバー**（`mc_serial_server.go`）: 設定はシリアル・形式・サムチェック・局番（0〜31）。局番の違う要求には応答しない（経路のほかの欄は確かめない）。読めない要求・扱えないコマンドには異常の応答（NAK / エラーコード）。形式 5 で経路まで読めないフレームには応答しない。読み取りは `serialport.Loop`
+- **クライアント**（`mc_serial_client.go`）: `ClientFactory`（SLMP）を埋め込む。リクエストは SLMP と同じバイナリの形で、形式 4 なら ASCII に直して送る。経路は自局宛て。異常の応答は `exception`（ポートは閉じない）。ポートの開閉は、ほかのシリアルのクライアントと同じ
+- **未実装**: 3C フレーム、形式 1〜3、2C / 1C フレーム、伝送シーケンスの初期化（EOT / CL）、オンデマンド、マルチドロップの中継（経路の局番以外の欄は使わない）
+- **テスト**: `mc_ascii_test.go`（マニュアルの例）、`mc_serial_test.go`（フレーム。形式 5 の例・DLE の重ね・形式 4）、`mc_serial_conn_test.go`（サーバーとクライアントを `serialport.Line` でつなぐ。形式 4 / 5 × サムチェックあり / なし、誤りの応答、壊れた応答、Stop → Start）、`internal/protocols/integration_serial_hw_test.go` の `TestHW_MCSerial_*`（実機）、画面は `client-serial.spec.ts`
 
 ### アプリ全体のログ
 

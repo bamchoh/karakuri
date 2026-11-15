@@ -132,7 +132,7 @@ func TestFactories(t *testing.T) {
 		}
 	}
 	sort.Strings(types)
-	if want := []string{"fins", "fins-hostlink", "modbus-ascii", "modbus-rtu", "modbus-tcp", "opcua", "slmp"}; !reflect.DeepEqual(types, want) {
+	if want := []string{"fins", "fins-hostlink", "mc-serial", "modbus-ascii", "modbus-rtu", "modbus-tcp", "opcua", "slmp"}; !reflect.DeepEqual(types, want) {
 		t.Errorf("プロトコル = %v, want %v", types, want)
 	}
 
@@ -145,7 +145,7 @@ func TestFactories(t *testing.T) {
 		}
 	}
 	// 並びは、登録した順（最初のものが、接続先を追加するときの既定になる）
-	if want := []string{"modbus-tcp", "modbus-rtu", "modbus-ascii", "opcua", "fins", "fins-hostlink", "slmp"}; !reflect.DeepEqual(clientTypes, want) {
+	if want := []string{"modbus-tcp", "modbus-rtu", "modbus-ascii", "opcua", "fins", "fins-hostlink", "slmp", "mc-serial"}; !reflect.DeepEqual(clientTypes, want) {
 		t.Errorf("クライアントのプロトコル = %v, want %v", clientTypes, want)
 	}
 

@@ -23,6 +23,7 @@ func Factories() []protocol.ServerFactory {
 		&fins.Factory{},
 		&fins.HostLinkFactory{},
 		&slmp.Factory{},
+		&slmp.MCSerialFactory{},
 	}
 }
 
@@ -36,5 +37,6 @@ func ClientFactories() []protocol.ClientFactory {
 		&fins.ClientFactory{},
 		&fins.HostLinkClientFactory{},
 		&slmp.ClientFactory{},
+		&slmp.MCSerialClientFactory{},
 	}
 }
