@@ -60,6 +60,10 @@ type ClientSender interface {
 	SendRequest(scriptName, client, requestHex string) map[string]any
 	// HasClient は、その名前の接続先があるか（clients("名前") で、打ち間違いにすぐ気づけるように）
 	HasClient(name string) bool
+	// SetPolling は、接続先のポーリングを開始・停止する（停止は、送信中のリクエストが終わるまで待つ）
+	SetPolling(client string, running bool) error
+	// IsPolling は、接続先がポーリング中か
+	IsPolling(client string) (bool, error)
 }
 
 // SetClientSender は clients("名前").send() / .sendHex() が使う送り先を設定する

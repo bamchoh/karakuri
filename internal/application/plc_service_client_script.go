@@ -5,7 +5,7 @@ import (
 	"strings"
 )
 
-// === スクリプトから外部の機器へ送る（clients("名前").send() / .sendHex()） ===
+// === スクリプトから外部の機器へ送る（clients("名前").send() / .sendHex()）・ポーリングを開始・停止する（.polling） ===
 //
 // 接続先と保存したコマンドは名前で指定する（同じ名前が複数あれば、追加した順で最初のもの）。
 // 見つからない・16 進が読めないときも、例外にせず status が "error" の結果を返す（スクリプトを止めないため）。
@@ -82,6 +82,29 @@ func logToScript(l *ClientCommandLogDTO) map[string]any {
 func (c scriptClientSender) HasClient(name string) bool {
 	_, ok := c.svc.clients.clientIDByName(name)
 	return ok
+}
+
+func (c scriptClientSender) SetPolling(client string, running bool) error {
+	clientID, ok := c.svc.clients.clientIDByName(client)
+	if !ok {
+		return fmt.Errorf("接続先「%s」がありません", client)
+	}
+	if running {
+		return c.svc.StartClientPolling(clientID)
+	}
+	return c.svc.StopClientPolling(clientID)
+}
+
+func (c scriptClientSender) IsPolling(client string) (bool, error) {
+	clientID, ok := c.svc.clients.clientIDByName(client)
+	if !ok {
+		return false, fmt.Errorf("接続先「%s」がありません", client)
+	}
+	p, err := c.svc.GetClientPolling(clientID)
+	if err != nil {
+		return false, err
+	}
+	return p.Running, nil
 }
 
 func (c scriptClientSender) SendCommand(scriptName, client, command string) map[string]any {

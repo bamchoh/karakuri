@@ -502,6 +502,7 @@ JavaScript（goja）でPLC動作を記述。
     - 例: `vars.counter = vars.counter + 1n`。BigInt は Number と混ぜて計算できない（`x + 1` は TypeError。`x + 1n` か `x + BigInt(y)` と書く）。比較（`x > 100`）は混ぜてよい
   - **`iec`**: TIME / DATE / TIME_OF_DAY / DATE_AND_TIME の文字列と数値の変換。`iec.parseTime()` / `formatTime()`（ミリ秒）、`parseDate()` / `formatDate()`（Unix 秒）、`parseTimeOfDay()` / `formatTimeOfDay()`（ミリ秒）、`parseDateAndTime()` / `formatDateAndTime()`（Unix 秒）。変数の値は文字列なので、計算するときは `vars.T = iec.formatTime(iec.parseTime(vars.T) + 1000)` のように書く（以前の `readTimeMs()` などの、読んで変換する関数はない）
   - **`clients("名前")`**: 外部の機器へ送る。接続先がなければエラー（`ClientSender.HasClient()`）。`.send(command)`（保存したコマンドを名前で指定）、`.sendHex(hex)`（16 進で指定）。応答かタイムアウトまで待って `{ status, error, values: [{ label, value, word?, bit? }], sent, received, elapsedMs, summary, label }` を返す。保存したコマンドが見つからない・16 進が読めないときは、例外にせず `status: "error"`。名前が重なれば追加した順で最初のもの。履歴の `label` は「スクリプト「名前」: コマンド名」（実装は `plc_service_client_script.go` の `scriptClientSender`、エンジンへは `ScriptEngine.SetClientSender()` で渡す）
+    - `.polling.start()` / `.polling.stop()` / `.polling.running`: 通信画面のポーリングの開始・停止と同じ（`StartClientPolling()` / `StopClientPolling()`。どちらも、すでにその状態なら何もしない）。`stop()` は送信中のリクエストが終わるまで待つ。`running` は読むたびに調べる（読み取り専用）。失敗したらスクリプトのエラー
 
 ### Wailsバインディング
 
@@ -894,6 +895,7 @@ JavaScript（goja）でPLC動作を記述。
   - ポーリングの送受信は、コマンドの履歴に入れない
   - 止めるときは、ロックの中で取り消しだけして、ゴルーチンの終わりはロックの外で待つ（ゴルーチンは結果を入れるときに `clientManager.mu` を取るため）。接続先の削除・プロジェクトの読み込み・終了でも止める
   - 読み取り項目・周期・表示形式（`format`。画面が決める値で、ホストは意味を持たない）はプロジェクトに保存する。ポーリング中かどうかは保存しない（読み込んだら停止中）
+  - スクリプトからも開始・停止できる（`clients("名前").polling.start()` / `.stop()`）
   - 値の表示形式を変えられるよう、`ResultValue` は表示用の文字列に加えて元の値（`Bit` / `Word`）を持つ
 - **テスト**: `internal/protocols/modbus/client_test.go`（フェイクの TCP サーバー）・`client_mapping_test.go`、`internal/infrastructure/adapter/device_sync_test.go`（同期の決まり）、`internal/application/plc_service_clients_test.go` / `plc_service_client_polling_test.go`（`protocoltest.ClientFactory`）・`plc_service_client_sync_test.go`（`protocoltest.DeviceClientFactory`: フェイクの機器つき。`Device.Down` でタイムアウトにできる）、`internal/protocols/integration_test.go` の `TestModbusClient_AgainstOwnServer` / `TestModbusClient_Polling` / `TestModbusClient_VariableMapping`（Karakuri 自身の Modbus TCP サーバーにつなぐ）、画面は `client-panel.spec.ts` / `client-polling.spec.ts` / `client-mapping.spec.ts`。Modbus RTU / ASCII は `internal/protocols/modbus/client_rtu_test.go` / `client_ascii_test.go`（フェイクの機器: 応答は Karakuri の RTU / ASCII サーバーと同じ `rtu.Processor`。送受信の共通の部分は RTU のテストで確かめる。分かれて届く応答・遅れた応答・壊れた応答・ポートが使えなくなったとき）、`integration_serial_hw_test.go`（実機。`KARAKURI_SERIAL_PAIR`）、画面は `client-serial.spec.ts`。OPC UA は `internal/protocols/opcua/client_test.go`（Karakuri の OPC UA サーバー、セキュリティポリシーとユーザー名を使う uastack のサーバー、応答しないサーバー）、`integration_test.go` の `TestOPCUAClient_AgainstOwnServer`、画面は `client-opcua.spec.ts`。サブスクリプションのホスト側は `internal/application/plc_service_client_subscription_test.go`（`protocoltest.ClientFactory` の監視は、テストから `Subscription.Emit()` で知らせを送れる）
 - **変数とのマッピング**（`plc_service_client_sync.go`、状態は `adapter.DeviceSync`）: 変数をサーバーのレジスタと同じ形（`ProtocolMapping`、`protocolType` は `client:<接続先の ID>`）で接続先のアドレスにマッピングする。同期はポーリング中だけ行う
