@@ -33,7 +33,7 @@ func TestAppLog_Scripts(t *testing.T) {
 		t.Fatal(err)
 	}
 	// Flag が 0 以外の間は、存在しない変数を読んでエラーになる。毎周 console.log も出す
-	code := `console.log("tick"); if (plc.readVariable("Flag") !== 0) { plc.readVariable("Nope"); }`
+	code := `console.log("tick"); if (vars.Flag !== 0) { vars.Nope; }`
 	sc, err := svc.CreateScript("周期", code, 10)
 	if err != nil {
 		t.Fatal(err)
@@ -66,7 +66,7 @@ func TestAppLog_Scripts(t *testing.T) {
 	}
 	setFlag(1)
 	waitFor(t, "エラーのログ", func() bool {
-		return hasLine(logs(), `error: スクリプトでエラーが起きています: Error: plc.readVariable: 変数 "Nope" がありません`)
+		return hasLine(logs(), `error: スクリプトでエラーが起きています: Error: vars: 変数 "Nope" がありません`)
 	})
 	ticks := func() int {
 		n := 0
@@ -88,7 +88,7 @@ func TestAppLog_Scripts(t *testing.T) {
 	got := logs()
 	want := []string{
 		"info: スクリプトを開始しました（周期 10 ms）",
-		`error: スクリプトでエラーが起きています: Error: plc.readVariable: 変数 "Nope" がありません`,
+		`error: スクリプトでエラーが起きています: Error: vars: 変数 "Nope" がありません`,
 		"info: スクリプトのエラーが解消しました",
 		"info: スクリプトを停止しました",
 	}

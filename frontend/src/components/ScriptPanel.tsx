@@ -16,28 +16,30 @@ import { application } from "../../wailsjs/go/models";
 import { Square, Play, SquarePlus } from "lucide-react";
 import { Group, Panel, Separator } from "react-resizable-panels";
 
-const DEFAULT_CODE = `// PLCオブジェクトで変数にアクセスできます
+const DEFAULT_CODE = `// vars で変数を読み書きできます
 //
-// === 基本 ===
-// plc.readVariable(name)              - 変数の値を読む
-// plc.writeVariable(name, value)      - 変数に値を書く
-// plc.getVariables()                  - 全変数名の一覧を取得
-// plc.hasVariable(name)               - 変数があるかどうか
+// === 変数 ===
+// vars.Counter                 - 変数の値を読む
+// vars.Counter = 1             - 変数に書く
+// vars["Sensor" + i]           - 名前を組み立てて読む
+// vars.Motor1.speed = 100      - 構造体のフィールド
+// vars.Values[1] = 5           - 配列の要素（添字は ARRAY[1..3] なら 1〜3）
+// "Counter" in vars            - 変数があるかどうか
+// Object.keys(vars)            - 変数の名前の一覧
+// vars("Counter").status()     - 接続先との同期の状態
+//
+// === 外部の機器 ===
+// clients("PLC-A").send("速度を読む")   - 保存したコマンドを送る
+// clients("PLC-A").sendHex("03 00 00 00 01") - 16 進で送る
+//
+// === 時間・日付 ===
+// iec.parseTime("T#1s")  /  iec.formatTime(1000)  など
 //
 // 変数がない・フィールドがない・型に合わない値を書いた、などの失敗はエラーになります
 // （エラーは下のコンソールに出ます。try / catch で受け取ることもできます）
-//
-// === 配列 ===
-// plc.readArrayElement(name, index)          - 配列要素を読む
-// plc.writeArrayElement(name, index, value)  - 配列要素に書く
-//
-// === 構造体 ===
-// plc.readStructField(name, fieldName)          - 構造体フィールドを読む
-// plc.writeStructField(name, fieldName, value)  - 構造体フィールドに書く
 
 // 例: 変数 "Counter" をインクリメント
-const count = plc.readVariable("Counter");
-plc.writeVariable("Counter", count + 1);
+vars.Counter = vars.Counter + 1;
 `;
 
 function generateNewScriptName(scripts: application.ScriptDTO[]) {

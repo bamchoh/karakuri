@@ -15,7 +15,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **マルチプロトコル対応**: Modbus TCP / Modbus RTU / Modbus ASCII / OPC UA / FINS / FINS（Host Link）/ SLMP / MC プロトコル（シリアル）を個別のサーバーとして起動可能
 - **複数サーバー同時実行**: 異なるプロトコル（例: Modbus TCP + OPC UA）を同時に起動可能。各サーバーは独立したメモリ空間を持つ
 - **変数管理**: IEC 61131-3準拠のデータ型（スカラー、配列、構造体、STRING[n]）をサポート。OPC UA でノードとして公開可能
-- **スクリプト機能**: JavaScriptで周期処理を記述。const/let対応（IIFE wrapping）、結果とエラーはコンソールに表示
+- **スクリプト機能**: JavaScriptで周期処理を記述。変数は `vars.名前` で読み書きする。const/let対応（IIFE wrapping）、結果とエラーはコンソールに表示
 - **レジスタ操作**: GUIからメモリエリアの値を直接操作可能
 - **モニタリング**: 任意のレジスタをリアルタイム監視・書き込み（ドラッグ&ドロップ並べ替え対応）
 - **プロトコルマッピング**: 変数を複数プロトコルのメモリアドレスにマッピング可能
@@ -296,11 +296,10 @@ internal/
   - オフにした UnitID には、TCP / RTU / ASCII のどれも応答しない（例外応答も返さない）
   - Modbus TCP は simonvetter/modbus のサーバーを使うが、このライブラリは受け取ったリクエストに必ず応答する。そのため `TCPTransport`（`tcp_transport.go`）がクライアントとの間に中継を入れ、オフにした UnitID 宛てのフレームを捨てる。ライブラリのサーバーは 127.0.0.1 の空きポートで動く
 - **ScriptEngine** (`internal/infrastructure/scripting/engine.go`): gojaベースのJavaScript実行エンジン
-  - `plc`オブジェクトで VariableStore にアクセスする（レジスタを直接読み書きする関数はない。レジスタを動かすときは、変数をマッピングする）
+  - スクリプトに見せるのは `vars`（変数）・`clients`（外部の機器）・`iec`（時間・日付の変換）・`console`。作るのは `api.go` の `installAPI()`（レジスタを直接読み書きする関数はない。レジスタを動かすときは、変数をマッピングする）
   - スクリプトコードをIIFE `(function(){...})();` でラップして、const/let再宣言エラーを回避
   - エラー（コンパイルエラー・実行時のエラー・panic）はコンソールログに `[ERROR]` として出す。周期実行では、同じエラーが続く間は最初の 1 回だけ出す
-  - TIME/DATE型シンタックスシュガー: `plc.readTimeMs(name)`, `plc.writeTimeMs(name, ms)` など、変数の読み取り〜数値変換〜書き込みをワンステップで実行（内部でparse/formatを自動適用）
-  - LINT / ULINT は、いつも BigInt で読み書きする（`readVariable()` などのふつうの関数で。64 ビットの全範囲を桁を落とさずに扱う。値の変換は `toJSCompatibleValue()` / `jsToStore()`）
+  - LINT / ULINT は、いつも BigInt で読み書きする（64 ビットの全範囲を桁を落とさずに扱う。値の変換は `toJSCompatibleValue()` / `jsToStore()`）
 
 ### フロントエンド構成（スキーマ駆動UI）
 
@@ -487,18 +486,22 @@ JavaScript（goja）でPLC動作を記述。
 - **操作のエラー**: 保存・削除・開始・停止に失敗したときは、コンソールの上にエラーを表示する（次の操作が成功すると消える）
 - **画面のテスト**: `frontend/e2e/script-panel.spec.ts`
 - **const/let対応**: スクリプトコードをIIFEでラップして再宣言エラーを回避
-- **plcオブジェクト**:
-  - レジスタを直接読み書きする関数（`plc.readBit()` / `plc.readWord()` など）はない。変数をレジスタにマッピングして、変数を読み書きする
-  - 変数アクセス: `plc.readVariable()`, `plc.writeVariable()`, `plc.readArrayElement()`, `plc.writeArrayElement()`, `plc.readStructField()`, `plc.writeStructField()`, `plc.hasVariable(name)`（変数があるかどうか）
-    - **変数の関数は、失敗したらスクリプトのエラー（例外）になる**: 変数がない・フィールドや要素がない・型が違う（`readTimeMs` を INT に使うなど）・型に合わない値を書いた・64 ビットに収まらない BigInt を書いた、のどれも。黙って `null` を返したり、何もしなかったりはしない。TIME/DATE の関数と `getVariableStatus` も同じ
-    - エラーは `[ERROR]` としてコンソールに出る（スクリプトの `try` / `catch` で受け取れる）。文面は「`plc.readVariable: 変数 "X" がありません`」の形。関数を足すときは、`createVM()` の `mustVariable()` / `check()` / `fromJS()` / `throw()` を使う
-  - **LINT / ULINT は、いつも BigInt**: `readVariable()` / `readArrayElement()` / `readStructField()` は、LINT / ULINT の値を BigInt で返す（構造体のフィールド・配列の要素にあるものも）。ほかの整数・実数は Number。書く関数は、BigInt と Number のどちらも受け付ける（構造体・配列の中の BigInt も）。64 ビットに収まらない BigInt はエラー
-    - 例: `plc.writeVariable("counter", plc.readVariable("counter") + 1n)`。BigInt は Number と混ぜて計算できない（`x + 1` は TypeError。`x + 1n` か `x + BigInt(y)` と書く）。比較（`x > 100`）は混ぜてよい
-    - 以前あった `readLintBig()` などの専用の関数と、±2^53 を超えたときの `[WARN]` はない（BigInt にそろえたので要らなくなった）
-  - TIME/DATE シンタックスシュガー: `plc.readTimeMs()`, `plc.writeTimeMs()`, `plc.readDateSec()`, `plc.writeDateSec()`, `plc.readTimeOfDayMs()`, `plc.writeTimeOfDayMs()`, `plc.readDateAndTimeSec()`, `plc.writeDateAndTimeSec()`（変数の読み取り・パース・フォーマット・書き込みをワンステップで実行）
-  - TIME/DATE 文字列変換: `plc.parseTime()`, `plc.formatTime()`, `plc.parseDate()`, `plc.formatDate()`, `plc.parseTimeOfDay()`, `plc.formatTimeOfDay()`, `plc.parseDateAndTime()`, `plc.formatDateAndTime()`
-  - 外部の機器との同期の状態: `plc.getVariableStatus(name)`（クライアントの接続先にマッピングした変数。`{ state, writePending, error, client }`。変数はあるが、接続先にマッピングしていなければ `null`。変数がなければエラー）
-  - 外部の機器へ送る: `plc.sendCommand(client, command)`（保存したコマンドを、接続先とコマンドの名前で指定）、`plc.sendRequest(client, hex)`（16 進で指定）。応答かタイムアウトまで待って `{ status, error, values: [{ label, value, word?, bit? }], sent, received, elapsedMs, summary, label }` を返す。見つからない・16 進が読めないときも例外にせず `status: "error"`。名前が重なれば追加した順で最初のもの。履歴の `label` は「スクリプト「名前」: コマンド名」（実装は `plc_service_client_script.go` の `scriptClientSender`、エンジンへは `ScriptEngine.SetClientSender()` で渡す）
+- **スクリプトの API**（`internal/infrastructure/scripting/api.go`）: 以前は `plc.readVariable()` などの関数だったが、`vars` / `clients` / `iec` に替えた（互換は残していない）
+  - レジスタを直接読み書きする関数はない。変数をレジスタにマッピングして、変数を読み書きする
+  - **`vars`**: 変数の値を、プロパティとして読み書きする（goja の Proxy）。`vars.Counter`、`vars["Sensor" + i]`、`vars.Counter = 1`
+    - 構造体・配列の変数は、値の代わりに Proxy を返す（`structProxy` / `arrayProxy`）。`vars.Motor1.speed = 100`、`vars.Values[1] = 5` のように、入れ子のまま書ける。読むたび・書くたびに変数ストアを通る（値を手元に写さない）
+    - 配列の添字は外部インデックス（`ARRAY[1..3]` なら 1〜3）。`length`・`for...of`・`[...vars.Values]` も使える
+    - `"Counter" in vars`（あるかどうか）、`Object.keys(vars)`（名前の一覧）。`delete vars.X` はエラー
+    - 構造体・配列を代入すると、まるごと書く（`vars.M1 = {speed: 1}`）。まるごと読んでふつうの値にするのは `vars("M1").read()`
+    - console.log などが黙って調べに来る名前（`toJSON` / `then` / `toString` など。`ignoredProp()`）は、ない変数・フィールドでもエラーにせず undefined を返す
+    - `console.log()` に Proxy を渡すと、中身の値を出す（`plainValue()`）
+  - **`vars("名前")`**: 値のほかの操作。`.name`、`.read()`、`.write(v)`、`.status()`（接続先にマッピングした変数の同期の状態 `{ state, writePending, error, client }`。マッピングしていなければ `null`）。名前は `"Motor1.speed"` や `"Values[1]"` のようにフィールド・要素まで書ける（呼んだ時点で、あるかを確かめる）。変数の名前とぶつからないよう、値のプロパティとは分けている
+  - **失敗したらスクリプトのエラー（例外）**: 変数がない・フィールドがない・添字が範囲外・型に合わない値を書いた・64 ビットに収まらない BigInt を書いた・接続先がない・`iec` に読めない文字列を渡した、のどれも。黙って `undefined` を返したり、何もしなかったりはしない
+    - エラーは `[ERROR]` としてコンソールに出る（スクリプトの `try` / `catch` で受け取れる）。文面は「`vars: 変数 "X" がありません`」の形（先頭は `vars:` / `clients:` / `iec.関数名(...)`）。足すときは `scriptAPI.throw()` を使う
+  - **LINT / ULINT は、いつも BigInt**: LINT / ULINT の値を BigInt で返す（構造体のフィールド・配列の要素にあるものも）。ほかの整数・実数は Number。書くときは、BigInt と Number のどちらも受け付ける（構造体・配列の中の BigInt も）。64 ビットに収まらない BigInt はエラー
+    - 例: `vars.counter = vars.counter + 1n`。BigInt は Number と混ぜて計算できない（`x + 1` は TypeError。`x + 1n` か `x + BigInt(y)` と書く）。比較（`x > 100`）は混ぜてよい
+  - **`iec`**: TIME / DATE / TIME_OF_DAY / DATE_AND_TIME の文字列と数値の変換。`iec.parseTime()` / `formatTime()`（ミリ秒）、`parseDate()` / `formatDate()`（Unix 秒）、`parseTimeOfDay()` / `formatTimeOfDay()`（ミリ秒）、`parseDateAndTime()` / `formatDateAndTime()`（Unix 秒）。変数の値は文字列なので、計算するときは `vars.T = iec.formatTime(iec.parseTime(vars.T) + 1000)` のように書く（以前の `readTimeMs()` などの、読んで変換する関数はない）
+  - **`clients("名前")`**: 外部の機器へ送る。接続先がなければエラー（`ClientSender.HasClient()`）。`.send(command)`（保存したコマンドを名前で指定）、`.sendHex(hex)`（16 進で指定）。応答かタイムアウトまで待って `{ status, error, values: [{ label, value, word?, bit? }], sent, received, elapsedMs, summary, label }` を返す。保存したコマンドが見つからない・16 進が読めないときは、例外にせず `status: "error"`。名前が重なれば追加した順で最初のもの。履歴の `label` は「スクリプト「名前」: コマンド名」（実装は `plc_service_client_script.go` の `scriptClientSender`、エンジンへは `ScriptEngine.SetClientSender()` で渡す）
 
 ### Wailsバインディング
 
@@ -903,7 +906,7 @@ JavaScript（goja）でPLC動作を記述。
   - ビットのエリアには BOOL だけ。使えないマッピング（ないエリア・範囲外・ビットのエリアに BOOL 以外）は `invalid` にして読み書きしない
   - 読み取りで変数を更新するときは `UpdateValueFrom()` で自分を通知先から外す（機器へ書き戻さない）。`DeviceSync` のロックの中では変数ストアを更新しない
   - 接続先を削除すると、その接続先へのマッピングを変数から外す。プロジェクトには接続先の ID を保存し、読み込んでも ID を変えない（マッピングが接続先を指すため）
-  - スクリプトからは `plc.getVariableStatus(name)` で状態を読める（`{ state, writePending, error, client }`。変数はあるが、接続先にマッピングしていなければ `null`。変数がなければエラー）
+  - スクリプトからは `vars("名前").status()` で状態を読める（`{ state, writePending, error, client }`。変数はあるが、接続先にマッピングしていなければ `null`。変数がなければエラー）
 
 ### FINS 実装
 

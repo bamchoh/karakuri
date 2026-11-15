@@ -191,12 +191,12 @@ FINS の CIO や DM などをビットで見るときは、ワードのエリア
 
 ```javascript
 // 変数 Counter を 1 ずつ増やし、100 を超えたら 0 に戻す
-const count = plc.readVariable("Counter") + 1;
-plc.writeVariable("Counter", count > 100 ? 0 : count);
+const count = vars.Counter + 1;
+vars.Counter = count > 100 ? 0 : count;
 
 // 構造体のフィールドと配列の要素
-plc.writeStructField("Motor1", "speed", count * 10);
-plc.writeArrayElement("Values", 0, count);
+vars.Motor1.speed = count * 10;
+vars.Values[1] = count;
 ```
 
 スクリプトから読み書きするのは変数です。レジスタを動かしたいときは、変数をレジスタにマッピングします（変数とレジスタは双方向に同期します）。
@@ -205,20 +205,32 @@ plc.writeArrayElement("Values", 0, count);
 
 #### 利用可能な API
 
-**変数アクセス API**:
+スクリプトで使えるのは、`vars`（変数）・`clients`（外部の機器）・`iec`（時間・日付の変換）・`console.log()` です。
 
-| メソッド                                       | 説明                             |
-| ---------------------------------------------- | -------------------------------- |
-| `plc.readVariable(name)`                       | 変数の値を読み取り               |
-| `plc.writeVariable(name, value)`               | 変数に値を書き込み               |
-| `plc.readArrayElement(name, index)`            | 配列変数の要素を読み取り         |
-| `plc.writeArrayElement(name, index, value)`    | 配列変数の要素を書き込み         |
-| `plc.readStructField(name, fieldName)`         | 構造体変数のフィールドを読み取り |
-| `plc.writeStructField(name, fieldName, value)` | 構造体変数のフィールドを書き込み |
-| `plc.hasVariable(name)`                        | 変数があるかどうか               |
-| `plc.getVariables()`                           | 全変数の一覧を取得               |
+**変数（`vars`）**:
 
-変数の関数は、失敗するとスクリプトのエラー（例外）になります（変数がない・フィールドや要素がない・型が違う・型に合わない値を書いた）。`try` / `catch` で受け取れます。あるかどうか分からない変数は、先に `plc.hasVariable()` で確かめます。
+| 書き方                                          | 説明                                                                    |
+| ----------------------------------------------- | ----------------------------------------------------------------------- |
+| `vars.Counter`                                  | 変数の値を読む                                                          |
+| `vars.Counter = 1`                              | 変数に書く                                                              |
+| `vars["Sensor" + i]`                            | 名前を組み立てて読み書きする                                            |
+| `vars.Motor1.speed` / `vars.Motor1.speed = 100` | 構造体のフィールドを読み書きする（入れ子も `vars.Line1.motor.speed`）   |
+| `vars.Values[1]` / `vars.Values[1] = 5`         | 配列の要素を読み書きする。添字は宣言のとおり（`ARRAY[1..3]` なら 1〜3） |
+| `vars.Values.length` / `[...vars.Values]`       | 配列の要素の数・要素の並び                                              |
+| `"Counter" in vars`                             | 変数があるかどうか                                                      |
+| `Object.keys(vars)`                             | 変数の名前の一覧                                                        |
+
+構造体・配列の変数をまるごと書くときは、`vars.Motor1 = { speed: 100, ... }` のようにオブジェクト・配列を代入します。まるごと読んでふつうのオブジェクト・配列にするときは `vars("Motor1").read()` です。
+
+値のほかの操作は、`vars("名前")` で行います（名前は `"Motor1.speed"` や `"Values[1]"` のようにフィールド・要素まで書けます）。
+
+| 書き方                     | 説明                                                                                                                        |
+| -------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
+| `vars("Counter").read()`   | 値を読む（構造体・配列は、ふつうのオブジェクト・配列で）                                                                    |
+| `vars("Counter").write(v)` | 値を書く                                                                                                                    |
+| `vars("Counter").status()` | 接続先にマッピングした変数の同期の状態（`{ state, writePending, error, client }`）。接続先にマッピングしていなければ `null` |
+
+変数の読み書きは、失敗するとスクリプトのエラー（例外）になります（変数がない・フィールドや要素がない・添字が範囲の外・型に合わない値を書いた）。`try` / `catch` で受け取れます。あるかどうか分からない変数は、先に `"名前" in vars` で確かめます。
 
 **LINT / ULINT（64 ビット整数）は BigInt**:
 
@@ -226,67 +238,55 @@ LINT / ULINT の値は、いつも JavaScript の `BigInt` で読み書きしま
 
 ```javascript
 // LINT 変数に 1 加算する例（BigInt のリテラルは、数字のあとに n を付ける）
-plc.writeVariable("counter", plc.readVariable("counter") + 1n);
+vars.counter = vars.counter + 1n;
 
 // ULINT 変数を 16 進リテラルで書き込む例
-plc.writeVariable("flags", 0xffffffffffffffffn);
+vars.flags = 0xffffffffffffffffn;
 
 // DINT など、ほかの整数の変数と組み合わせるときは BigInt() でそろえる
-plc.writeVariable("total", plc.readVariable("total") + BigInt(plc.readVariable("count")));
+vars.total = vars.total + BigInt(vars.count);
 ```
 
 > **注意**: BigInt は Number と混ぜて計算できません（`x + 1` はエラーになるので、`x + 1n` と書きます）。比較（`x > 100`）は混ぜてもかまいません。64 ビットに収まらない BigInt を書くと、エラーになります。
 
-**TIME/DATE シンタックスシュガー**:
+**時間・日付（`iec`）**:
 
-読み取り〜数値変換〜書き込みをワンステップで実行します。
+TIME / DATE / TIME_OF_DAY / DATE_AND_TIME の変数の値は、`"T#1s"` のような文字列です。数値で計算するときは、`iec` で変換します。読めない文字列を渡すと、エラーになります。
 
-| メソッド                             | 型            | 内部値 | 説明                                  |
-| ------------------------------------ | ------------- | ------ | ------------------------------------- |
-| `plc.readTimeMs(name)`               | TIME          | ms     | TIME 変数をミリ秒（数値）で読み取り   |
-| `plc.writeTimeMs(name, ms)`          | TIME          | ms     | ミリ秒（数値）を TIME 変数に書き込み  |
-| `plc.readDateSec(name)`              | DATE          | 秒     | DATE 変数を Unix 秒（数値）で読み取り |
-| `plc.writeDateSec(name, sec)`        | DATE          | 秒     | Unix 秒（数値）を DATE 変数に書き込み |
-| `plc.readTimeOfDayMs(name)`          | TIME_OF_DAY   | ms     | TOD 変数をミリ秒（数値）で読み取り    |
-| `plc.writeTimeOfDayMs(name, ms)`     | TIME_OF_DAY   | ms     | ミリ秒（数値）を TOD 変数に書き込み   |
-| `plc.readDateAndTimeSec(name)`       | DATE_AND_TIME | 秒     | DT 変数を Unix 秒（数値）で読み取り   |
-| `plc.writeDateAndTimeSec(name, sec)` | DATE_AND_TIME | 秒     | Unix 秒（数値）を DT 変数に書き込み   |
+| 関数                         | 説明                                           |
+| ---------------------------- | ---------------------------------------------- |
+| `iec.parseTime(str)`         | `"T#1h30m"` → ミリ秒（number）                 |
+| `iec.formatTime(ms)`         | ミリ秒（number） → `"T#1h30m"`                 |
+| `iec.parseDate(str)`         | `"D#2024-01-01"` → Unix 秒（number）           |
+| `iec.formatDate(sec)`        | Unix 秒（number） → `"D#2024-01-01"`           |
+| `iec.parseTimeOfDay(str)`    | `"TOD#12:30:15"` → ミリ秒（number）            |
+| `iec.formatTimeOfDay(ms)`    | ミリ秒（number） → `"TOD#12:30:15"`            |
+| `iec.parseDateAndTime(str)`  | `"DT#2024-01-01-12:30:15"` → Unix 秒（number） |
+| `iec.formatDateAndTime(sec)` | Unix 秒（number） → `"DT#2024-01-01-12:30:15"` |
 
 ```javascript
 // TIME_OF_DAY 変数に 1 秒加算する例
-plc.writeTimeOfDayMs("TOD1", plc.readTimeOfDayMs("TOD1") + 1000);
+vars.TOD1 = iec.formatTimeOfDay(iec.parseTimeOfDay(vars.TOD1) + 1000);
 
 // DATE 変数を 1 日進める例
-plc.writeDateSec("date1", plc.readDateSec("date1") + 86400);
+vars.date1 = iec.formatDate(iec.parseDate(vars.date1) + 86400);
 ```
 
-**TIME/DATE 文字列変換 API**:
+**外部の機器（`clients`）**:
 
-| メソッド                     | 説明                                           |
-| ---------------------------- | ---------------------------------------------- |
-| `plc.parseTime(str)`         | `"T#1h30m"` → ミリ秒（number）                 |
-| `plc.formatTime(ms)`         | ミリ秒（number） → `"T#1h30m"`                 |
-| `plc.parseDate(str)`         | `"D#2024-01-01"` → Unix 秒（number）           |
-| `plc.formatDate(sec)`        | Unix 秒（number） → `"D#2024-01-01"`           |
-| `plc.parseTimeOfDay(str)`    | `"TOD#12:30:15"` → ミリ秒（number）            |
-| `plc.formatTimeOfDay(ms)`    | ミリ秒（number） → `"TOD#12:30:15"`            |
-| `plc.parseDateAndTime(str)`  | `"DT#2024-01-01-12:30:15"` → Unix 秒（number） |
-| `plc.formatDateAndTime(sec)` | Unix 秒（number） → `"DT#2024-01-01-12:30:15"` |
+`clients("接続先の名前")` で、クライアントの接続先を指定します（同じ名前が複数あれば、追加した順で最初のもの）。接続先がなければ、エラーになります。
 
-**外部の機器（クライアントの接続先）へ送る API**:
+| 書き方                           | 説明                                               |
+| -------------------------------- | -------------------------------------------------- |
+| `clients("PLC-A").send(command)` | 保存したコマンドを、名前で指定して送る             |
+| `clients("PLC-A").sendHex(hex)`  | 16 進で指定したリクエスト（Modbus なら PDU）を送る |
 
-| メソッド                           | 説明                                                                                    |
-| ---------------------------------- | --------------------------------------------------------------------------------------- |
-| `plc.sendCommand(client, command)` | 保存したコマンドを、接続先とコマンドの名前で送る                                        |
-| `plc.sendRequest(client, hex)`     | 16 進で指定したリクエスト（Modbus なら PDU）を、名前で指定した接続先に送る              |
-| `plc.getVariableStatus(name)`      | 接続先にマッピングした変数の同期の状態（`state` / `writePending` / `error` / `client`） |
-
-どちらの送信も、応答（またはタイムアウト）を待ってから、`{ status, error, values, sent, received, elapsedMs }` を返します。`status` は `ok` / `exception` / `timeout` / `error`。接続先・コマンドが見つからないときも、例外ではなく `status: "error"` を返します。送った内容は、画面の「結果と履歴」にも残ります。
+どちらも、応答（またはタイムアウト）を待ってから、`{ status, error, values, sent, received, elapsedMs }` を返します。`status` は `ok` / `exception` / `timeout` / `error`。保存したコマンドが見つからない・16 進が読めないときは、例外ではなく `status: "error"` を返します。送った内容は、画面の「結果と履歴」にも残ります。
 
 ```javascript
-const r = plc.sendCommand("PLC-A", "速度を読む");
+const r = clients("PLC-A").send("速度を読む");
 if (r.status === "ok") {
-  plc.writeVariable("Speed", r.values[0].word); // 読み取った値（ワードは word、ビットは bit）
+  vars.Speed = r.values[0].word; // 読み取った値（ワードは word、ビットは bit）
 } else {
   console.log("失敗: " + r.error);
 }

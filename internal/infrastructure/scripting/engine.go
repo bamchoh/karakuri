@@ -45,22 +45,24 @@ type ScriptEngine struct {
 	onLogAdded    func(ConsoleLogEntry)
 	// onRunStateChanged は、周期実行のスクリプトでエラーが起き始めたとき・解消したときに呼ぶ（SetOnRunStateChanged）
 	onRunStateChanged func(scriptID, scriptName, errMsg string)
-	// statusOf は、外部の機器にマッピングした変数の同期の状態を返す（plc.getVariableStatus 用）。
+	// statusOf は、外部の機器にマッピングした変数の同期の状態を返す（vars("x").status() 用）。
 	// 変数 ID を受け取り、マッピングしていなければ nil を返す
 	statusOf func(variableID string) map[string]any
-	// clientSender は外部の機器へコマンドを送る（plc.sendCommand / plc.sendRequest 用）
+	// clientSender は外部の機器へコマンドを送る（clients("名前").send() / .sendHex() 用）
 	clientSender ClientSender
 }
 
-// ClientSender は、スクリプトから外部の機器（クライアントの接続先）へコマンドを送るためのもの（plc.sendCommand / plc.sendRequest 用）。
+// ClientSender は、スクリプトから外部の機器（クライアントの接続先）へコマンドを送るためのもの（clients("名前") 用）。
 // 戻り値は JavaScript のオブジェクトにする内容（status・error・values など）。見つからない・送れないときも、
 // 例外ではなく status が "error" の内容を返す。scriptName は履歴に出すスクリプトの名前
 type ClientSender interface {
 	SendCommand(scriptName, client, command string) map[string]any
 	SendRequest(scriptName, client, requestHex string) map[string]any
+	// HasClient は、その名前の接続先があるか（clients("名前") で、打ち間違いにすぐ気づけるように）
+	HasClient(name string) bool
 }
 
-// SetClientSender は plc.sendCommand() / plc.sendRequest() が使う送り先を設定する
+// SetClientSender は clients("名前").send() / .sendHex() が使う送り先を設定する
 func (e *ScriptEngine) SetClientSender(s ClientSender) {
 	e.mu.Lock()
 	e.clientSender = s
@@ -73,7 +75,7 @@ func (e *ScriptEngine) getClientSender() ClientSender {
 	return e.clientSender
 }
 
-// SetVariableStatusProvider は plc.getVariableStatus() が使う、変数の同期の状態を返す関数を設定する
+// SetVariableStatusProvider は vars("x").status() が使う、変数の同期の状態を返す関数を設定する
 func (e *ScriptEngine) SetVariableStatusProvider(fn func(variableID string) map[string]any) {
 	e.mu.Lock()
 	e.statusOf = fn
@@ -138,44 +140,12 @@ func (e *ScriptEngine) createVM(scriptID, scriptName string) *goja.Runtime {
 	console.Set("log", func(call goja.FunctionCall) goja.Value {
 		parts := make([]string, len(call.Arguments))
 		for i, arg := range call.Arguments {
-			parts[i] = fmt.Sprintf("%v", arg.Export())
+			parts[i] = fmt.Sprintf("%v", plainValue(arg)) // vars の構造体・配列は、中身を普通の値で出す
 		}
 		e.addLog(scriptID, scriptName, LogLevelLog, strings.Join(parts, " "))
 		return goja.Undefined()
 	})
 	vm.Set("console", console)
-
-	// PLCオブジェクト - 変数アクセス用
-	plc := vm.NewObject()
-
-	// sendCommand(client, command) - 保存したコマンドを、接続先とコマンドの名前で指定して送る。
-	// sendRequest(client, hex) - 16 進で指定したリクエストを送る。
-	// どちらも応答（またはタイムアウト）まで待ち、{ status, error, values, sent, received, elapsedMs, ... } を返す
-	noSender := map[string]any{"status": "error", "error": "外部の機器へ送る機能が使えません"}
-	plc.Set("sendCommand", func(client, command string) any {
-		s := e.getClientSender()
-		if s == nil {
-			return noSender
-		}
-		return s.SendCommand(scriptName, client, command)
-	})
-	plc.Set("sendRequest", func(client, requestHex string) any {
-		s := e.getClientSender()
-		if s == nil {
-			return noSender
-		}
-		return s.SendRequest(scriptName, client, requestHex)
-	})
-
-	// --- 変数へのアクセス ---
-	//
-	// LINT / ULINT の値は、いつも BigInt で読む（桁の制限なく、64 ビットの全範囲を正しく扱うため）。
-	// 構造体のフィールド・配列の要素にある LINT / ULINT も同じ。書き込みは BigInt と Number のどちらでもよい。
-	// BigInt は Number と混ぜて計算できないので、スクリプトでは `x + 1n` のように書く。
-	//
-	// どの関数も、失敗したらスクリプトのエラー（例外）にする: 変数がない・フィールドや要素がない・
-	// 型に合わない値を書こうとした、など。黙って null を返したり、何もしなかったりはしない
-	// （変数名の打ち間違いに気づけるようにするため）。変数があるかどうかは hasVariable() で調べる。
 
 	// throw は、スクリプトのエラー（例外）を投げる。スクリプトの try / catch で受け取れる
 	throw := func(format string, args ...any) {
@@ -186,271 +156,10 @@ func (e *ScriptEngine) createVM(scriptID, scriptName string) *goja.Runtime {
 		panic(errObj)
 	}
 
-	if e.variableStore != nil {
-		// mustVariable は変数を返す。なければ、スクリプトのエラーにする
-		mustVariable := func(fn, name string) *variable.Variable {
-			v, err := e.variableStore.GetVariableByName(name)
-			if err != nil {
-				throw("plc.%s: 変数 %q がありません", fn, name)
-			}
-			return v
-		}
-		// check は、変数ストアのエラーをスクリプトのエラーにする。
-		// name は "VarName" のほか "Array[2]" / "Struct.field" の形でもよい（変数がないときは、そのことを伝える）
-		check := func(fn, name string, err error) {
-			if err == nil {
-				return
-			}
-			baseName, _ := splitNameAndPath(name)
-			mustVariable(fn, baseName)
-			throw("plc.%s(%q): %v", fn, name, err)
-		}
-		// fromJS は、スクリプトから書く値を、変数ストアが受け付ける形にする（BigInt を 64 ビットの整数に）。
-		// 64 ビットに収まらない BigInt は、スクリプトのエラーにする
-		fromJS := func(fn, name string, value any) any {
-			out, err := jsToStore(value)
-			if err != nil {
-				throw("plc.%s(%q): %v", fn, name, err)
-			}
-			return out
-		}
-
-		// hasVariable(name) - 変数があるかどうか
-		plc.Set("hasVariable", func(name string) bool {
-			_, err := e.variableStore.GetVariableByName(name)
-			return err == nil
-		})
-
-		// readVariable(name) - 変数名で値を読む
-		// name は "VarName", "Array[2]", "Struct.field", "Array[1].field" など
-		plc.Set("readVariable", func(name string) any {
-			baseName, fieldPath := splitNameAndPath(name)
-			if fieldPath != "" {
-				val, err := e.variableStore.ReadFieldValue(baseName, fieldPath)
-				check("readVariable", name, err)
-				return toJSCompatibleValue(val)
-			}
-			v := mustVariable("readVariable", name)
-			return toJSCompatibleValue(v.Value)
-		})
-
-		// getVariableStatus(name) - 外部の機器（クライアントの接続先）にマッピングした変数の同期の状態。
-		// { state: "ok" | "comm_error" | "invalid" | "stopped" | "", writePending: bool, error: string, client: 接続先の名前 }
-		// を返す。変数はあるが、接続先にマッピングしていなければ null
-		plc.Set("getVariableStatus", func(name string) any {
-			v := mustVariable("getVariableStatus", name)
-			e.mu.Lock()
-			statusOf := e.statusOf
-			e.mu.Unlock()
-			if statusOf == nil {
-				return nil
-			}
-			st := statusOf(v.ID)
-			if st == nil {
-				return nil
-			}
-			return st
-		})
-
-		// writeVariable(name, value) - 変数名で値を書く
-		// name は "VarName", "Array[2]", "Struct.field", "Array[1].field" など
-		plc.Set("writeVariable", func(name string, value any) {
-			value = fromJS("writeVariable", name, value)
-			baseName, fieldPath := splitNameAndPath(name)
-			if fieldPath != "" {
-				// ないフィールド・範囲外の添字は、読んでみて確かめる（書き込みだけでは、エラーにならないことがある）
-				_, err := e.variableStore.ReadFieldValue(baseName, fieldPath)
-				check("writeVariable", name, err)
-				check("writeVariable", name, e.variableStore.WriteFieldValueByName(baseName, fieldPath, value))
-				return
-			}
-			check("writeVariable", name, e.variableStore.UpdateValueByName(name, value))
-		})
-
-		// readArrayElement(name, index) - 配列要素読み込み（外部インデックス：表示ベース）
-		// 例: ARRAY[1..10] の場合、index=1 が最初の要素
-		plc.Set("readArrayElement", func(name string, index int) any {
-			val, err := e.variableStore.ReadArrayElement(name, index)
-			check("readArrayElement", name, err)
-			return toJSCompatibleValue(val)
-		})
-
-		// writeArrayElement(name, index, value) - 配列要素書き込み（外部インデックス：表示ベース）
-		// 例: ARRAY[1..10] の場合、index=1 が最初の要素
-		plc.Set("writeArrayElement", func(name string, index int, value any) {
-			value = fromJS("writeArrayElement", name, value)
-			// 配列でない変数・範囲外の添字は、読んでみて確かめる（書き込みだけでは区別がつかないため）
-			_, err := e.variableStore.ReadArrayElement(name, index)
-			check("writeArrayElement", name, err)
-			check("writeArrayElement", name, e.variableStore.WriteArrayElement(name, index, value))
-		})
-
-		// structField は、構造体の変数とフィールドがあることを確かめて、フィールドの値を返す
-		structField := func(fn, name, fieldName string) any {
-			v := mustVariable(fn, name)
-			m, ok := v.Value.(map[string]any)
-			if !ok {
-				throw("plc.%s: 変数 %q は構造体ではありません（%v）", fn, name, v.DataType)
-			}
-			val, exists := m[fieldName]
-			if !exists {
-				throw("plc.%s: 変数 %q にフィールド %q がありません", fn, name, fieldName)
-			}
-			return val
-		}
-
-		// readStructField(name, fieldName) - 構造体フィールド読み込み
-		plc.Set("readStructField", func(name string, fieldName string) any {
-			return toJSCompatibleValue(structField("readStructField", name, fieldName))
-		})
-
-		// writeStructField(name, fieldName, value) - 構造体フィールド書き込み
-		plc.Set("writeStructField", func(name string, fieldName string, value any) {
-			value = fromJS("writeStructField", name, value)
-			structField("writeStructField", name, fieldName)
-			check("writeStructField", name, e.variableStore.WriteFieldValueByName(name, "."+fieldName, value))
-		})
-
-		// getVariables() - 全変数名一覧を取得
-		plc.Set("getVariables", func() []string {
-			vars := e.variableStore.GetAllVariables()
-			names := make([]string, len(vars))
-			for i, v := range vars {
-				names[i] = v.Name
-			}
-			return names
-		})
-
-		// --- TIME/DATE型シンタックスシュガー（変数の読み書きをワンステップで） ---
-
-		// timeText は、時間・日付の型の変数の値（"T#1s" などの文字列）を返す
-		timeText := func(fn, name, typeName string) string {
-			v := mustVariable(fn, name)
-			s, ok := v.Value.(string)
-			if !ok {
-				throw("plc.%s: 変数 %q は %s ではありません（%v）", fn, name, typeName, v.DataType)
-			}
-			return s
-		}
-		// checkTime は、時間・日付の文字列を読めなかったときに、スクリプトのエラーにする
-		checkTime := func(fn, name, typeName string, err error) {
-			if err != nil {
-				throw("plc.%s: 変数 %q の値を %s として読めません: %v", fn, name, typeName, err)
-			}
-		}
-
-		// readTimeMs(name) -> ミリ秒(number)
-		plc.Set("readTimeMs", func(name string) any {
-			ms, err := variable.ParseTIME(timeText("readTimeMs", name, "TIME"))
-			checkTime("readTimeMs", name, "TIME", err)
-			return int64(ms)
-		})
-		// writeTimeMs(name, ms)
-		plc.Set("writeTimeMs", func(name string, ms int64) {
-			check("writeTimeMs", name, e.variableStore.UpdateValueByName(name, variable.FormatTIME(int32(ms))))
-		})
-
-		// readDateSec(name) -> Unix秒(number)
-		plc.Set("readDateSec", func(name string) any {
-			sec, err := variable.ParseDATE(timeText("readDateSec", name, "DATE"))
-			checkTime("readDateSec", name, "DATE", err)
-			return int64(sec)
-		})
-		// writeDateSec(name, sec)
-		plc.Set("writeDateSec", func(name string, sec int64) {
-			check("writeDateSec", name, e.variableStore.UpdateValueByName(name, variable.FormatDATE(uint64(sec))))
-		})
-
-		// readTimeOfDayMs(name) -> ミリ秒(number)
-		plc.Set("readTimeOfDayMs", func(name string) any {
-			ms, err := variable.ParseTIME_OF_DAY(timeText("readTimeOfDayMs", name, "TIME_OF_DAY"))
-			checkTime("readTimeOfDayMs", name, "TIME_OF_DAY", err)
-			return int64(ms)
-		})
-		// writeTimeOfDayMs(name, ms)
-		plc.Set("writeTimeOfDayMs", func(name string, ms int64) {
-			check("writeTimeOfDayMs", name, e.variableStore.UpdateValueByName(name, variable.FormatTIME_OF_DAY(uint32(ms))))
-		})
-
-		// readDateAndTimeSec(name) -> Unix秒(number)
-		plc.Set("readDateAndTimeSec", func(name string) any {
-			sec, err := variable.ParseDATE_AND_TIME(timeText("readDateAndTimeSec", name, "DATE_AND_TIME"))
-			checkTime("readDateAndTimeSec", name, "DATE_AND_TIME", err)
-			return int64(sec)
-		})
-		// writeDateAndTimeSec(name, sec)
-		plc.Set("writeDateAndTimeSec", func(name string, sec int64) {
-			check("writeDateAndTimeSec", name, e.variableStore.UpdateValueByName(name, variable.FormatDATE_AND_TIME(uint64(sec))))
-		})
-	}
-
-	// TIME/DATE型ユーティリティ（文字列⇔数値変換のみ）
-
-	// parseTime("T#1h30m45s") -> ミリ秒(number)
-	plc.Set("parseTime", func(s string) any {
-		ms, err := variable.ParseTIME(s)
-		if err != nil {
-			return nil
-		}
-		return int64(ms)
-	})
-	// formatTime(ms) -> "T#1h30m45s"
-	plc.Set("formatTime", func(ms int64) string {
-		return variable.FormatTIME(int32(ms))
-	})
-
-	// parseDate("D#2024-01-01") -> Unix秒(number)
-	plc.Set("parseDate", func(s string) any {
-		sec, err := variable.ParseDATE(s)
-		if err != nil {
-			return nil
-		}
-		return int64(sec)
-	})
-	// formatDate(sec) -> "D#2024-01-01"
-	plc.Set("formatDate", func(sec int64) string {
-		return variable.FormatDATE(uint64(sec))
-	})
-
-	// parseTimeOfDay("TOD#12:30:15") -> ミリ秒(number)
-	plc.Set("parseTimeOfDay", func(s string) any {
-		ms, err := variable.ParseTIME_OF_DAY(s)
-		if err != nil {
-			return nil
-		}
-		return int64(ms)
-	})
-	// formatTimeOfDay(ms) -> "TOD#12:30:15"
-	plc.Set("formatTimeOfDay", func(ms int64) string {
-		return variable.FormatTIME_OF_DAY(uint32(ms))
-	})
-
-	// parseDateAndTime("DT#2024-01-01-12:30:15") -> Unix秒(number)
-	plc.Set("parseDateAndTime", func(s string) any {
-		sec, err := variable.ParseDATE_AND_TIME(s)
-		if err != nil {
-			return nil
-		}
-		return int64(sec)
-	})
-	// formatDateAndTime(sec) -> "DT#2024-01-01-12:30:15"
-	plc.Set("formatDateAndTime", func(sec int64) string {
-		return variable.FormatDATE_AND_TIME(uint64(sec))
-	})
-
-	vm.Set("plc", plc)
+	// vars（変数）・clients（外部の機器）・iec（時間・日付の変換）。中身は api.go
+	e.installAPI(vm, scriptName, throw)
 
 	return vm
-}
-
-// splitNameAndPath は "Test[2]" → ("Test", "[2]") や "Test.field" → ("Test", ".field") に分割する。
-// パスがない場合は (name, "") を返す。
-func splitNameAndPath(name string) (baseName, fieldPath string) {
-	idx := strings.IndexAny(name, "[.")
-	if idx < 0 {
-		return name, ""
-	}
-	return name[:idx], name[idx:]
 }
 
 // toJSCompatibleValue は、変数ストアの値を、スクリプトに渡す値にする。

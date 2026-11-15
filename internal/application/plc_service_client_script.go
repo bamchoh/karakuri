@@ -5,7 +5,7 @@ import (
 	"strings"
 )
 
-// === スクリプトから外部の機器へ送る（plc.sendCommand / plc.sendRequest） ===
+// === スクリプトから外部の機器へ送る（clients("名前").send() / .sendHex()） ===
 //
 // 接続先と保存したコマンドは名前で指定する（同じ名前が複数あれば、追加した順で最初のもの）。
 // 見つからない・16 進が読めないときも、例外にせず status が "error" の結果を返す（スクリプトを止めないため）。
@@ -76,6 +76,12 @@ func logToScript(l *ClientCommandLogDTO) map[string]any {
 		"elapsedMs": l.ElapsedMs,
 		"values":    values,
 	}
+}
+
+// HasClient は、その名前の接続先があるか
+func (c scriptClientSender) HasClient(name string) bool {
+	_, ok := c.svc.clients.clientIDByName(name)
+	return ok
 }
 
 func (c scriptClientSender) SendCommand(scriptName, client, command string) map[string]any {
