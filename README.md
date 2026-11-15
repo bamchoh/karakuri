@@ -276,10 +276,13 @@ vars.date1 = iec.formatDate(iec.parseDate(vars.date1) + 86400);
 
 `clients("接続先の名前")` で、クライアントの接続先を指定します（同じ名前が複数あれば、追加した順で最初のもの）。接続先がなければ、エラーになります。
 
-| 書き方                           | 説明                                               |
-| -------------------------------- | -------------------------------------------------- |
-| `clients("PLC-A").send(command)` | 保存したコマンドを、名前で指定して送る             |
-| `clients("PLC-A").sendHex(hex)`  | 16 進で指定したリクエスト（Modbus なら PDU）を送る |
+| 書き方                             | 説明                                               |
+| ---------------------------------- | -------------------------------------------------- |
+| `clients("PLC-A").send(command)`   | 保存したコマンドを、名前で指定して送る             |
+| `clients("PLC-A").sendHex(hex)`    | 16 進で指定したリクエスト（Modbus なら PDU）を送る |
+| `clients("PLC-A").polling.start()` | ポーリングを開始する（ポーリング中なら何もしない） |
+| `clients("PLC-A").polling.stop()`  | ポーリングを止める（止まっていれば何もしない）     |
+| `clients("PLC-A").polling.running` | ポーリング中か（true / false）                     |
 
 どちらも、応答（またはタイムアウト）を待ってから、`{ status, error, values, sent, received, elapsedMs }` を返します。`status` は `ok` / `exception` / `timeout` / `error`。保存したコマンドが見つからない・16 進が読めないときは、例外ではなく `status: "error"` を返します。送った内容は、画面の「結果と履歴」にも残ります。
 
@@ -293,6 +296,15 @@ if (r.status === "ok") {
 ```
 
 > 送信は応答を待つ間、そのスクリプトを止めます（応答しない接続先なら、タイムアウトの時間だけ周期が延びます）。
+
+ポーリングは、通信画面の「ポーリング」のタブで開始・停止するのと同じです（読み取り項目・周期・マッピングした変数の同期も、画面で設定したとおりに動きます）。止めるときは、送信中のリクエストが終わるまで待ちます。
+
+```javascript
+// 変数 Enable が ON の間だけ、PLC-A をポーリングする
+const p = clients("PLC-A").polling;
+if (vars.Enable && !p.running) p.start();
+if (!vars.Enable && p.running) p.stop();
+```
 
 ### プロジェクトの保存と読み込み
 

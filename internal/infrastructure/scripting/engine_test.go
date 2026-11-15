@@ -1,6 +1,7 @@
 package scripting
 
 import (
+	"errors"
 	"reflect"
 	"strings"
 	"sync"
@@ -731,8 +732,19 @@ func TestScriptEngine_LintUlintAreBigInt(t *testing.T) {
 
 // fakeClientSender は、送った内容を覚えて決まった結果を返す
 type fakeClientSender struct {
-	sent []string
+	sent    []string
+	polling bool
+	pollErr error
 }
+
+func (f *fakeClientSender) SetPolling(client string, running bool) error {
+	if f.pollErr != nil {
+		return f.pollErr
+	}
+	f.polling = running
+	return nil
+}
+func (f *fakeClientSender) IsPolling(client string) (bool, error) { return f.polling, nil }
 
 func (f *fakeClientSender) HasClient(name string) bool { return name == "PLC-A" }
 func (f *fakeClientSender) SendCommand(scriptName, client, command string) map[string]any {
@@ -796,5 +808,36 @@ func TestScriptEngine_ConsoleLogVars(t *testing.T) {
 	logs := rec.messages(LogLevelLog)
 	if len(logs) == 0 || !strings.Contains(logs[0], "speed:12") || !strings.Contains(logs[0], "[0 0 0]") {
 		t.Errorf("console.log = %q", logs)
+	}
+}
+
+func TestScriptEngine_ClientPolling(t *testing.T) {
+	engine, _ := newTestEngine()
+	sender := &fakeClientSender{}
+	engine.SetClientSender(sender)
+
+	got, err := engine.RunOnce(`
+		const p = clients("PLC-A").polling;
+		const before = p.running;
+		p.start();
+		const started = p.running;
+		p.stop();
+		[before, started, p.running].join(",")
+	`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != "false,true,false" {
+		t.Errorf("running = %v", got)
+	}
+
+	// 開始できなければ、スクリプトのエラー
+	sender.pollErr = errors.New("開始できません")
+	if _, err := engine.RunOnce(`clients("PLC-A").polling.start()`); err == nil || !strings.Contains(err.Error(), `clients("PLC-A").polling.start(): 開始できません`) {
+		t.Errorf("エラー = %v", err)
+	}
+	// running は書けない
+	if _, err := engine.RunOnce(`"use strict"; clients("PLC-A").polling.running = true`); err == nil {
+		t.Error("running に書けた")
 	}
 }

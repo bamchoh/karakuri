@@ -31,6 +31,8 @@ const DEFAULT_CODE = `// vars で変数を読み書きできます
 // === 外部の機器 ===
 // clients("PLC-A").send("速度を読む")   - 保存したコマンドを送る
 // clients("PLC-A").sendHex("03 00 00 00 01") - 16 進で送る
+// clients("PLC-A").polling.start() / .stop()  - ポーリングを開始・停止する
+// clients("PLC-A").polling.running           - ポーリング中か
 //
 // === 時間・日付 ===
 // iec.parseTime("T#1s")  /  iec.formatTime(1000)  など

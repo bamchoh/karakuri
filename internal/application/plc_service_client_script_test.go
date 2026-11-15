@@ -80,3 +80,29 @@ func TestScript_SendErrorsDoNotThrow(t *testing.T) {
 		t.Fatalf("timeout: %v %v", res, err)
 	}
 }
+
+// スクリプトから、接続先のポーリングを開始・停止できる
+func TestScript_StartAndStopPolling(t *testing.T) {
+	svc, _ := newClientTestService(t)
+	c, _ := svc.AddClient("fake-client", "PLC-A", nil)
+
+	res, err := svc.RunScriptOnce(`const p = clients("PLC-A").polling; p.start(); return p.running;`)
+	if err != nil || res != true {
+		t.Fatalf("start: %v %v", res, err)
+	}
+	if p, _ := svc.GetClientPolling(c.ID); !p.Running {
+		t.Fatal("ポーリングが始まっていない")
+	}
+	// 2 回目の start は何もしない
+	if _, err := svc.RunScriptOnce(`clients("PLC-A").polling.start()`); err != nil {
+		t.Fatal(err)
+	}
+
+	res, err = svc.RunScriptOnce(`const p = clients("PLC-A").polling; p.stop(); return p.running;`)
+	if err != nil || res != false {
+		t.Fatalf("stop: %v %v", res, err)
+	}
+	if p, _ := svc.GetClientPolling(c.ID); p.Running {
+		t.Fatal("ポーリングが止まっていない")
+	}
+}

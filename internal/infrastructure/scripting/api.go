@@ -419,8 +419,32 @@ func (a *scriptAPI) clientsFunc(scriptName string) func(string) goja.Value {
 		_ = c.Set("send", func(command string) any { return s.SendCommand(scriptName, name, command) })
 		// sendHex(hex) - 16 進で指定したリクエストを送る
 		_ = c.Set("sendHex", func(requestHex string) any { return s.SendRequest(scriptName, name, requestHex) })
+		_ = c.Set("polling", a.pollingObject(s, name))
 		return c
 	}
+}
+
+// pollingObject は clients("名前").polling（ポーリングの開始・停止と、ポーリング中か）
+func (a *scriptAPI) pollingObject(s ClientSender, name string) *goja.Object {
+	p := a.vm.NewObject()
+	set := func(fn string, running bool) {
+		if err := s.SetPolling(name, running); err != nil {
+			a.throw("clients(%q).polling.%s(): %v", name, fn, err)
+		}
+	}
+	// start() - ポーリングを開始する（ポーリング中なら何もしない）
+	_ = p.Set("start", func() { set("start", true) })
+	// stop() - ポーリングを止める（止まっていれば何もしない）。送信中のリクエストが終わるまで待つ
+	_ = p.Set("stop", func() { set("stop", false) })
+	// running - ポーリング中か（読むたびに、いまの状態を調べる）
+	_ = p.DefineAccessorProperty("running", a.vm.ToValue(func() bool {
+		running, err := s.IsPolling(name)
+		if err != nil {
+			a.throw("clients(%q).polling.running: %v", name, err)
+		}
+		return running
+	}), nil, goja.FLAG_FALSE, goja.FLAG_TRUE)
+	return p
 }
 
 // --- iec ---
