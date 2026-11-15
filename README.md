@@ -220,24 +220,22 @@ plc.writeArrayElement("Values", 0, count);
 
 変数の関数は、失敗するとスクリプトのエラー（例外）になります（変数がない・フィールドや要素がない・型が違う・型に合わない値を書いた）。`try` / `catch` で受け取れます。あるかどうか分からない変数は、先に `plc.hasVariable()` で確かめます。
 
-> **注意**: `plc.readVariable()` で LINT/ULINT の値が ±2^53 を超えていた場合、JavaScript の `Number` の精度の都合で、コンソールに `[WARN]` が出ます。大きな値を扱う場合は、下の **LINT/ULINT BigInt API** を使ってください。
+**LINT / ULINT（64 ビット整数）は BigInt**:
 
-**LINT/ULINT BigInt API（64 ビット整数を精度を失わずに操作）**:
-
-| メソッド                       | 説明                                         |
-| ------------------------------ | -------------------------------------------- |
-| `plc.readLintBig(name)`        | LINT 変数を BigInt として読み取り            |
-| `plc.writeLintBig(name, val)`  | BigInt または Number を LINT 変数に書き込み  |
-| `plc.readUlintBig(name)`       | ULINT 変数を BigInt として読み取り           |
-| `plc.writeUlintBig(name, val)` | BigInt または Number を ULINT 変数に書き込み |
+LINT / ULINT の値は、いつも JavaScript の `BigInt` で読み書きします（構造体のフィールド・配列の要素にあるものも同じ）。64 ビットの全範囲を、桁を落とさずに扱えます。書くときは、BigInt と Number のどちらでもかまいません。
 
 ```javascript
-// LINT 変数に 1 加算する例
-plc.writeLintBig("counter", plc.readLintBig("counter") + 1n);
+// LINT 変数に 1 加算する例（BigInt のリテラルは、数字のあとに n を付ける）
+plc.writeVariable("counter", plc.readVariable("counter") + 1n);
 
 // ULINT 変数を 16 進リテラルで書き込む例
-plc.writeUlintBig("flags", 0xffffffffffffffffn);
+plc.writeVariable("flags", 0xffffffffffffffffn);
+
+// DINT など、ほかの整数の変数と組み合わせるときは BigInt() でそろえる
+plc.writeVariable("total", plc.readVariable("total") + BigInt(plc.readVariable("count")));
 ```
+
+> **注意**: BigInt は Number と混ぜて計算できません（`x + 1` はエラーになるので、`x + 1n` と書きます）。比較（`x > 100`）は混ぜてもかまいません。64 ビットに収まらない BigInt を書くと、エラーになります。
 
 **TIME/DATE シンタックスシュガー**:
 

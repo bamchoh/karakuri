@@ -300,7 +300,7 @@ internal/
   - スクリプトコードをIIFE `(function(){...})();` でラップして、const/let再宣言エラーを回避
   - エラー（コンパイルエラー・実行時のエラー・panic）はコンソールログに `[ERROR]` として出す。周期実行では、同じエラーが続く間は最初の 1 回だけ出す
   - TIME/DATE型シンタックスシュガー: `plc.readTimeMs(name)`, `plc.writeTimeMs(name, ms)` など、変数の読み取り〜数値変換〜書き込みをワンステップで実行（内部でparse/formatを自動適用）
-  - LINT/ULINT BigInt API: `plc.readLintBig(name)`, `plc.writeLintBig(name, val)`, `plc.readUlintBig(name)`, `plc.writeUlintBig(name, val)`（2^53超の値をJavaScript BigInt型で精度損失なく操作。`readVariable()` で±2^53超の値を読んだ場合はコンソールに `[WARN]` を出力）
+  - LINT / ULINT は、いつも BigInt で読み書きする（`readVariable()` などのふつうの関数で。64 ビットの全範囲を桁を落とさずに扱う。値の変換は `toJSCompatibleValue()` / `jsToStore()`）
 
 ### フロントエンド構成（スキーマ駆動UI）
 
@@ -490,10 +490,11 @@ JavaScript（goja）でPLC動作を記述。
 - **plcオブジェクト**:
   - レジスタを直接読み書きする関数（`plc.readBit()` / `plc.readWord()` など）はない。変数をレジスタにマッピングして、変数を読み書きする
   - 変数アクセス: `plc.readVariable()`, `plc.writeVariable()`, `plc.readArrayElement()`, `plc.writeArrayElement()`, `plc.readStructField()`, `plc.writeStructField()`, `plc.hasVariable(name)`（変数があるかどうか）
-    - **変数の関数は、失敗したらスクリプトのエラー（例外）になる**: 変数がない・フィールドや要素がない・型が違う（`readLintBig` を INT に使うなど）・型に合わない値を書いた、のどれも。黙って `null` を返したり、何もしなかったりはしない。BigInt・TIME/DATE の関数と `getVariableStatus` も同じ
-    - エラーは `[ERROR]` としてコンソールに出る（スクリプトの `try` / `catch` で受け取れる）。文面は「`plc.readVariable: 変数 "X" がありません`」の形。関数を足すときは、`createVM()` の `mustVariable()` / `check()` / `throw()` を使う
-  - LINT/ULINT BigInt API: `plc.readLintBig(name)`, `plc.writeLintBig(name, val)`, `plc.readUlintBig(name)`, `plc.writeUlintBig(name, val)`（JavaScriptのBigInt型で64ビット整数を精度損失なく読み書き。例: `plc.writeLintBig("myVar", plc.readLintBig("myVar") + 1n)`）
-    - `plc.readVariable()` でLINT/ULINT値が±2^53を超えた場合は `[WARN]` をコンソールに出力して `readLintBig()`/`readUlintBig()` の使用を促す
+    - **変数の関数は、失敗したらスクリプトのエラー（例外）になる**: 変数がない・フィールドや要素がない・型が違う（`readTimeMs` を INT に使うなど）・型に合わない値を書いた・64 ビットに収まらない BigInt を書いた、のどれも。黙って `null` を返したり、何もしなかったりはしない。TIME/DATE の関数と `getVariableStatus` も同じ
+    - エラーは `[ERROR]` としてコンソールに出る（スクリプトの `try` / `catch` で受け取れる）。文面は「`plc.readVariable: 変数 "X" がありません`」の形。関数を足すときは、`createVM()` の `mustVariable()` / `check()` / `fromJS()` / `throw()` を使う
+  - **LINT / ULINT は、いつも BigInt**: `readVariable()` / `readArrayElement()` / `readStructField()` は、LINT / ULINT の値を BigInt で返す（構造体のフィールド・配列の要素にあるものも）。ほかの整数・実数は Number。書く関数は、BigInt と Number のどちらも受け付ける（構造体・配列の中の BigInt も）。64 ビットに収まらない BigInt はエラー
+    - 例: `plc.writeVariable("counter", plc.readVariable("counter") + 1n)`。BigInt は Number と混ぜて計算できない（`x + 1` は TypeError。`x + 1n` か `x + BigInt(y)` と書く）。比較（`x > 100`）は混ぜてよい
+    - 以前あった `readLintBig()` などの専用の関数と、±2^53 を超えたときの `[WARN]` はない（BigInt にそろえたので要らなくなった）
   - TIME/DATE シンタックスシュガー: `plc.readTimeMs()`, `plc.writeTimeMs()`, `plc.readDateSec()`, `plc.writeDateSec()`, `plc.readTimeOfDayMs()`, `plc.writeTimeOfDayMs()`, `plc.readDateAndTimeSec()`, `plc.writeDateAndTimeSec()`（変数の読み取り・パース・フォーマット・書き込みをワンステップで実行）
   - TIME/DATE 文字列変換: `plc.parseTime()`, `plc.formatTime()`, `plc.parseDate()`, `plc.formatDate()`, `plc.parseTimeOfDay()`, `plc.formatTimeOfDay()`, `plc.parseDateAndTime()`, `plc.formatDateAndTime()`
   - 外部の機器との同期の状態: `plc.getVariableStatus(name)`（クライアントの接続先にマッピングした変数。`{ state, writePending, error, client }`。変数はあるが、接続先にマッピングしていなければ `null`。変数がなければエラー）
