@@ -541,6 +541,8 @@ export const ServerPanel = forwardRef<ServerPanelHandle, ServerPanelProps>(
                 onClientsChanged={loadClients}
                 onLogsChanged={loadLogs}
                 onRemove={handleRemoveClient}
+                serialPorts={serialPorts}
+                onRefreshPorts={handleRefreshPorts}
               />
             </div>
           ) : (

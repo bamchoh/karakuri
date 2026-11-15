@@ -69,11 +69,11 @@ func (s *RTUServer) Stop() error {
 	s.running = false
 	s.mu.Unlock()
 
-	// シリアルポートを閉じてReadFrameをアンブロックする
-	s.serial.Close()
-
-	// ゴルーチンの終了を待つ
+	// 読み取りをやめさせ、待っている読み取りが終わってから（最長で読み取りのタイムアウト）ポートを閉じる。
+	// 読み取りの途中で閉じると、Windows ではポートが 50〜200ms ほど使用中のまま残り、すぐに Start し直せない
+	s.serial.Shutdown()
 	s.wg.Wait()
+	s.serial.Close()
 
 	return nil
 }
