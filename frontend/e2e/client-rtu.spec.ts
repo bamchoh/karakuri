@@ -107,7 +107,9 @@ const serialPair = (process.env.KARAKURI_SERIAL_PAIR || "")
   .map((s) => s.trim())
   .filter(Boolean);
 
-test("実機: Karakuri の Modbus RTU サーバーから読み取れる", async ({ page }) => {
+test("実機: Karakuri の Modbus RTU サーバーから読み取れる", async ({
+  page,
+}) => {
   test.skip(
     serialPair.length !== 2,
     "KARAKURI_SERIAL_PAIR（例: COM4,COM6）が設定されていない",
