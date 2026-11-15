@@ -2,9 +2,11 @@ package rtu
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
 	"sync"
+	"time"
 )
 
 // ASCIIServer はModbus ASCIIサーバーを表す
@@ -16,6 +18,8 @@ type ASCIIServer struct {
 	ctx       context.Context
 	cancel    context.CancelFunc
 	wg        sync.WaitGroup
+
+	reopenInterval time.Duration // ポートが使えなくなったときに、開き直す間隔
 }
 
 // NewASCIIServer は新しいASCIIServerを作成する
@@ -26,8 +30,9 @@ func NewASCIIServer(config SerialConfig, handler RequestHandler) *ASCIIServer {
 // newASCIIServer は、ポートを open で開く ASCIIServer を作る（テストではフェイクのポートを開く）
 func newASCIIServer(config SerialConfig, handler RequestHandler, open PortOpener) *ASCIIServer {
 	return &ASCIIServer{
-		serial:    newASCIISerialManager(config, open),
-		processor: NewProcessor(handler),
+		serial:         newASCIISerialManager(config, open),
+		processor:      NewProcessor(handler),
+		reopenInterval: defaultReopenInterval,
 	}
 }
 
@@ -93,11 +98,22 @@ func (s *ASCIIServer) mainLoop() {
 	}
 }
 
+// reconnect は、使えなくなったポートを、開けるか Stop されるまで reopenInterval おきに開き直す
+func (s *ASCIIServer) reconnect(cause error) {
+	name := s.serial.PortName()
+	log.Printf("[Modbus ASCII] %s が使えなくなりました。%v おきに開き直します（error: %v）", name, s.reopenInterval, cause)
+	if waitReopen(s.ctx, s.serial, s.reopenInterval) {
+		log.Printf("[Modbus ASCII] %s を開き直しました", name)
+	}
+}
+
 func (s *ASCIIServer) processNextRequest() {
 	// フレームを読み取る
 	frame, err := s.serial.ReadFrame()
 	if err != nil {
-		// タイムアウトは正常なので無視
+		if errors.Is(err, errPortLost) {
+			s.reconnect(err)
+		}
 		return
 	}
 

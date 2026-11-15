@@ -2,6 +2,7 @@ package rtu
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
 	"sync"
@@ -17,6 +18,8 @@ type RTUServer struct {
 	ctx       context.Context
 	cancel    context.CancelFunc
 	wg        sync.WaitGroup
+
+	reopenInterval time.Duration // ポートが使えなくなったときに、開き直す間隔
 }
 
 // NewRTUServer は新しいRTUServerを作成する
@@ -27,8 +30,9 @@ func NewRTUServer(config SerialConfig, handler RequestHandler) *RTUServer {
 // newRTUServer は、ポートを open で開く RTUServer を作る（テストではフェイクのポートを開く）
 func newRTUServer(config SerialConfig, handler RequestHandler, open PortOpener) *RTUServer {
 	return &RTUServer{
-		serial:    newSerialManager(config, open),
-		processor: NewProcessor(handler),
+		serial:         newSerialManager(config, open),
+		processor:      NewProcessor(handler),
+		reopenInterval: defaultReopenInterval,
 	}
 }
 
@@ -94,11 +98,22 @@ func (s *RTUServer) mainLoop() {
 	}
 }
 
+// reconnect は、使えなくなったポートを、開けるか Stop されるまで reopenInterval おきに開き直す
+func (s *RTUServer) reconnect(cause error) {
+	name := s.serial.PortName()
+	log.Printf("[Modbus RTU] %s が使えなくなりました。%v おきに開き直します（error: %v）", name, s.reopenInterval, cause)
+	if waitReopen(s.ctx, s.serial, s.reopenInterval) {
+		log.Printf("[Modbus RTU] %s を開き直しました", name)
+	}
+}
+
 func (s *RTUServer) processNextRequest() {
 	// フレームを読み取る
 	frame, err := s.serial.ReadFrame()
 	if err != nil {
-		// タイムアウトは正常なので無視
+		if errors.Is(err, errPortLost) {
+			s.reconnect(err)
+		}
 		return
 	}
 
