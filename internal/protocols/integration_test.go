@@ -957,8 +957,8 @@ func TestModbusClient_FromScript(t *testing.T) {
 	must(t, svc.WriteWord(modbusTCP, hr, 1, 22))
 
 	res, err := svc.RunScriptOnce(`
-		const r = plc.sendCommand("自分", "先頭 2 個");
-		const w = plc.sendRequest("自分", "06 00 05 00 2A"); // FC06: アドレス 5 に 42
+		const r = clients("自分").send("先頭 2 個");
+		const w = clients("自分").sendHex("06 00 05 00 2A"); // FC06: アドレス 5 に 42
 		return r.status + ":" + (r.values[0].word + r.values[1].word) + "/" + w.status;
 	`)
 	must(t, err)

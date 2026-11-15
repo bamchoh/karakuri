@@ -299,14 +299,14 @@ func TestMapping_ScriptStatus(t *testing.T) {
 	if _, err := x.svc.CreateVariable("plain", "INT", 0); err != nil {
 		t.Fatal(err)
 	}
-	res, err := x.svc.RunScriptOnce(`const s = plc.getVariableStatus("a"); return s.state + "/" + s.writePending + "/" + s.client + "/" + plc.getVariableStatus("plain");`)
+	res, err := x.svc.RunScriptOnce(`const s = vars("a").status(); return s.state + "/" + s.writePending + "/" + s.client + "/" + vars("plain").status();`)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if fmt.Sprint(res) != "ok/false/機器/null" {
 		t.Fatalf("script = %v", res)
 	}
-	if _, err := x.svc.RunScriptOnce(`plc.getVariableStatus("nope")`); err == nil || !strings.Contains(err.Error(), `変数 "nope" がありません`) {
+	if _, err := x.svc.RunScriptOnce(`vars("nope").status()`); err == nil || !strings.Contains(err.Error(), `変数 "nope" がありません`) {
 		t.Fatalf("ない変数の状態を読んだときのエラー = %v", err)
 	}
 }

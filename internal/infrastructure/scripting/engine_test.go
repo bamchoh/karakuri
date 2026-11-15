@@ -70,7 +70,7 @@ func TestScriptEngine_RunOnce_ReadWriteVariable(t *testing.T) {
 	}
 
 	// スクリプトで書き込む
-	_, err = engine.RunOnce(`plc.writeVariable("Counter", 1234)`)
+	_, err = engine.RunOnce(`vars.Counter = 1234`)
 	if err != nil {
 		t.Fatalf("RunOnce failed: %v", err)
 	}
@@ -82,7 +82,7 @@ func TestScriptEngine_RunOnce_ReadWriteVariable(t *testing.T) {
 	}
 
 	// スクリプトで読み取り
-	result, err := engine.RunOnce(`plc.readVariable("Counter")`)
+	result, err := engine.RunOnce(`vars.Counter`)
 	if err != nil {
 		t.Fatalf("RunOnce failed: %v", err)
 	}
@@ -99,7 +99,7 @@ func TestScriptEngine_RunOnce_ReadWriteVariable_BOOL(t *testing.T) {
 		t.Fatalf("CreateVariable failed: %v", err)
 	}
 
-	_, err = engine.RunOnce(`plc.writeVariable("Flag", true)`)
+	_, err = engine.RunOnce(`vars.Flag = true`)
 	if err != nil {
 		t.Fatalf("RunOnce failed: %v", err)
 	}
@@ -109,7 +109,7 @@ func TestScriptEngine_RunOnce_ReadWriteVariable_BOOL(t *testing.T) {
 		t.Errorf("expected true, got %v", v.Value)
 	}
 
-	result, err := engine.RunOnce(`plc.readVariable("Flag")`)
+	result, err := engine.RunOnce(`vars.Flag`)
 	if err != nil {
 		t.Fatalf("RunOnce failed: %v", err)
 	}
@@ -126,7 +126,7 @@ func TestScriptEngine_RunOnce_ReadWriteVariable_REAL(t *testing.T) {
 		t.Fatalf("CreateVariable failed: %v", err)
 	}
 
-	_, err = engine.RunOnce(`plc.writeVariable("Temperature", 25.5)`)
+	_, err = engine.RunOnce(`vars.Temperature = 25.5`)
 	if err != nil {
 		t.Fatalf("RunOnce failed: %v", err)
 	}
@@ -143,7 +143,7 @@ func TestScriptEngine_RunOnce_GetVariables(t *testing.T) {
 	vs.CreateVariable("Var1", variable.TypeINT, int16(0))
 	vs.CreateVariable("Var2", variable.TypeBOOL, false)
 
-	result, err := engine.RunOnce(`plc.getVariables()`)
+	result, err := engine.RunOnce(`Object.keys(vars)`)
 	if err != nil {
 		t.Fatalf("getVariables failed: %v", err)
 	}
@@ -185,30 +185,26 @@ func TestScriptEngine_VariableFunctionsFailLoudly(t *testing.T) {
 	cases := []struct {
 		name, code, wantInError string
 	}{
-		{"ない変数を読む", `plc.readVariable("Nope")`, `plc.readVariable: 変数 "Nope" がありません`},
-		{"ない変数に書く", `plc.writeVariable("Nope", 1)`, `plc.writeVariable: 変数 "Nope" がありません`},
-		{"ない変数のフィールドを読む", `plc.readVariable("Nope.speed")`, `変数 "Nope" がありません`},
-		{"ない変数の要素に書く", `plc.writeVariable("Nope[1]", 1)`, `変数 "Nope" がありません`},
-		{"ないフィールドを読む", `plc.readVariable("M1.nope")`, `plc.readVariable("M1.nope")`},
-		{"ないフィールドに書く", `plc.writeVariable("M1.nope", 1)`, `plc.writeVariable("M1.nope")`},
-		{"配列の範囲外を読む", `plc.readVariable("Values[9]")`, `plc.readVariable("Values[9]")`},
-		{"型に合わない値を書く", `plc.writeVariable("Count", "abc")`, `plc.writeVariable("Count")`},
-		{"readArrayElement: ない変数", `plc.readArrayElement("Nope", 1)`, `変数 "Nope" がありません`},
-		{"readArrayElement: 配列でない変数", `plc.readArrayElement("Count", 1)`, `plc.readArrayElement("Count")`},
-		{"readArrayElement: 範囲外", `plc.readArrayElement("Values", 0)`, `plc.readArrayElement("Values")`},
-		{"writeArrayElement: 範囲外", `plc.writeArrayElement("Values", 4, 1)`, `plc.writeArrayElement("Values")`},
-		{"writeArrayElement: ない変数", `plc.writeArrayElement("Nope", 1, 1)`, `変数 "Nope" がありません`},
-		{"readStructField: ない変数", `plc.readStructField("Nope", "speed")`, `変数 "Nope" がありません`},
-		{"readStructField: 構造体でない変数", `plc.readStructField("Count", "speed")`, `は構造体ではありません`},
-		{"readStructField: ないフィールド", `plc.readStructField("M1", "nope")`, `フィールド "nope" がありません`},
-		{"writeStructField: ないフィールド", `plc.writeStructField("M1", "nope", 1)`, `フィールド "nope" がありません`},
-		{"64 ビットを超える BigInt を書く", `plc.writeVariable("Big", 2n ** 64n)`, `64 ビットの整数の範囲`},
-		{"構造体の中の 64 ビットを超える BigInt", `plc.writeVariable("M1", {speed: -(2n ** 63n) - 1n})`, `speed: BigInt`},
-		{"readTimeMs: ない変数", `plc.readTimeMs("Nope")`, `変数 "Nope" がありません`},
-		{"readTimeMs: TIME でない変数", `plc.readTimeMs("Count")`, `は TIME ではありません`},
-		{"readDateSec: DATE でない値", `plc.readDateSec("Wait")`, `DATE として読めません`},
-		{"writeTimeMs: ない変数", `plc.writeTimeMs("Nope", 1000)`, `変数 "Nope" がありません`},
-		{"getVariableStatus: ない変数", `plc.getVariableStatus("Nope")`, `plc.getVariableStatus: 変数 "Nope" がありません`},
+		{"ない変数を読む", `vars.Nope`, `vars: 変数 "Nope" がありません`},
+		{"ない変数に書く", `vars.Nope = 1`, `vars: 変数 "Nope" がありません`},
+		{"ない変数のフィールドを読む", `vars.Nope.speed`, `変数 "Nope" がありません`},
+		{"ない変数の要素に書く", `vars.Nope[1] = 1`, `変数 "Nope" がありません`},
+		{"ないフィールドを読む", `vars.M1.nope`, `vars: M1 にフィールド "nope" がありません`},
+		{"ないフィールドに書く", `vars.M1.nope = 1`, `vars: M1 にフィールド "nope" がありません`},
+		{"配列の範囲外を読む", `vars.Values[9]`, `vars: Values の添字 9 は範囲（1〜3）の外です`},
+		{"配列の範囲外に書く", `vars.Values[0] = 1`, `vars: Values の添字 0 は範囲（1〜3）の外です`},
+		{"配列を名前で読む", `vars.Values.first`, `vars: Values は配列です`},
+		{"構造体でない変数のフィールド", `vars.Count.speed.x`, `TypeError`},
+		{"型に合わない値を書く", `vars.Count = "abc"`, `vars: Count に書けません`},
+		{"64 ビットを超える BigInt を書く", `vars.Big = 2n ** 64n`, `64 ビットの整数の範囲`},
+		{"構造体の中の 64 ビットを超える BigInt", `vars.M1 = {speed: -(2n ** 63n) - 1n}`, `speed: BigInt`},
+		{"変数は消せない", `delete vars.Count`, `vars: 変数 "Count" は消せません`},
+		{"vars(): ない変数", `vars("Nope")`, `vars: 変数 "Nope" がありません`},
+		{"vars(): ないフィールド", `vars("M1.nope")`, `vars("M1.nope")`},
+		{"vars(): 名前がない", `vars()`, `変数の名前を渡してください`},
+		{"clients(): ない接続先", `clients("Nope")`, `clients: 接続先 "Nope" がありません`},
+		{"iec: 読めない時間", `iec.parseTime("abc")`, `iec.parseTime("abc")`},
+		{"iec: 読めない日付", `iec.parseDate(vars.Wait)`, `iec.parseDate("T#1s")`},
 	}
 	for _, c := range cases {
 		_, err := engine.RunOnce(c.code)
@@ -222,6 +218,9 @@ func TestScriptEngine_VariableFunctionsFailLoudly(t *testing.T) {
 	}
 
 	// コンソールに出る文面には、Go の関数の呼び出し位置を含めない
+	if _, err := engine.RunOnce(`vars.Nope`); err == nil {
+		t.Fatal("エラーにならない")
+	}
 	logs := engine.GetConsoleLogs()
 	last := logs[len(logs)-1]
 	if last.Level != LogLevelError || strings.Contains(last.Message, "(native)") || !strings.Contains(last.Message, `変数 "Nope" がありません`) {
@@ -233,22 +232,35 @@ func TestScriptEngine_VariableFunctionsFailLoudly(t *testing.T) {
 		t.Errorf("Count = %v, want 10", v.Value)
 	}
 
-	// 成功する呼び出しは、これまでどおり
+	// 成功する呼び出し
 	ok := []struct {
 		code string
 		want any
 	}{
-		{`plc.hasVariable("Count")`, true},
-		{`plc.hasVariable("Nope")`, false},
-		{`plc.readVariable("Count")`, int64(10)},
-		{`plc.writeVariable("M1.speed", 7); plc.readStructField("M1", "speed")`, int64(7)},
-		{`plc.writeStructField("M1", "speed", 8); plc.readVariable("M1.speed")`, int64(8)},
-		{`plc.writeArrayElement("Values", 3, 5); plc.readArrayElement("Values", 3)`, int64(5)},
-		{`plc.writeTimeMs("Wait", 2500); plc.readTimeMs("Wait")`, int64(2500)},
+		{`"Count" in vars`, true},
+		{`"Nope" in vars`, false},
+		{`"speed" in vars.M1`, true},
+		{`3 in vars.Values`, true},
+		{`0 in vars.Values`, false},
+		{`vars.Count`, int64(10)},
+		{`vars.M1.speed = 7; vars.M1.speed`, int64(7)},
+		{`vars["M" + 1].speed = 8; vars("M1.speed").read()`, int64(8)},
+		{`vars.Values[3] = 5; vars.Values[3]`, int64(5)},
+		{`vars("Values[2]").write(4); vars.Values[2]`, int64(4)},
+		{`vars.Values.length`, int64(3)},
+		{`[...vars.Values].join(",")`, "0,4,5"},
+		{`Object.keys(vars.Values).join(",")`, "1,2,3"},
+		{`Object.keys(vars.M1).join(",")`, "speed"},
+		{`JSON.stringify(vars("M1").read())`, `{"speed":8}`},
+		{`vars.Wait`, "T#1s"},
+		{`vars.Wait = iec.formatTime(2500); iec.parseTime(vars.Wait)`, int64(2500)},
+		{`vars("Count").name`, "Count"},
 		// エラーは、スクリプトの try / catch で受け取れる
-		{`let caught = ""; try { plc.readVariable("Nope") } catch (e) { caught = e.message } caught`, `plc.readVariable: 変数 "Nope" がありません`},
+		{`let caught = ""; try { vars.Nope } catch (e) { caught = e.message } caught`, `vars: 変数 "Nope" がありません`},
 		// 変数はあるが、接続先にマッピングしていなければ null
-		{`plc.getVariableStatus("Count")`, nil},
+		{`vars("Count").status()`, nil},
+		// console.log などが黙って調べに来る名前は、エラーにしない
+		{`typeof vars.toJSON`, "undefined"},
 	}
 	for _, c := range ok {
 		got, err := engine.RunOnce(c.code)
@@ -272,8 +284,8 @@ func TestScriptEngine_RunOnce_IncrementVariable(t *testing.T) {
 
 	// readして+1してwrite（ユーザーの実際のユースケース）
 	_, err = engine.RunOnce(`
-		var count = plc.readVariable("Count");
-		plc.writeVariable("Count", count + 1);
+		var count = vars.Count;
+		vars.Count = count + 1;
 	`)
 	if err != nil {
 		t.Fatalf("RunOnce failed: %v", err)
@@ -294,8 +306,8 @@ func TestScriptEngine_StartStopScript(t *testing.T) {
 	}
 
 	s := script.NewScript("test-1", "counter", `
-		var val = plc.readVariable("Counter");
-		plc.writeVariable("Counter", val + 1);
+		var val = vars.Counter;
+		vars.Counter = val + 1;
 	`, 50*time.Millisecond, 0)
 
 	// スクリプト開始
@@ -396,8 +408,8 @@ func TestScriptEngine_StartScript_ReplaceRunning(t *testing.T) {
 
 	_, _ = vs.CreateVariable("Val", variable.TypeINT, int16(0))
 
-	s1 := script.NewScript("test-1", "script1", `plc.writeVariable("Val", 111)`, 50*time.Millisecond, 0)
-	s2 := script.NewScript("test-1", "script1-updated", `plc.writeVariable("Val", 222)`, 50*time.Millisecond, 0)
+	s1 := script.NewScript("test-1", "script1", `vars.Val = 111`, 50*time.Millisecond, 0)
+	s2 := script.NewScript("test-1", "script1-updated", `vars.Val = 222`, 50*time.Millisecond, 0)
 
 	// 最初のスクリプト開始
 	_ = engine.StartScript(s1)
@@ -538,9 +550,9 @@ func TestScriptEngine_RunOnce_TopLevelReturn(t *testing.T) {
 	}
 
 	result, err := engine.RunOnce(`
-		plc.writeVariable("Counter", 5);
-		if (plc.readVariable("Counter") === 5) { return 42; }
-		plc.writeVariable("Counter", 9);
+		vars.Counter = 5;
+		if (vars.Counter === 5) { return 42; }
+		vars.Counter = 9;
 	`)
 	if err != nil {
 		t.Fatalf("RunOnce: %v", err)
@@ -561,7 +573,7 @@ func TestScriptEngine_RuntimeError_LoggedOncePerStreak(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	s := script.NewScript("err-1", "failing", `if (plc.readVariable("Fail")) { throw new Error("boom"); }`, 10*time.Millisecond, 0)
+	s := script.NewScript("err-1", "failing", `if (vars.Fail) { throw new Error("boom"); }`, 10*time.Millisecond, 0)
 	if err := engine.StartScript(s); err != nil {
 		t.Fatal(err)
 	}
@@ -658,61 +670,131 @@ func TestScriptEngine_LintUlintAreBigInt(t *testing.T) {
 	}
 
 	// 読むと BigInt。ほかの整数は Number のまま
-	if got := run(`typeof plc.readVariable("L") + "," + typeof plc.readVariable("D")`); got != "bigint,number" {
+	if got := run(`typeof vars.L + "," + typeof vars.D`); got != "bigint,number" {
 		t.Errorf("型 = %v", got)
 	}
 	// 2^53 を超える値も、桁を落とさずに計算して書ける
-	run(`plc.writeVariable("L", plc.readVariable("L") + 1n)`)
+	run(`vars.L = vars.L + 1n`)
 	if got := read("L"); got != int64(1)<<60+2 {
 		t.Errorf("L = %v", got)
 	}
 	// ULINT の最大値（2^64 - 1）も、そのまま読める
-	if got := run(`String(plc.readVariable("U"))`); got != "18446744073709551615" {
+	if got := run(`String(vars.U)`); got != "18446744073709551615" {
 		t.Errorf("U = %v", got)
 	}
-	run(`plc.writeVariable("U", plc.readVariable("U") - 5n)`)
+	run(`vars.U = vars.U - 5n`)
 	if got := read("U"); got != uint64(18446744073709551610) {
 		t.Errorf("U = %v", got)
 	}
 	// Number でも書ける
-	run(`plc.writeVariable("L", 5)`)
+	run(`vars.L = 5`)
 	if got := read("L"); got != int64(5) {
 		t.Errorf("Number を書いた L = %v", got)
 	}
 
 	// 構造体のフィールド: 読むと BigInt、書くのは BigInt でも Number でも
-	if got := run(`typeof plc.readVariable("C").total + "," + typeof plc.readStructField("C", "total") + "," + typeof plc.readVariable("C.count")`); got != "bigint,bigint,number" {
+	if got := run(`typeof vars.C.total + "," + typeof vars("C.total").read() + "," + typeof vars.C.count`); got != "bigint,bigint,number" {
 		t.Errorf("構造体の型 = %v", got)
 	}
-	run(`plc.writeVariable("C.total", 2n ** 62n)`)
-	run(`plc.writeStructField("C", "count", 3)`)
-	run(`plc.writeVariable("C", {total: plc.readVariable("C").total + 1n, count: 4})`)
+	run(`vars("C.total").write(2n ** 62n)`)
+	run(`vars.C.count = 3`)
+	run(`vars.C = {total: vars.C.total + 1n, count: 4}`)
 	if got := read("C").(map[string]any); got["total"] != int64(1)<<62+1 || got["count"] != int32(4) {
 		t.Errorf("C = %v", got)
 	}
 
 	// 配列の要素
-	if got := run(`typeof plc.readVariable("Arr")[0] + "," + typeof plc.readArrayElement("Arr", 2)`); got != "bigint,bigint" {
+	if got := run(`typeof vars.Arr[1] + "," + typeof vars("Arr[2]").read()`); got != "bigint,bigint" {
 		t.Errorf("配列の型 = %v", got)
 	}
-	run(`plc.writeArrayElement("Arr", 2, 2n ** 63n)`)
-	run(`plc.writeVariable("Arr[1]", 9n)`)
+	run(`vars.Arr[2] = 2n ** 63n`)
+	run(`vars("Arr[1]").write(9n)`)
 	if got := read("Arr").([]any); got[0] != uint64(9) || got[1] != uint64(1)<<63 {
 		t.Errorf("Arr = %v", got)
 	}
 
 	// BigInt と Number は混ぜて計算できない（JS の決まり）。比較は混ぜてよい
-	if _, err := engine.RunOnce(`plc.readVariable("L") + 1`); err == nil || !strings.Contains(err.Error(), "TypeError") {
+	if _, err := engine.RunOnce(`vars.L + 1`); err == nil || !strings.Contains(err.Error(), "TypeError") {
 		t.Errorf("混ぜた計算のエラー = %v", err)
 	}
-	if got := run(`plc.readVariable("L") > 4`); got != true {
+	if got := run(`vars.L > 4`); got != true {
 		t.Errorf("比較 = %v", got)
 	}
 
 	// console.log には、そのままの桁で出る
 	rec := recordLogs(engine)
-	run(`console.log(plc.readVariable("U"))`)
+	run(`console.log(vars.U)`)
 	if logs := rec.messages(LogLevelLog); len(logs) == 0 || !strings.Contains(logs[0], "18446744073709551610") {
+		t.Errorf("console.log = %q", logs)
+	}
+}
+
+// fakeClientSender は、送った内容を覚えて決まった結果を返す
+type fakeClientSender struct {
+	sent []string
+}
+
+func (f *fakeClientSender) HasClient(name string) bool { return name == "PLC-A" }
+func (f *fakeClientSender) SendCommand(scriptName, client, command string) map[string]any {
+	f.sent = append(f.sent, scriptName+"|"+client+"|cmd:"+command)
+	return map[string]any{"status": "ok", "values": []any{map[string]any{"label": "D0", "value": "1"}}}
+}
+func (f *fakeClientSender) SendRequest(scriptName, client, requestHex string) map[string]any {
+	f.sent = append(f.sent, scriptName+"|"+client+"|hex:"+requestHex)
+	return map[string]any{"status": "ok", "values": []any{}}
+}
+
+func TestScriptEngine_Clients(t *testing.T) {
+	engine, _ := newTestEngine()
+	sender := &fakeClientSender{}
+	engine.SetClientSender(sender)
+
+	got, err := engine.RunOnce(`
+		const a = clients("PLC-A");
+		const r = a.send("速度");
+		a.sendHex("0300000001");
+		a.name + "," + r.status + "," + r.values[0].value
+	`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != "PLC-A,ok,1" {
+		t.Errorf("結果 = %v", got)
+	}
+	want := []string{"1 回実行|PLC-A|cmd:速度", "1 回実行|PLC-A|hex:0300000001"}
+	if !reflect.DeepEqual(sender.sent, want) {
+		t.Errorf("送った内容 = %q, want %q", sender.sent, want)
+	}
+
+	// ない接続先はエラー（送らない）
+	if _, err := engine.RunOnce(`clients("Nope").send("速度")`); err == nil || !strings.Contains(err.Error(), `clients: 接続先 "Nope" がありません`) {
+		t.Errorf("ない接続先のエラー = %v", err)
+	}
+	if len(sender.sent) != 2 {
+		t.Errorf("ない接続先にも送った: %q", sender.sent)
+	}
+}
+
+// console.log に構造体・配列の変数を渡すと、中身を出す
+func TestScriptEngine_ConsoleLogVars(t *testing.T) {
+	engine, vs := newTestEngine()
+	if err := vs.RegisterStructType(&variable.StructTypeDef{Name: "Motor", Fields: []variable.StructField{
+		{Name: "speed", DataType: variable.TypeINT},
+	}}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := vs.CreateVariable("M1", variable.DataType("Motor"), map[string]any{"speed": int16(12)}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := vs.CreateVariable("Values", variable.DataType("ARRAY[1..3] OF INT"), nil); err != nil {
+		t.Fatal(err)
+	}
+	rec := recordLogs(engine)
+	if _, err := engine.RunOnce(`console.log(vars.M1, vars.Values)`); err != nil {
+		t.Fatal(err)
+	}
+	logs := rec.messages(LogLevelLog)
+	if len(logs) == 0 || !strings.Contains(logs[0], "speed:12") || !strings.Contains(logs[0], "[0 0 0]") {
 		t.Errorf("console.log = %q", logs)
 	}
 }

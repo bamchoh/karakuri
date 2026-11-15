@@ -174,7 +174,7 @@ func (s *PLCService) GetVariableDeviceStatuses() []VariableDeviceStatusDTO {
 	return result
 }
 
-// VariableDeviceStatus は変数の同期の状態を返す（スクリプトの plc.getVariableStatus 用）。
+// VariableDeviceStatus は変数の同期の状態を返す（スクリプトの vars("x").status() 用）。
 // 接続先にマッピングしていなければ nil。複数の接続先にマッピングしていれば、最初の接続先のもの
 func (s *PLCService) VariableDeviceStatus(variableID string) *VariableDeviceStatusDTO {
 	for _, st := range s.GetVariableDeviceStatuses() {

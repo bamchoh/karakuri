@@ -87,7 +87,7 @@ func NewPLCService() *PLCService {
 	service.clients.log = service.appLog
 	service.scriptEngine.SetOnRunStateChanged(service.logScriptRunState)
 
-	// スクリプトの plc.getVariableStatus() に、外部の機器との同期の状態を渡す
+	// スクリプトの vars("x").status() に、外部の機器との同期の状態を渡す
 	service.scriptEngine.SetVariableStatusProvider(func(variableID string) map[string]any {
 		st := service.VariableDeviceStatus(variableID)
 		if st == nil {
@@ -101,7 +101,7 @@ func NewPLCService() *PLCService {
 		}
 	})
 
-	// スクリプトの plc.sendCommand() / plc.sendRequest() から、クライアントの接続先へ送れるようにする
+	// スクリプトの clients("名前").send() / .sendHex() から、クライアントの接続先へ送れるようにする
 	service.scriptEngine.SetClientSender(scriptClientSender{svc: service})
 
 	// モニタリング設定を読み込み

@@ -147,7 +147,7 @@ test("スクリプトの開始・エラー・停止がログに出る。console.
     page,
     "CreateScript",
     "監視",
-    `console.log("tick"); if (plc.readVariable("Flag") !== 0) { plc.readVariable("Nope"); }`,
+    `console.log("tick"); if (vars.Flag !== 0) { vars.Nope; }`,
     100,
   );
   const flag = (
@@ -189,7 +189,7 @@ test("スクリプトの開始・エラー・停止がログに出る。console.
   await expect(selectedItem(page)).toContainText("監視");
   await expect(
     page.locator(".console-entry.error", {
-      hasText: 'plc.readVariable: 変数 "Nope" がありません',
+      hasText: 'vars: 変数 "Nope" がありません',
     }),
   ).not.toHaveCount(0);
   await shot(page, "app-log-script-opened");
