@@ -30,6 +30,7 @@ type fakeDevice struct {
 	chunk      int                     // 応答を何バイトずつ渡すか（0 なら一度に）
 	chunkDelay time.Duration
 	processor  *rtu.Processor
+	ascii      bool // true なら、リクエストを ASCII のフレームとして読み、ASCII で応答する
 }
 
 type deviceWrite struct {
@@ -92,6 +93,10 @@ func (d *fakeDevice) handle(p *fakeDevicePort, req []byte) {
 	var resp []byte
 	if respond != nil {
 		resp = respond(req)
+	} else if d.ascii {
+		if r, err := rtu.ParseASCIIRequest(req); err == nil {
+			resp = d.processor.ProcessASCII(r)
+		}
 	} else if r, err := rtu.ParseRequest(req); err == nil {
 		resp = d.processor.Process(r)
 	}
@@ -221,11 +226,16 @@ func withCRC(t *testing.T, s string) []byte {
 	return rtu.AppendCRC(hexb(t, s))
 }
 
-// newRTUTestClient は、フェイクの機器につながったクライアントを作る
-func newRTUTestClient(t *testing.T, dev *fakeDevice, settings map[string]interface{}) *RTUClient {
+// newRTUTestClient は、フェイクの機器につながった RTU のクライアントを作る
+func newRTUTestClient(t *testing.T, dev *fakeDevice, settings map[string]interface{}) *serialClient {
 	t.Helper()
-	f := &RTUClientFactory{open: dev.open}
-	base := map[string]interface{}{"serialPort": "COM_FAKE", "baudRate": 115200, "unitId": 1, "timeoutMs": 300}
+	return newSerialTestClient(t, &RTUClientFactory{open: dev.open}, 115200, settings)
+}
+
+// newSerialTestClient は、ファクトリー（フェイクの機器を開くもの）からクライアントを作る
+func newSerialTestClient(t *testing.T, f protocol.ClientFactory, baud int, settings map[string]interface{}) *serialClient {
+	t.Helper()
+	base := map[string]interface{}{"serialPort": "COM_FAKE", "baudRate": baud, "unitId": 1, "timeoutMs": 300}
 	for k, v := range settings {
 		base[k] = v
 	}
@@ -234,10 +244,10 @@ func newRTUTestClient(t *testing.T, dev *fakeDevice, settings map[string]interfa
 		t.Fatalf("NewClient: %v", err)
 	}
 	t.Cleanup(func() { c.Close() })
-	return c.(*RTUClient)
+	return c.(*serialClient)
 }
 
-func sendHex(t *testing.T, c *RTUClient, pdu string) protocol.CommandResult {
+func sendHex(t *testing.T, c *serialClient, pdu string) protocol.CommandResult {
 	t.Helper()
 	return c.Send(context.Background(), hexb(t, pdu))
 }
