@@ -11,7 +11,7 @@ import { ExportProject, ImportProject } from "../wailsjs/go/main/App";
 import { WindowSetTitle } from "../wailsjs/runtime/runtime";
 import { windowTitle } from "./utils/windowTitle";
 
-const APP_VERSION = "v0.0.45";
+const APP_VERSION = "v0.0.46";
 
 type Tab = "server" | "variables" | "scripts";
 
