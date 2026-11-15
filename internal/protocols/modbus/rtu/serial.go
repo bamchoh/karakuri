@@ -4,8 +4,6 @@ import (
 	"fmt"
 	"sync"
 	"time"
-
-	"go.bug.st/serial"
 )
 
 // SerialConfig はシリアルポートの設定を表す
@@ -20,15 +18,25 @@ type SerialConfig struct {
 // SerialManager はシリアルポートの管理を行う
 type SerialManager struct {
 	mu          sync.Mutex
-	port        serial.Port
+	port        Port
+	open        PortOpener
 	config      SerialConfig
 	silenceTime time.Duration // 3.5文字時間
 	readTimeout time.Duration
 	closed      bool
+	pending     []byte // 前のフレームのあとに続けて届いていたバイト（次の ReadFrame で使う）
 }
+
+// maxRTUFrameSize は RTU のフレーム（ADU）の最大の長さ
+const maxRTUFrameSize = 256
 
 // NewSerialManager は新しいSerialManagerを作成する
 func NewSerialManager(config SerialConfig) *SerialManager {
+	return newSerialManager(config, OpenSerialPort)
+}
+
+// newSerialManager は、ポートを open で開く SerialManager を作る（テストではフェイクのポートを開く）
+func newSerialManager(config SerialConfig, open PortOpener) *SerialManager {
 	// 3.5文字時間を計算（1文字 = スタートビット + データビット + パリティビット + ストップビット）
 	// 9600bps以下の場合は3.5文字時間を使用、それ以上は固定値1.75ms
 	bitsPerChar := 1 + config.DataBits + config.StopBits
@@ -46,6 +54,7 @@ func NewSerialManager(config SerialConfig) *SerialManager {
 	}
 
 	return &SerialManager{
+		open:        open,
 		config:      config,
 		silenceTime: silenceTime,
 		readTimeout: 100 * time.Millisecond,
@@ -61,43 +70,15 @@ func (sm *SerialManager) Open() error {
 		return nil
 	}
 
-	// パリティの変換
-	var parity serial.Parity
-	switch sm.config.Parity {
-	case "N", "none":
-		parity = serial.NoParity
-	case "E", "even":
-		parity = serial.EvenParity
-	case "O", "odd":
-		parity = serial.OddParity
-	default:
-		parity = serial.NoParity
-	}
-
-	// ストップビットの変換
-	var stopBits serial.StopBits
-	switch sm.config.StopBits {
-	case 1:
-		stopBits = serial.OneStopBit
-	case 2:
-		stopBits = serial.TwoStopBits
-	default:
-		stopBits = serial.OneStopBit
-	}
-
-	mode := &serial.Mode{
-		BaudRate: sm.config.BaudRate,
-		DataBits: sm.config.DataBits,
-		Parity:   parity,
-		StopBits: stopBits,
-	}
-
-	port, err := serial.Open(sm.config.Port, mode)
+	port, err := sm.open(sm.config)
 	if err != nil {
-		return fmt.Errorf("failed to open serial port: %w", err)
+		return err
 	}
 
 	sm.port = port
+	// Close のあとにもう一度開いたとき（サーバーの Stop → Start）も読めるようにする
+	sm.closed = false
+	sm.pending = nil
 	return nil
 }
 
@@ -117,7 +98,36 @@ func (sm *SerialManager) Close() error {
 	return err
 }
 
-// ReadFrame はフレームを読み取る（3.5文字時間の静寂で区切る）
+// requestLength は、フレームの先頭からわかるリクエストの長さ（CRC を含む）を返す。
+// ファンクションコードが長さの決まらないもの、まだ長さを決めるところまで届いていないときは 0。
+func requestLength(frame []byte) int {
+	if len(frame) < 2 {
+		return 0
+	}
+	switch frame[1] {
+	case FuncReadCoils, FuncReadDiscreteInputs, FuncReadHoldingRegisters, FuncReadInputRegisters,
+		FuncWriteSingleCoil, FuncWriteSingleRegister:
+		// UnitID・FC・アドレス 2・個数（値）2・CRC 2
+		return 8
+	case FuncWriteMultipleCoils, FuncWriteMultipleRegisters:
+		// UnitID・FC・アドレス 2・個数 2・バイト数 1・データ・CRC 2
+		if len(frame) < 7 {
+			return 0
+		}
+		return 9 + int(frame[6])
+	}
+	return 0
+}
+
+// ReadFrame はフレームを 1 つ読み取る。
+//
+//   - リクエストの長さがファンクションコードからわかる（requestLength）ときは、その長さが届いて CRC が合った時点で返す。
+//     そのあとに続けて届いていたバイトは、次のフレームに回す
+//   - 長さがわからない・CRC が合わないときは、バイトが届かなくなるまで（読み取りのタイムアウトが過ぎ、
+//     最後に届いてから 3.5 文字時間が過ぎるまで）を 1 つのフレームにする
+//
+// 無音の時間だけで厳密に区切らないのは、USB シリアル変換器が受信したバイトをまとめて渡すため
+// （1 つのフレームの途中に、3.5 文字時間より長い間が空くことがある）。
 func (sm *SerialManager) ReadFrame() ([]byte, error) {
 	sm.mu.Lock()
 	if sm.closed {
@@ -133,13 +143,26 @@ func (sm *SerialManager) ReadFrame() ([]byte, error) {
 	sm.port.SetReadTimeout(sm.readTimeout)
 	port := sm.port
 	silenceTime := sm.silenceTime
+	frame := append(make([]byte, 0, maxRTUFrameSize), sm.pending...)
+	sm.pending = nil
 	sm.mu.Unlock()
 
-	buffer := make([]byte, 256)
-	frame := make([]byte, 0, 256)
+	buffer := make([]byte, maxRTUFrameSize)
 	lastReadTime := time.Now()
 
 	for {
+		if n := requestLength(frame); n > 0 && n <= len(frame) && CheckCRC(frame[:n]) {
+			if n < len(frame) {
+				sm.mu.Lock()
+				sm.pending = append([]byte(nil), frame[n:]...)
+				sm.mu.Unlock()
+			}
+			return frame[:n], nil
+		}
+		if len(frame) >= maxRTUFrameSize {
+			return frame, nil
+		}
+
 		// 閉じられたかチェック
 		sm.mu.Lock()
 		if sm.closed {
@@ -176,11 +199,6 @@ func (sm *SerialManager) ReadFrame() ([]byte, error) {
 			if len(frame) > 0 && time.Since(lastReadTime) >= silenceTime {
 				return frame, nil
 			}
-		}
-
-		// 最大フレーム長チェック
-		if len(frame) >= 256 {
-			return frame, nil
 		}
 	}
 }
