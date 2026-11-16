@@ -68,7 +68,7 @@ func ParseASCIIRequest(frame []byte) (*Request, error) {
 	if err != nil {
 		return nil, err
 	}
-	return parseRequestBody(data)
+	return ParseRequestBody(data)
 }
 
 // BuildASCIIFrame はバイナリデータからASCIIフレームを構築する

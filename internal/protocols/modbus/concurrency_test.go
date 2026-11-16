@@ -10,8 +10,8 @@ import (
 )
 
 // 複数のクライアント（他社製の simonvetter/modbus）から同時に読み書きしても、
-// 中継（TCPTransport）で応答が取り違えられず、どの書き込みも反映される。
-// あわせて、読み書きの最中に UnitID の応答設定を切り替える（中継とサーバーの設定を同時に触る）。競合は CI の -race で見つける
+// 応答が取り違えられず、どの書き込みも反映される。
+// あわせて、読み書きの最中に UnitID の応答設定を切り替える（サーバーが読む設定を同時に触る）。競合は CI の -race で見つける
 func TestTCP_ConcurrentClients(t *testing.T) {
 	const clients, rounds = 8, 30
 	srv, port := startTCPServer(t)

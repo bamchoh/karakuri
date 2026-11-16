@@ -173,9 +173,9 @@ internal/
 │   ├── modbus/           # Modbus TCP / RTU / ASCII
 │   │   ├── factory.go      # TCPFactory / RTUFactory / ASCIIFactory、ModbusConfig、ModbusServer、プロトコルタイプの定数
 │   │   ├── server.go       # Server（トランスポートの起動・停止）
-│   │   ├── *_transport.go  # TCP / RTU / ASCII のトランスポート（TCP は、オフにした UnitID 宛てのリクエストを捨てる中継を持つ）
+│   │   ├── *_transport.go  # TCP / RTU / ASCII のトランスポート（どれも、リクエストの処理は rtu.Processor。違うのはフレームの形だけ）
 │   │   ├── datastore.go    # ModbusDataStore（4 つのメモリエリア）
-│   │   ├── datastore_adapter.go # リクエスト → DataStore の読み書き
+│   │   ├── datastore_adapter.go # RTUDataStoreAdapter（rtu.Processor → DataStore の読み書き。TCP / RTU / ASCII で共通）
 │   │   ├── client.go       # TCPClientFactory / TCPClient（Modbus TCP クライアント。リクエストの組み立て・送受信・応答の解釈）。pduClient（TCP と RTU で共通のコマンドの定義・PDU の組み立てと解釈）
 │   │   ├── client_serial.go # Modbus RTU / ASCII クライアントの共通の部分（serialClient: シリアルポートでの送受信・設定）
 │   │   ├── client_rtu.go   # RTUClientFactory と RTU のフレーム（CRC・応答の長さ）
@@ -298,7 +298,8 @@ internal/
   - `ProtocolCapabilities.SupportsUnitID: true` のプロトコルで利用される。ホストはこの型で判定する（個別のローカル定義は持たない）
   - 応答しない UnitID の一覧は、サーバーのオブジェクト（Modbus は `ModbusServer` の `DataStoreHandler`）が持つ。サーバーは削除するまで同じものを使うので、起動前から設定でき、起動し直しても残る
   - オフにした UnitID には、TCP / RTU / ASCII のどれも応答しない（例外応答も返さない）
-  - Modbus TCP は simonvetter/modbus のサーバーを使うが、このライブラリは受け取ったリクエストに必ず応答する。そのため `TCPTransport`（`tcp_transport.go`）がクライアントとの間に中継を入れ、オフにした UnitID 宛てのフレームを捨てる。ライブラリのサーバーは 127.0.0.1 の空きポートで動く
+  - Modbus TCP / RTU / ASCII のサーバーは、どれも `rtu.Processor` でリクエストを処理する（UnitID の判定もここ）。TCP（`tcp_transport.go` の `TCPTransport`）は、MBAP ヘッダーで区切って UnitID + PDU を `Processor.ProcessBody()` に渡し、応答に MBAP ヘッダーを付けるだけ
+    - 以前は simonvetter/modbus のサーバーを使っていたが、このライブラリは受け取ったリクエストに必ず応答し（オフにした UnitID にも）、個数の誤りには例外を返さず接続を閉じるので、やめた（ライブラリはテストのクライアントとしてだけ使う）
 - **ScriptEngine** (`internal/infrastructure/scripting/engine.go`): gojaベースのJavaScript実行エンジン
   - スクリプトに見せるのは `vars`（変数）・`clients`（外部の機器）・`iec`（時間・日付の変換）・`console`。作るのは `api.go` の `installAPI()`（レジスタを直接読み書きする関数はない。レジスタを動かすときは、変数をマッピングする）
   - スクリプトコードをIIFE `(function(){...})();` でラップして、const/let再宣言エラーを回避
@@ -662,8 +663,8 @@ JavaScript（goja）でPLC動作を記述。
 - **FINS**（`internal/protocols/fins/`）: `fins_test.go` / `area_test.go` はフレームのバイト列と、自分のサーバーへの接続で確認する。`client_test.go` は、応答を決められるフェイクの相手（UDP のソケット・TCP の待ち受け）で、遅れて届いた応答・壊れた応答・FINS/TCP のエラー・タイムアウト後のつなぎ直しを確認する
 - **SLMP**（`internal/protocols/slmp/slmp_test.go`）: 要求のフレームのバイト列と応答（マニュアルの例を含む）、自分のサーバーへの接続（TCP / UDP × 3E / 4E）、全デバイスの最後の番号の読み書き、フェイクの相手（遅れた応答・壊れた応答・タイムアウト）
 - **Modbus**（`internal/protocols/modbus/`）: `tcp_transport_test.go` は実際に TCP でつないで確認する。`rtu/rtu_test.go` は仕様書の既知のフレームで CRC / LRC を確認し、同じリクエストを RTU と ASCII の両方で処理して結果が一致することを確認する
-  - **RTU / ASCII のサーバーは、リクエストの個数を仕様どおりに確かめる**（`rtu/processor.go` の `checkRequest()`）: 個数が 0・上限（FC01 / 02 は 2000、FC03 / 04 は 125、FC15 は 1968、FC16 は 123）を超える・バイト数が個数と合わないものは例外 03、開始アドレス + 個数が 65536 を超えるものは例外 02。オフにした UnitID は、これより先に確かめる（応答しない）。テストは `rtu_test.go` の `TestProcess_QuantityLimits`
-    - Modbus TCP はライブラリ（simonvetter/modbus）が確かめるが、個数の誤りには例外を返さず、接続を閉じる（仕様では例外 03）
+  - **TCP / RTU / ASCII のサーバーは、リクエストの個数を仕様どおりに確かめる**（`rtu/processor.go` の `checkRequest()`）: 個数が 0・上限（FC01 / 02 は 2000、FC03 / 04 は 125、FC15 は 1968、FC16 は 123）を超える・バイト数が個数と合わないものは例外 03、開始アドレス + 個数が 65536 を超えるものは例外 02。オフにした UnitID は、これより先に確かめる（応答しない）。テストは `rtu_test.go` の `TestProcess_QuantityLimits`
+    - TCP だけのこと（`TestTCP_InvalidRequestsGetExceptions` / `TestTCP_ClosesOnBadLength`）: データが短すぎるリクエストは例外 03。MBAP の長さが 2 未満か 254 を超えるフレームは、区切りを信用できないので接続を閉じる。プロトコル ID が 0 でないフレームは読み捨てる。1 つの接続のリクエストは、届いた順に 1 つずつ処理する
   - `rtu_adapter_test.go` は、RTU / ASCII のサーバーと同じ組み立て（`rtu.Processor` → `RTUDataStoreAdapter` → `ModbusDataStore`）に、全部のファンクションコードと例外を通す（`rtu` のテストはフェイクの受け手を使うため）
   - `rtu/serial_test.go` は、COM ポートなしでシリアルの送受信を確かめる。サーバーはポートを `PortOpener`（`rtu/port.go`。中身は `internal/protocols/serialport` の別名）で開くので、テストではメモリ上のフェイクのポート（`fakePort`。実際のポートと同じく、タイムアウトしたら `Read` が `(0, nil)`、閉じたら error）を渡す（`newRTUServer` / `newASCIIServer`）。フレームの区切り・壊れたフレーム・Stop → Start を確認する
   - RTU のフレームの区切り（`SerialManager.ReadFrame()`）: ファンクションコードからリクエストの長さがわかるとき（FC01〜06・0F・10）は、その長さが届いて CRC が合った時点で 1 つのフレームにする（後ろに続けて届いたバイトは次に回す）。わからないときは、バイトが届かなくなった時点まで。無音の時間（3.5 文字時間）だけで厳密に区切らないのは、USB シリアル変換器が受信したバイトをまとめて渡し、フレームの途中に間が空くことがあるため
@@ -673,13 +674,13 @@ JavaScript（goja）でPLC動作を記述。
 - **OPC UA**（`internal/protocols/opcua/`）: 実際の OPC UA クライアントでつなぐ。`host_integration_test.go` は実際の変数ストアを使う（他のテストはフェイクの変数ストアを使うため、変数ストアが持つ値の型や型変換を通らない）
 - 設定フォルダに書き込むパッケージのテストは、`TestMain` で `KARAKURI_CONFIG_DIR` を一時フォルダに向ける
 - **ファズテスト**（各プロトコルの `fuzz_test.go`）: 外から届くバイト列を読む処理に、でたらめな入力を与えて、panic しないこと（panic するとアプリ全体が落ちる）と、出力の形が正しいこと（応答がフレームとして読める・RTU の応答は 256 バイト以内など）を確かめる
-  - 対象: サーバーがリクエストを処理する入口（FINS / SLMP の `handler.handle()`、Host Link / MC プロトコル（シリアル）の `receive()`、Modbus の `rtu.ParseRequest` → `Process`・TCP の中継の `forwardRequests()`・TCP のフレームの読み取り）と、クライアントが応答を解釈する処理（`decodeResponse()` など。リクエストも、利用者が 16 進で入れたものがそのまま来るので、両方をでたらめにする）、MC プロトコルの ASCII の変換、OPC UA のリクエスト本体の読み取り
+  - 対象: サーバーがリクエストを処理する入口（FINS / SLMP の `handler.handle()`、Host Link / MC プロトコル（シリアル）の `receive()`、Modbus の `rtu.ParseRequest` → `Process`・TCP のサーバーの `serve()`・TCP のフレームの読み取り）と、クライアントが応答を解釈する処理（`decodeResponse()` など。リクエストも、利用者が 16 進で入れたものがそのまま来るので、両方をでたらめにする）、MC プロトコルの ASCII の変換、OPC UA のリクエスト本体の読み取り
   - ふだんの `go test` では、種（`f.Add`）と `testdata/fuzz/` に残った入力だけを流す（CI でも流れる）。探すときは、パッケージごとに 1 つずつ `go test -run '^$' -fuzz='^FuzzHandler$' -fuzztime=1m ./internal/protocols/fins` のように流す
   - 見つかった入力は `testdata/fuzz/<関数名>/` に書かれる。不具合なら直して、その入力は残す（次から毎回流れる）。確かめ方の誤りなら、確かめ方を直して入力を消す
 - **同時の接続**（各プロトコルの `concurrency_test.go`）: 1 つのサーバーに複数のクライアントを同時につなぎ、それぞれが自分の受け持ちのアドレスに書いては読む。応答が取り違えられないこと・どの書き込みも反映されることを確かめる（競合は CI の `-race` で見つける）
   - FINS（UDP / TCP）・SLMP（TCP / UDP × 3E / 4E を混ぜる）・Modbus TCP（他社製の simonvetter/modbus のクライアント。UnitID の応答設定を同時に切り替え続ける）・OPC UA（実際の変数ストア。同じ構造体の別のフィールドへの同時の書き込み・ホストの側の変数の更新も同時に走らせる）
   - FINS と SLMP は、読み書きの最中に Stop しても固まらず、また Start できることも確かめる（`TestStopDuringTraffic`）
-- **他社製のクライアント**（各プロトコルの `interop_*_test.go`）: Karakuri のサーバーとクライアントは同じコードでフレームを作るので、同じ読み違えをしていても自分同士の試験では見つからない。別の作者のライブラリからつないで確かめる: OPC UA は gopcua/opcua、FINS は l1va/gofins、SLMP は future-architect/go-mcprotocol、Modbus TCP は simonvetter/modbus（もともと使っている）
+- **他社製のクライアント**（各プロトコルの `interop_*_test.go`）: Karakuri のサーバーとクライアントは同じコードでフレームを作るので、同じ読み違えをしていても自分同士の試験では見つからない。別の作者のライブラリからつないで確かめる: OPC UA は gopcua/opcua、FINS は l1va/gofins、SLMP は future-architect/go-mcprotocol、Modbus TCP は simonvetter/modbus
   - テストだけで使う（`go.mod` の require に入るが、exe には入らない。`go list -deps .` で確かめられる）
 
 ## 新プロトコル追加手順

@@ -39,11 +39,26 @@ func NewProcessor(handler RequestHandler) *Processor {
 // ProcessASCII はリクエストを処理して、ASCII フレームのレスポンスを返す。
 // 処理は RTU と同じで、フレームの形式（CRC の代わりに LRC、16 進の文字列）だけが違う
 func (p *Processor) ProcessASCII(req *Request) []byte {
+	body := p.ProcessBody(req)
+	if body == nil {
+		return nil
+	}
+	return BuildASCIIFrame(body)
+}
+
+// IsUnitIDEnabled は、その UnitID 宛てのリクエストに応答するかを返す
+func (p *Processor) IsUnitIDEnabled(unitID byte) bool {
+	return p.handler.IsUnitIDEnabled(unitID)
+}
+
+// ProcessBody はリクエストを処理して、UnitID・機能コード・データ（CRC を除いたもの）を返す。
+// Modbus TCP は、これに MBAP ヘッダーを付けて送る。応答しない場合（UnitID がオフ）は nil を返す
+func (p *Processor) ProcessBody(req *Request) []byte {
 	res := p.Process(req)
 	if res == nil {
 		return nil
 	}
-	return BuildASCIIFrame(res[:len(res)-2]) // CRC を除いた中身
+	return res[:len(res)-2] // CRC を除いた中身
 }
 
 // Process はリクエストを処理してレスポンス（RTU フレーム）を返す。
