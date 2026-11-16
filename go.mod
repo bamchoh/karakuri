@@ -5,7 +5,10 @@ go 1.25.0
 require (
 	github.com/bamchoh/uastack v0.1.2
 	github.com/dop251/goja v0.0.0-20260106131823-651366fbe6e3
+	github.com/future-architect/go-mcprotocol v0.0.0-20210518065132-abfb4ef2fb9b
 	github.com/google/uuid v1.6.0
+	github.com/gopcua/opcua v0.9.1
+	github.com/l1va/gofins v0.0.0-20191108164614-37730db91d7d
 	github.com/simonvetter/modbus v1.6.4
 	github.com/wailsapp/wails/v2 v2.17.0
 	go.bug.st/serial v1.6.4
