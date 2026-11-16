@@ -649,6 +649,9 @@ JavaScript（goja）でPLC動作を記述。
 - **FINS**（`internal/protocols/fins/`）: `fins_test.go` / `area_test.go` はフレームのバイト列と、自分のサーバーへの接続で確認する。`client_test.go` は、応答を決められるフェイクの相手（UDP のソケット・TCP の待ち受け）で、遅れて届いた応答・壊れた応答・FINS/TCP のエラー・タイムアウト後のつなぎ直しを確認する
 - **SLMP**（`internal/protocols/slmp/slmp_test.go`）: 要求のフレームのバイト列と応答（マニュアルの例を含む）、自分のサーバーへの接続（TCP / UDP × 3E / 4E）、全デバイスの最後の番号の読み書き、フェイクの相手（遅れた応答・壊れた応答・タイムアウト）
 - **Modbus**（`internal/protocols/modbus/`）: `tcp_transport_test.go` は実際に TCP でつないで確認する。`rtu/rtu_test.go` は仕様書の既知のフレームで CRC / LRC を確認し、同じリクエストを RTU と ASCII の両方で処理して結果が一致することを確認する
+  - **RTU / ASCII のサーバーは、リクエストの個数を仕様どおりに確かめる**（`rtu/processor.go` の `checkRequest()`）: 個数が 0・上限（FC01 / 02 は 2000、FC03 / 04 は 125、FC15 は 1968、FC16 は 123）を超える・バイト数が個数と合わないものは例外 03、開始アドレス + 個数が 65536 を超えるものは例外 02。オフにした UnitID は、これより先に確かめる（応答しない）。テストは `rtu_test.go` の `TestProcess_QuantityLimits`
+    - Modbus TCP はライブラリ（simonvetter/modbus）が確かめるが、個数の誤りには例外を返さず、接続を閉じる（仕様では例外 03）
+  - `rtu_adapter_test.go` は、RTU / ASCII のサーバーと同じ組み立て（`rtu.Processor` → `RTUDataStoreAdapter` → `ModbusDataStore`）に、全部のファンクションコードと例外を通す（`rtu` のテストはフェイクの受け手を使うため）
   - `rtu/serial_test.go` は、COM ポートなしでシリアルの送受信を確かめる。サーバーはポートを `PortOpener`（`rtu/port.go`。中身は `internal/protocols/serialport` の別名）で開くので、テストではメモリ上のフェイクのポート（`fakePort`。実際のポートと同じく、タイムアウトしたら `Read` が `(0, nil)`、閉じたら error）を渡す（`newRTUServer` / `newASCIIServer`）。フレームの区切り・壊れたフレーム・Stop → Start を確認する
   - RTU のフレームの区切り（`SerialManager.ReadFrame()`）: ファンクションコードからリクエストの長さがわかるとき（FC01〜06・0F・10）は、その長さが届いて CRC が合った時点で 1 つのフレームにする（後ろに続けて届いたバイトは次に回す）。わからないときは、バイトが届かなくなった時点まで。無音の時間（3.5 文字時間）だけで厳密に区切らないのは、USB シリアル変換器が受信したバイトをまとめて渡し、フレームの途中に間が空くことがあるため
   - **ポートが使えなくなったとき**（USB シリアル変換器を抜いたなど）: 読み取りがエラーになったら、ポートを閉じて、1 秒おきに開き直す（`rtu/reconnect.go`。ログに「使えなくなりました」「開き直しました」を 1 回ずつ出す）。ライブラリは通信エラー（フレーミング・パリティ）では読み取りを失敗にしないので、`Read` のエラーは「ポートが使えなくなった」として扱う。閉じずに読み直すと、エラーがすぐ返り続けて CPU を 1 コア使い切り、挿し直しても同じハンドルでは読めない

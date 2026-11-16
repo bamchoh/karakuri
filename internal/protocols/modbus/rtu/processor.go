@@ -53,6 +53,9 @@ func (p *Processor) Process(req *Request) []byte {
 	if !p.handler.IsUnitIDEnabled(req.UnitID) {
 		return nil
 	}
+	if exCode := checkRequest(req); exCode != 0 {
+		return BuildExceptionResponse(req.UnitID, req.FunctionCode, exCode)
+	}
 
 	switch req.FunctionCode {
 	case FuncReadCoils:
@@ -199,4 +202,46 @@ func unpackUint16s(data []byte) []uint16 {
 		result[i] = binary.BigEndian.Uint16(data[i*2:])
 	}
 	return result
+}
+
+// 1 回のリクエストで扱える個数の上限（Modbus Application Protocol Specification V1.1b3 の 6.1〜6.12）
+const (
+	maxReadBits       = 0x07D0 // FC01 / FC02: 2000
+	maxReadRegisters  = 0x007D // FC03 / FC04: 125
+	maxWriteBits      = 0x07B0 // FC15: 1968
+	maxWriteRegisters = 0x007B // FC16: 123
+)
+
+// checkRequest は、仕様に合わないリクエストを例外コードにする（合っていれば 0）。
+// 個数が 0・上限を超える・バイト数が個数と合わないものは Illegal Data Value（03）、
+// 開始アドレス + 個数が 65536 を超えるものは Illegal Data Address（02）。
+// 確かめないと、空の応答や、バイト数が 1 バイトに収まらない壊れた応答を返したり、
+// 足りないデータを 0 として書いたりする
+func checkRequest(req *Request) byte {
+	var limit uint16
+	byteCount := -1 // 書き込みのとき、個数から決まるバイト数
+	switch req.FunctionCode {
+	case FuncReadCoils, FuncReadDiscreteInputs:
+		limit = maxReadBits
+	case FuncReadHoldingRegisters, FuncReadInputRegisters:
+		limit = maxReadRegisters
+	case FuncWriteMultipleCoils:
+		limit = maxWriteBits
+		byteCount = (int(req.Quantity) + 7) / 8
+	case FuncWriteMultipleRegisters:
+		limit = maxWriteRegisters
+		byteCount = int(req.Quantity) * 2
+	default:
+		return 0
+	}
+	if req.Quantity == 0 || req.Quantity > limit {
+		return ExceptionIllegalDataValue
+	}
+	if byteCount >= 0 && len(req.Data) != byteCount {
+		return ExceptionIllegalDataValue
+	}
+	if uint32(req.Address)+uint32(req.Quantity) > 0x10000 {
+		return ExceptionIllegalDataAddress
+	}
+	return 0
 }
