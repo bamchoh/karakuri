@@ -744,3 +744,20 @@ func TestUpdateValue_StructFieldErrorKeepsValue(t *testing.T) {
 		t.Errorf("失敗した書き込みで値が変わった: %v", m)
 	}
 }
+
+// ないフィールドへの書き込みは失敗にする（以前は黙って捨てて、成功したように見えた）
+func TestUpdateFieldValue_UnknownFieldFails(t *testing.T) {
+	store := NewVariableStore()
+	point, _ := NewStructTypeDef("Point", []StructField{{Name: "x", DataType: TypeINT}}, store.TypeResolver())
+	_ = store.RegisterStructType(point)
+	v, err := store.CreateVariable("P", "Point", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := store.UpdateFieldValue(v.ID, "nope", float64(1)); err == nil {
+		t.Error("ないフィールドへの UpdateFieldValue がエラーにならなかった")
+	}
+	if err := store.UpdateFieldValue(v.ID, "x", float64(3)); err != nil {
+		t.Errorf("あるフィールドへの書き込み: %v", err)
+	}
+}

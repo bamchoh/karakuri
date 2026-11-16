@@ -3,6 +3,7 @@ package application
 import (
 	"fmt"
 	"sort"
+	"strconv"
 
 	"karakuri/internal/domain/protocol"
 	"karakuri/internal/domain/variable"
@@ -397,4 +398,45 @@ func dataTypeDescription(dt variable.DataType) string {
 	default:
 		return ""
 	}
+}
+
+// ReadVariableValue は変数の値を読む。fieldPath が空なら変数全体、そうでなければフィールド・要素
+// （外部インデックス。例: "motor.speed", "items[1]"）。
+// LINT / ULINT の値は、構造体・配列の中にあるものも文字列にする（JSON の数値で桁を落とさないため）
+func (s *PLCService) ReadVariableValue(id, fieldPath string) (interface{}, error) {
+	v, err := s.variableStore.GetVariable(id)
+	if err != nil {
+		return nil, err
+	}
+	if fieldPath == "" {
+		return stringify64(v.Value), nil
+	}
+	val, err := s.variableStore.ReadFieldValue(v.Name, fieldPath)
+	if err != nil {
+		return nil, err
+	}
+	return stringify64(val), nil
+}
+
+// stringify64 は値の中の int64 / uint64（LINT / ULINT）を 10 進の文字列にする
+func stringify64(value interface{}) interface{} {
+	switch v := value.(type) {
+	case int64:
+		return strconv.FormatInt(v, 10)
+	case uint64:
+		return strconv.FormatUint(v, 10)
+	case []interface{}:
+		out := make([]interface{}, len(v))
+		for i, e := range v {
+			out[i] = stringify64(e)
+		}
+		return out
+	case map[string]interface{}:
+		out := make(map[string]interface{}, len(v))
+		for k, e := range v {
+			out[k] = stringify64(e)
+		}
+		return out
+	}
+	return value
 }

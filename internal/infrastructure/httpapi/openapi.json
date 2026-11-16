@@ -1,0 +1,352 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "Karakuri REST API",
+    "description": "Karakuri（PLC シミュレーター）を外から操作する API。エラーは {\"error\": \"理由\"} で返す（400: 入力の誤り・操作の失敗、404: 変数・接続先などがない）。変数・接続先は、パスに ID か名前のどちらでも書ける（ID を先に探す）。",
+    "version": "1"
+  },
+  "servers": [{ "url": "http://localhost:8765" }],
+  "tags": [
+    { "name": "サーバー" },
+    { "name": "メモリ" },
+    { "name": "変数" },
+    { "name": "クライアント" },
+    { "name": "プロジェクト" }
+  ],
+  "paths": {
+    "/api/openapi.json": {
+      "get": { "summary": "この仕様", "responses": { "200": { "description": "OpenAPI 3.0 の JSON" } } }
+    },
+    "/api/servers": {
+      "get": {
+        "tags": ["サーバー"], "summary": "サーバーの一覧",
+        "responses": { "200": { "description": "サーバーの一覧", "content": { "application/json": { "schema": { "type": "array", "items": { "$ref": "#/components/schemas/ServerInstance" } } } } } }
+      },
+      "post": {
+        "tags": ["サーバー"], "summary": "サーバーを追加する",
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "type": "object", "required": ["protocolType"], "properties": { "protocolType": { "type": "string", "example": "modbus-tcp" }, "variantId": { "type": "string", "description": "空なら最初のバリアント" } } } } } },
+        "responses": { "201": { "description": "追加した" }, "400": { "$ref": "#/components/responses/Error" } }
+      }
+    },
+    "/api/servers/{protocolType}": {
+      "parameters": [{ "$ref": "#/components/parameters/protocolType" }],
+      "delete": { "tags": ["サーバー"], "summary": "サーバーを削除する（起動中は削除できない）", "responses": { "204": { "description": "削除した" }, "400": { "$ref": "#/components/responses/Error" } } }
+    },
+    "/api/servers/{protocolType}/start": {
+      "parameters": [{ "$ref": "#/components/parameters/protocolType" }],
+      "post": { "tags": ["サーバー"], "summary": "サーバーを起動する", "responses": { "204": { "description": "起動した" }, "400": { "$ref": "#/components/responses/Error" } } }
+    },
+    "/api/servers/{protocolType}/stop": {
+      "parameters": [{ "$ref": "#/components/parameters/protocolType" }],
+      "post": { "tags": ["サーバー"], "summary": "サーバーを停止する", "responses": { "204": { "description": "停止した" }, "400": { "$ref": "#/components/responses/Error" } } }
+    },
+    "/api/servers/{protocolType}/status": {
+      "parameters": [{ "$ref": "#/components/parameters/protocolType" }],
+      "get": { "tags": ["サーバー"], "summary": "サーバーの状態", "responses": { "200": { "description": "状態", "content": { "application/json": { "schema": { "type": "object", "properties": { "status": { "type": "string" } } } } } } } }
+    },
+    "/api/servers/{protocolType}/config": {
+      "parameters": [{ "$ref": "#/components/parameters/protocolType" }],
+      "get": { "tags": ["サーバー"], "summary": "サーバーの設定", "responses": { "200": { "description": "設定", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ServerConfig" } } } }, "404": { "$ref": "#/components/responses/Error" } } },
+      "put": { "tags": ["サーバー"], "summary": "サーバーの設定を変える（起動中は変えられない）", "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ServerConfig" } } } }, "responses": { "204": { "description": "変えた" }, "400": { "$ref": "#/components/responses/Error" } } }
+    },
+    "/api/memory/{protocolType}/areas": {
+      "parameters": [{ "$ref": "#/components/parameters/protocolType" }],
+      "get": { "tags": ["メモリ"], "summary": "メモリエリアの一覧", "responses": { "200": { "description": "エリアの一覧", "content": { "application/json": { "schema": { "type": "array", "items": { "$ref": "#/components/schemas/MemoryArea" } } } } } } }
+    },
+    "/api/memory/{protocolType}/{area}/words": {
+      "parameters": [{ "$ref": "#/components/parameters/protocolType" }, { "$ref": "#/components/parameters/area" }],
+      "get": {
+        "tags": ["メモリ"], "summary": "ワードを読む",
+        "parameters": [{ "$ref": "#/components/parameters/address" }, { "$ref": "#/components/parameters/count" }],
+        "responses": { "200": { "description": "値（0〜65535）", "content": { "application/json": { "schema": { "type": "object", "properties": { "values": { "type": "array", "items": { "type": "integer" } } } } } } }, "400": { "$ref": "#/components/responses/Error" } }
+      },
+      "put": {
+        "tags": ["メモリ"], "summary": "address から続けて複数ワードを書く（範囲外なら 1 つも書かない）",
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "type": "object", "required": ["address", "values"], "properties": { "address": { "type": "integer", "minimum": 0 }, "values": { "type": "array", "minItems": 1, "items": { "type": "integer", "minimum": -32768, "maximum": 65535 } } } }, "example": { "address": 0, "values": [1, 2, 3] } } } },
+        "responses": { "204": { "description": "書いた" }, "400": { "$ref": "#/components/responses/Error" } }
+      }
+    },
+    "/api/memory/{protocolType}/{area}/words/{address}": {
+      "parameters": [{ "$ref": "#/components/parameters/protocolType" }, { "$ref": "#/components/parameters/area" }, { "$ref": "#/components/parameters/pathAddress" }],
+      "put": {
+        "tags": ["メモリ"], "summary": "ワードを 1 つ書く",
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "type": "object", "required": ["value"], "properties": { "value": { "type": "integer", "minimum": -32768, "maximum": 65535, "description": "負の数は 2 の補数" } } } } } },
+        "responses": { "204": { "description": "書いた" }, "400": { "$ref": "#/components/responses/Error" } }
+      }
+    },
+    "/api/memory/{protocolType}/{area}/bits": {
+      "parameters": [{ "$ref": "#/components/parameters/protocolType" }, { "$ref": "#/components/parameters/area" }],
+      "get": {
+        "tags": ["メモリ"], "summary": "ビットを読む",
+        "parameters": [{ "$ref": "#/components/parameters/address" }, { "$ref": "#/components/parameters/count" }],
+        "responses": { "200": { "description": "値", "content": { "application/json": { "schema": { "type": "object", "properties": { "values": { "type": "array", "items": { "type": "boolean" } } } } } } }, "400": { "$ref": "#/components/responses/Error" } }
+      },
+      "put": {
+        "tags": ["メモリ"], "summary": "address から続けて複数ビットを書く（範囲外なら 1 つも書かない）",
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "type": "object", "required": ["address", "values"], "properties": { "address": { "type": "integer", "minimum": 0 }, "values": { "type": "array", "minItems": 1, "items": { "type": "boolean" } } } } } } },
+        "responses": { "204": { "description": "書いた" }, "400": { "$ref": "#/components/responses/Error" } }
+      }
+    },
+    "/api/memory/{protocolType}/{area}/bits/{address}": {
+      "parameters": [{ "$ref": "#/components/parameters/protocolType" }, { "$ref": "#/components/parameters/area" }, { "$ref": "#/components/parameters/pathAddress" }],
+      "put": {
+        "tags": ["メモリ"], "summary": "ビットを 1 つ書く",
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "type": "object", "required": ["value"], "properties": { "value": { "type": "boolean" } } } } } },
+        "responses": { "204": { "description": "書いた" }, "400": { "$ref": "#/components/responses/Error" } }
+      }
+    },
+    "/api/variables": {
+      "get": { "tags": ["変数"], "summary": "変数の一覧（名前順）", "responses": { "200": { "description": "変数の一覧", "content": { "application/json": { "schema": { "type": "array", "items": { "$ref": "#/components/schemas/Variable" } } } } } } },
+      "post": {
+        "tags": ["変数"], "summary": "変数を作る",
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "type": "object", "required": ["name", "dataType"], "properties": { "name": { "type": "string" }, "dataType": { "type": "string", "example": "ARRAY[1..3] OF INT" }, "value": { "description": "初期値（省けば既定値）" } } } } } },
+        "responses": { "201": { "description": "作った変数", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Variable" } } } }, "400": { "$ref": "#/components/responses/Error" } }
+      }
+    },
+    "/api/variables/{ref}": {
+      "parameters": [{ "$ref": "#/components/parameters/variableRef" }],
+      "get": { "tags": ["変数"], "summary": "変数 1 つ", "responses": { "200": { "description": "変数", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Variable" } } } }, "404": { "$ref": "#/components/responses/Error" } } },
+      "put": {
+        "tags": ["変数"], "summary": "名前・データ型を変える（省いた方はそのまま。データ型を変えると値は既定値に戻り、マッピングは残る）",
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "type": "object", "properties": { "name": { "type": "string" }, "dataType": { "type": "string" } } } } } },
+        "responses": { "200": { "description": "変えた変数", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Variable" } } } }, "400": { "$ref": "#/components/responses/Error" }, "404": { "$ref": "#/components/responses/Error" } }
+      },
+      "delete": { "tags": ["変数"], "summary": "変数を削除する", "responses": { "204": { "description": "削除した" }, "404": { "$ref": "#/components/responses/Error" } } }
+    },
+    "/api/variables/{ref}/value": {
+      "parameters": [{ "$ref": "#/components/parameters/variableRef" }, { "$ref": "#/components/parameters/fieldPath" }],
+      "get": { "tags": ["変数"], "summary": "値を読む（LINT / ULINT は文字列）", "responses": { "200": { "description": "値", "content": { "application/json": { "schema": { "type": "object", "properties": { "value": {} } } } } }, "400": { "$ref": "#/components/responses/Error" }, "404": { "$ref": "#/components/responses/Error" } } },
+      "put": {
+        "tags": ["変数"], "summary": "値を書く（LINT / ULINT は数値でも文字列でも、64 ビットの全範囲を書ける）",
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "type": "object", "required": ["value"], "properties": { "value": {} } }, "example": { "value": 100 } } } },
+        "responses": { "204": { "description": "書いた" }, "400": { "$ref": "#/components/responses/Error" }, "404": { "$ref": "#/components/responses/Error" } }
+      }
+    },
+    "/api/variables/{ref}/mappings": {
+      "parameters": [{ "$ref": "#/components/parameters/variableRef" }],
+      "get": { "tags": ["変数"], "summary": "マッピングの一覧", "responses": { "200": { "description": "マッピング", "content": { "application/json": { "schema": { "type": "array", "items": { "$ref": "#/components/schemas/ProtocolMapping" } } } } }, "404": { "$ref": "#/components/responses/Error" } } },
+      "put": {
+        "tags": ["変数"], "summary": "マッピングをまるごと置き換える（空の配列ならすべて外す。範囲の検査はしない）",
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "type": "array", "items": { "$ref": "#/components/schemas/ProtocolMapping" } } } } },
+        "responses": { "204": { "description": "置き換えた" }, "400": { "$ref": "#/components/responses/Error" }, "404": { "$ref": "#/components/responses/Error" } }
+      }
+    },
+    "/api/variables/{ref}/node-publishings/{protocolType}": {
+      "parameters": [{ "$ref": "#/components/parameters/variableRef" }, { "$ref": "#/components/parameters/protocolType" }],
+      "put": {
+        "tags": ["変数"], "summary": "ノード公開の設定（OPC UA など）",
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "type": "object", "properties": { "enabled": { "type": "boolean" }, "accessMode": { "type": "string", "enum": ["read", "write", "readwrite"], "default": "readwrite" } } } } } },
+        "responses": { "204": { "description": "設定した" }, "400": { "$ref": "#/components/responses/Error" }, "404": { "$ref": "#/components/responses/Error" } }
+      }
+    },
+    "/api/values": {
+      "get": {
+        "tags": ["変数"], "summary": "値をまとめて読む",
+        "parameters": [{ "name": "names", "in": "query", "description": "カンマ区切りの名前。フィールド・要素まで書ける（Motor1.speed, Values[1]）。省けばすべての変数", "schema": { "type": "string" } }],
+        "responses": { "200": { "description": "名前 → 値", "content": { "application/json": { "schema": { "type": "object", "additionalProperties": {} }, "example": { "Counter": 5, "Motor1.speed": 100 } } } }, "404": { "$ref": "#/components/responses/Error" } }
+      },
+      "put": {
+        "tags": ["変数"], "summary": "値をまとめて書く（変数がなければ 1 つも書かない。名前順に書き、書けないものがあればそこで止まる）",
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "type": "object", "additionalProperties": {} }, "example": { "Counter": 5, "Motor1.speed": 100, "Values[1]": 3 } } } },
+        "responses": { "204": { "description": "書いた" }, "400": { "$ref": "#/components/responses/Error" }, "404": { "$ref": "#/components/responses/Error" } }
+      }
+    },
+    "/api/data-types": {
+      "get": { "tags": ["変数"], "summary": "使えるデータ型", "responses": { "200": { "description": "データ型の一覧" } } }
+    },
+    "/api/struct-types": {
+      "get": { "tags": ["変数"], "summary": "構造体型の一覧", "responses": { "200": { "description": "構造体型", "content": { "application/json": { "schema": { "type": "array", "items": { "$ref": "#/components/schemas/StructType" } } } } } } },
+      "post": {
+        "tags": ["変数"], "summary": "構造体型を登録する（offset と wordCount は計算するので省いてよい）",
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/StructType" }, "example": { "name": "Motor", "fields": [{ "name": "speed", "dataType": "INT" }, { "name": "running", "dataType": "BOOL" }] } } } },
+        "responses": { "201": { "description": "登録した構造体型", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/StructType" } } } }, "400": { "$ref": "#/components/responses/Error" } }
+      }
+    },
+    "/api/struct-types/{name}": {
+      "parameters": [{ "name": "name", "in": "path", "required": true, "schema": { "type": "string" } }],
+      "delete": { "tags": ["変数"], "summary": "構造体型を削除する（使っている変数・型があれば削除できない）", "responses": { "204": { "description": "削除した" }, "400": { "$ref": "#/components/responses/Error" } } }
+    },
+    "/api/mapping-targets": {
+      "get": { "tags": ["変数"], "summary": "マッピングできる先（サーバーと、マッピングできる接続先。接続先の protocolType は client:<ID>）", "responses": { "200": { "description": "マッピング先" } } }
+    },
+    "/api/variable-statuses": {
+      "get": { "tags": ["変数"], "summary": "接続先にマッピングした変数の同期の状態", "responses": { "200": { "description": "状態の一覧（state: \"\" / ok / comm_error / invalid / stopped）" } } }
+    },
+    "/api/client-protocols": {
+      "get": { "tags": ["クライアント"], "summary": "クライアントとして使えるプロトコル（接続先の設定項目・コマンドの定義）", "responses": { "200": { "description": "プロトコルの一覧" } } }
+    },
+    "/api/clients": {
+      "get": { "tags": ["クライアント"], "summary": "接続先の一覧（追加した順）", "responses": { "200": { "description": "接続先", "content": { "application/json": { "schema": { "type": "array", "items": { "$ref": "#/components/schemas/Client" } } } } } } },
+      "post": {
+        "tags": ["クライアント"], "summary": "接続先を追加する（省いた設定は既定値）",
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "type": "object", "required": ["protocolType"], "properties": { "protocolType": { "type": "string" }, "name": { "type": "string" }, "settings": { "type": "object", "additionalProperties": {} } } }, "example": { "protocolType": "modbus-tcp", "name": "PLC1", "settings": { "host": "127.0.0.1", "port": 502 } } } } },
+        "responses": { "201": { "description": "追加した接続先", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Client" } } } }, "400": { "$ref": "#/components/responses/Error" } }
+      }
+    },
+    "/api/clients/{ref}": {
+      "parameters": [{ "$ref": "#/components/parameters/clientRef" }],
+      "get": { "tags": ["クライアント"], "summary": "接続先 1 つ", "responses": { "200": { "description": "接続先", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Client" } } } }, "404": { "$ref": "#/components/responses/Error" } } },
+      "put": {
+        "tags": ["クライアント"], "summary": "名前と設定を変える（省いた名前・設定の項目はそのまま）",
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "type": "object", "properties": { "name": { "type": "string" }, "settings": { "type": "object", "additionalProperties": {} } } } } } },
+        "responses": { "200": { "description": "変えた接続先", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Client" } } } }, "400": { "$ref": "#/components/responses/Error" }, "404": { "$ref": "#/components/responses/Error" } }
+      },
+      "delete": { "tags": ["クライアント"], "summary": "接続先を削除する（この接続先へのマッピングも外れる）", "responses": { "204": { "description": "削除した" }, "404": { "$ref": "#/components/responses/Error" } } }
+    },
+    "/api/clients/{ref}/disconnect": {
+      "parameters": [{ "$ref": "#/components/parameters/clientRef" }],
+      "post": { "tags": ["クライアント"], "summary": "接続を閉じる", "responses": { "204": { "description": "閉じた" }, "404": { "$ref": "#/components/responses/Error" } } }
+    },
+    "/api/clients/{ref}/build": {
+      "parameters": [{ "$ref": "#/components/parameters/clientRef" }],
+      "post": {
+        "tags": ["クライアント"], "summary": "コマンドと項目の値からリクエストを組み立てる（送らない）",
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/BuildInput" } } } },
+        "responses": { "200": { "description": "16 進のリクエスト", "content": { "application/json": { "schema": { "type": "object", "properties": { "request": { "type": "string", "example": "03 00 00 00 0A" } } } } } }, "400": { "$ref": "#/components/responses/Error" }, "404": { "$ref": "#/components/responses/Error" } }
+      }
+    },
+    "/api/clients/{ref}/send": {
+      "parameters": [{ "$ref": "#/components/parameters/clientRef" }],
+      "post": {
+        "tags": ["クライアント"], "summary": "リクエストを送る（request の 16 進か、commandId と params で組み立てて）。タイムアウト・例外応答も 200 で、結果の status に入る",
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "type": "object", "properties": { "request": { "type": "string" }, "commandId": { "type": "string" }, "params": { "type": "object", "additionalProperties": {} } } }, "example": { "commandId": "3", "params": { "address": 0, "count": 10 } } } } },
+        "responses": { "200": { "description": "結果", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/CommandResult" } } } }, "400": { "$ref": "#/components/responses/Error" }, "404": { "$ref": "#/components/responses/Error" } }
+      }
+    },
+    "/api/clients/{ref}/browse": {
+      "parameters": [{ "$ref": "#/components/parameters/clientRef" }],
+      "get": {
+        "tags": ["クライアント"], "summary": "機器のアドレス（OPC UA ならノード）のうち、parent の子",
+        "parameters": [{ "name": "parent", "in": "query", "description": "省けば、いちばん上", "schema": { "type": "string" } }],
+        "responses": { "200": { "description": "子の一覧" }, "400": { "$ref": "#/components/responses/Error" }, "404": { "$ref": "#/components/responses/Error" } }
+      }
+    },
+    "/api/clients/{ref}/commands": {
+      "parameters": [{ "$ref": "#/components/parameters/clientRef" }],
+      "get": { "tags": ["クライアント"], "summary": "保存したコマンドの一覧", "responses": { "200": { "description": "保存したコマンド", "content": { "application/json": { "schema": { "type": "array", "items": { "$ref": "#/components/schemas/SavedCommand" } } } } }, "404": { "$ref": "#/components/responses/Error" } } },
+      "post": {
+        "tags": ["クライアント"], "summary": "コマンドを保存する",
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/SavedCommandInput" } } } },
+        "responses": { "201": { "description": "保存したコマンド", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/SavedCommand" } } } }, "400": { "$ref": "#/components/responses/Error" }, "404": { "$ref": "#/components/responses/Error" } }
+      }
+    },
+    "/api/clients/{ref}/commands/{cmd}": {
+      "parameters": [{ "$ref": "#/components/parameters/clientRef" }, { "$ref": "#/components/parameters/commandRef" }],
+      "put": {
+        "tags": ["クライアント"], "summary": "保存したコマンドを置き換える（mode を省けば、名前だけを変える）",
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/SavedCommandInput" } } } },
+        "responses": { "204": { "description": "変えた" }, "400": { "$ref": "#/components/responses/Error" }, "404": { "$ref": "#/components/responses/Error" } }
+      },
+      "delete": { "tags": ["クライアント"], "summary": "保存したコマンドを削除する", "responses": { "204": { "description": "削除した" }, "404": { "$ref": "#/components/responses/Error" } } }
+    },
+    "/api/clients/{ref}/commands/{cmd}/send": {
+      "parameters": [{ "$ref": "#/components/parameters/clientRef" }, { "$ref": "#/components/parameters/commandRef" }],
+      "post": { "tags": ["クライアント"], "summary": "保存したコマンドを送る", "responses": { "200": { "description": "結果", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/CommandResult" } } } }, "400": { "$ref": "#/components/responses/Error" }, "404": { "$ref": "#/components/responses/Error" } } }
+    },
+    "/api/clients/{ref}/polling": {
+      "parameters": [{ "$ref": "#/components/parameters/clientRef" }],
+      "get": { "tags": ["クライアント"], "summary": "ポーリングの状態（周期・読み取り項目と最後の結果）", "responses": { "200": { "description": "ポーリングの状態" }, "404": { "$ref": "#/components/responses/Error" } } },
+      "put": {
+        "tags": ["クライアント"], "summary": "周期と、通信エラーにするまでの失敗の回数を変える（省いたものはそのまま）",
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "type": "object", "properties": { "intervalMs": { "type": "integer", "minimum": 50, "maximum": 3600000 }, "failThreshold": { "type": "integer", "minimum": 1, "maximum": 100 } } } } } },
+        "responses": { "200": { "description": "変えたあとのポーリングの状態" }, "400": { "$ref": "#/components/responses/Error" }, "404": { "$ref": "#/components/responses/Error" } }
+      }
+    },
+    "/api/clients/{ref}/polling/start": {
+      "parameters": [{ "$ref": "#/components/parameters/clientRef" }],
+      "post": { "tags": ["クライアント"], "summary": "ポーリングを始める", "responses": { "204": { "description": "始めた" }, "400": { "$ref": "#/components/responses/Error" }, "404": { "$ref": "#/components/responses/Error" } } }
+    },
+    "/api/clients/{ref}/polling/stop": {
+      "parameters": [{ "$ref": "#/components/parameters/clientRef" }],
+      "post": { "tags": ["クライアント"], "summary": "ポーリングを止める", "responses": { "204": { "description": "止めた" }, "404": { "$ref": "#/components/responses/Error" } } }
+    },
+    "/api/clients/{ref}/polling/items": {
+      "parameters": [{ "$ref": "#/components/parameters/clientRef" }],
+      "post": {
+        "tags": ["クライアント"], "summary": "読み取り項目を足す（pollable のコマンドだけ）",
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/PollItemInput" } } } },
+        "responses": { "201": { "description": "足した項目" }, "400": { "$ref": "#/components/responses/Error" }, "404": { "$ref": "#/components/responses/Error" } }
+      }
+    },
+    "/api/clients/{ref}/polling/items/{itemId}": {
+      "parameters": [{ "$ref": "#/components/parameters/clientRef" }, { "$ref": "#/components/parameters/itemId" }],
+      "put": {
+        "tags": ["クライアント"], "summary": "読み取り項目を変える",
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/PollItemInput" } } } },
+        "responses": { "204": { "description": "変えた" }, "400": { "$ref": "#/components/responses/Error" }, "404": { "$ref": "#/components/responses/Error" } }
+      },
+      "delete": { "tags": ["クライアント"], "summary": "読み取り項目を削除する", "responses": { "204": { "description": "削除した" }, "400": { "$ref": "#/components/responses/Error" }, "404": { "$ref": "#/components/responses/Error" } } }
+    },
+    "/api/clients/{ref}/subscription": {
+      "parameters": [{ "$ref": "#/components/parameters/clientRef" }],
+      "get": { "tags": ["クライアント"], "summary": "サブスクリプションの状態（対応するプロトコルの接続先だけ）", "responses": { "200": { "description": "サブスクリプションの状態" }, "400": { "$ref": "#/components/responses/Error" }, "404": { "$ref": "#/components/responses/Error" } } },
+      "put": {
+        "tags": ["クライアント"], "summary": "通知の間隔を変える",
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "type": "object", "properties": { "intervalMs": { "type": "integer", "minimum": 50, "maximum": 3600000 } } } } } },
+        "responses": { "200": { "description": "変えたあとの状態" }, "400": { "$ref": "#/components/responses/Error" }, "404": { "$ref": "#/components/responses/Error" } }
+      }
+    },
+    "/api/clients/{ref}/subscription/start": {
+      "parameters": [{ "$ref": "#/components/parameters/clientRef" }],
+      "post": { "tags": ["クライアント"], "summary": "監視を始める", "responses": { "204": { "description": "始めた" }, "400": { "$ref": "#/components/responses/Error" }, "404": { "$ref": "#/components/responses/Error" } } }
+    },
+    "/api/clients/{ref}/subscription/stop": {
+      "parameters": [{ "$ref": "#/components/parameters/clientRef" }],
+      "post": { "tags": ["クライアント"], "summary": "監視を止める", "responses": { "204": { "description": "止めた" }, "400": { "$ref": "#/components/responses/Error" }, "404": { "$ref": "#/components/responses/Error" } } }
+    },
+    "/api/clients/{ref}/subscription/items": {
+      "parameters": [{ "$ref": "#/components/parameters/clientRef" }],
+      "post": {
+        "tags": ["クライアント"], "summary": "監視項目を足す（1 回の入力から、いくつも足されることがある）",
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "type": "object", "properties": { "params": { "type": "object", "additionalProperties": {} } } }, "example": { "params": { "nodeId": "ns=2;s=Counter" } } } } },
+        "responses": { "201": { "description": "足した項目の一覧" }, "400": { "$ref": "#/components/responses/Error" }, "404": { "$ref": "#/components/responses/Error" } }
+      }
+    },
+    "/api/clients/{ref}/subscription/items/{itemId}": {
+      "parameters": [{ "$ref": "#/components/parameters/clientRef" }, { "$ref": "#/components/parameters/itemId" }],
+      "delete": { "tags": ["クライアント"], "summary": "監視項目を削除する", "responses": { "204": { "description": "削除した" }, "400": { "$ref": "#/components/responses/Error" }, "404": { "$ref": "#/components/responses/Error" } } }
+    },
+    "/api/client-logs": {
+      "get": { "tags": ["クライアント"], "summary": "送ったコマンドの履歴（新しい順、最大 200 件。ポーリングは含まない）", "responses": { "200": { "description": "履歴", "content": { "application/json": { "schema": { "type": "array", "items": { "$ref": "#/components/schemas/CommandResult" } } } } } } },
+      "delete": { "tags": ["クライアント"], "summary": "履歴を消す", "responses": { "204": { "description": "消した" } } }
+    },
+    "/api/project/export": {
+      "get": { "tags": ["プロジェクト"], "summary": "プロジェクトを JSON で取り出す", "responses": { "200": { "description": "プロジェクト" } } }
+    },
+    "/api/project/import": {
+      "post": { "tags": ["プロジェクト"], "summary": "プロジェクトを読み込む（いまの状態は置き換わる）", "requestBody": { "required": true, "content": { "application/json": { "schema": { "type": "object" } } } }, "responses": { "204": { "description": "読み込んだ" }, "400": { "$ref": "#/components/responses/Error" } } }
+    }
+  },
+  "components": {
+    "parameters": {
+      "protocolType": { "name": "protocolType", "in": "path", "required": true, "description": "プロトコルタイプ（modbus-tcp, opcua, fins, slmp など）", "schema": { "type": "string" } },
+      "area": { "name": "area", "in": "path", "required": true, "description": "メモリエリアの ID（areas で調べる）", "schema": { "type": "string" } },
+      "address": { "name": "address", "in": "query", "description": "0 始まりのアドレス（既定 0）", "schema": { "type": "integer", "minimum": 0, "default": 0 } },
+      "count": { "name": "count", "in": "query", "description": "個数（既定 1）", "schema": { "type": "integer", "minimum": 1, "maximum": 65535, "default": 1 } },
+      "pathAddress": { "name": "address", "in": "path", "required": true, "description": "0 始まりのアドレス", "schema": { "type": "integer", "minimum": 0 } },
+      "variableRef": { "name": "ref", "in": "path", "required": true, "description": "変数の ID か名前", "schema": { "type": "string" } },
+      "fieldPath": { "name": "path", "in": "query", "description": "フィールド・要素（speed, [1], [1].name。添字は宣言どおり）。省けば変数全体", "schema": { "type": "string" } },
+      "clientRef": { "name": "ref", "in": "path", "required": true, "description": "接続先の ID か名前", "schema": { "type": "string" } },
+      "commandRef": { "name": "cmd", "in": "path", "required": true, "description": "保存したコマンドの ID か名前", "schema": { "type": "string" } },
+      "itemId": { "name": "itemId", "in": "path", "required": true, "schema": { "type": "string" } }
+    },
+    "responses": {
+      "Error": { "description": "エラー", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } }
+    },
+    "schemas": {
+      "Error": { "type": "object", "properties": { "error": { "type": "string" } } },
+      "ServerInstance": { "type": "object", "properties": { "protocolType": { "type": "string" }, "displayName": { "type": "string" }, "variant": { "type": "string" }, "status": { "type": "string" } } },
+      "ServerConfig": { "type": "object", "properties": { "protocolType": { "type": "string" }, "variant": { "type": "string" }, "settings": { "type": "object", "additionalProperties": {} } } },
+      "MemoryArea": { "type": "object", "properties": { "id": { "type": "string" }, "displayName": { "type": "string" }, "isBit": { "type": "boolean" }, "size": { "type": "integer" }, "readOnly": { "type": "boolean" }, "oneOrigin": { "type": "boolean", "description": "画面のアドレスは 1 始まり（API は 0 始まり）" }, "bitsOf": { "type": "string" }, "hexAddress": { "type": "boolean" } } },
+      "Variable": { "type": "object", "properties": { "id": { "type": "string" }, "name": { "type": "string" }, "dataType": { "type": "string" }, "value": { "description": "値（LINT / ULINT は文字列）" }, "mappings": { "type": "array", "items": { "$ref": "#/components/schemas/ProtocolMapping" } }, "nodePublishings": { "type": "array", "items": { "type": "object", "properties": { "protocolType": { "type": "string" }, "enabled": { "type": "boolean" }, "accessMode": { "type": "string" } } } } } },
+      "ProtocolMapping": { "type": "object", "required": ["protocolType", "memoryArea", "address"], "properties": { "protocolType": { "type": "string", "description": "サーバーのプロトコルタイプか client:<接続先の ID>" }, "memoryArea": { "type": "string" }, "address": { "type": "integer", "description": "0 始まり" }, "endianness": { "type": "string", "enum": ["big", "little"] } } },
+      "StructType": { "type": "object", "required": ["name", "fields"], "properties": { "name": { "type": "string" }, "fields": { "type": "array", "items": { "type": "object", "properties": { "name": { "type": "string" }, "dataType": { "type": "string" }, "offset": { "type": "integer" } } } }, "wordCount": { "type": "integer" } } },
+      "Client": { "type": "object", "properties": { "id": { "type": "string" }, "name": { "type": "string" }, "protocolType": { "type": "string" }, "displayName": { "type": "string" }, "settings": { "type": "object", "additionalProperties": {} }, "connected": { "type": "boolean" }, "polling": { "type": "boolean" }, "subscribing": { "type": "boolean" } } },
+      "BuildInput": { "type": "object", "required": ["commandId"], "properties": { "commandId": { "type": "string", "description": "client-protocols の commands の id" }, "params": { "type": "object", "additionalProperties": {} } } },
+      "CommandResult": { "type": "object", "properties": { "seq": { "type": "integer" }, "clientId": { "type": "string" }, "clientName": { "type": "string" }, "at": { "type": "string" }, "request": { "type": "string" }, "sent": { "type": "string" }, "received": { "type": "string" }, "elapsedMs": { "type": "number" }, "status": { "type": "string", "enum": ["ok", "exception", "timeout", "error"] }, "error": { "type": "string" }, "summary": { "type": "string" }, "values": { "type": "array", "items": { "type": "object", "properties": { "label": { "type": "string" }, "value": { "type": "string" }, "bit": { "type": "boolean" }, "word": { "type": "integer" } } } }, "label": { "type": "string" } } },
+      "SavedCommand": { "type": "object", "properties": { "id": { "type": "string" }, "name": { "type": "string" }, "mode": { "type": "string", "enum": ["build", "hex"] }, "commandId": { "type": "string" }, "params": { "type": "object", "additionalProperties": {} }, "request": { "type": "string" }, "summary": { "type": "string" } } },
+      "SavedCommandInput": { "type": "object", "properties": { "name": { "type": "string" }, "mode": { "type": "string", "enum": ["build", "hex"] }, "commandId": { "type": "string" }, "params": { "type": "object", "additionalProperties": {} }, "request": { "type": "string", "description": "mode が hex のとき" } } },
+      "PollItemInput": { "type": "object", "required": ["commandId"], "properties": { "commandId": { "type": "string" }, "params": { "type": "object", "additionalProperties": {} }, "format": { "type": "string" } } }
+    }
+  }
+}

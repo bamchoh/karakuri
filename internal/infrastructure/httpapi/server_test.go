@@ -304,9 +304,9 @@ func TestVariables_Errors(t *testing.T) {
 	api.do("POST", "/api/variables", `{"name":`).isError(http.StatusBadRequest)                                 // 不正な JSON
 	api.do("POST", "/api/variables", `{"name":"A","dataType":"INT","value":0}`).isError(http.StatusBadRequest)  // 名前の重複
 	api.do("POST", "/api/variables", `{"name":"B","dataType":"NOPE","value":0}`).isError(http.StatusBadRequest) // 知らない型
-	api.do("PUT", "/api/variables/no-such-id/value", `{"value":1}`).isError(http.StatusBadRequest)              // 存在しない変数
-	api.do("PUT", "/api/variables/no-such-id/value", `{"value":`).isError(http.StatusBadRequest)                // 不正な JSON
-	api.do("DELETE", "/api/variables/no-such-id", "").isError(http.StatusBadRequest)
+	api.do("PUT", "/api/variables/no-such-id/value", `{"value":1}`).isError(http.StatusNotFound)                // 存在しない変数
+	api.do("PUT", "/api/variables/A/value", `{"value":`).isError(http.StatusBadRequest)                         // 不正な JSON
+	api.do("DELETE", "/api/variables/no-such-id", "").isError(http.StatusNotFound)
 }
 
 // ===== プロジェクト =====

@@ -20,7 +20,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **モニタリング**: 任意のレジスタをリアルタイム監視・書き込み（ドラッグ&ドロップ並べ替え対応）
 - **プロトコルマッピング**: 変数を複数プロトコルのメモリアドレスにマッピング可能
 - **アプリ全体のログ**: サーバーの起動・停止、クライアントの通信エラーなどを、どのページからも画面の下の欄で見られる
-- **REST HTTP API**: アプリをネットワーク経由で外部から操作可能（デフォルトポート 8765）。サーバー管理・レジスタ読み書き・変数管理・プロジェクトエクスポート/インポートに対応
+- **REST HTTP API**: アプリをネットワーク経由で外部から操作可能（デフォルトポート 8765）。サーバー管理・レジスタ読み書き（複数ワード・ビットの一括書き込み）・変数（名前での読み書き・フィールド・マッピング・構造体型）・クライアント（送信・保存したコマンド・ポーリング・サブスクリプション）・プロジェクトエクスポート/インポートに対応。仕様は `GET /api/openapi.json`
 - **クライアント機能**: Karakuri から外部の機器（Modbus TCP・Modbus RTU・Modbus ASCII・OPC UA・FINS・FINS（Host Link）・SLMP・MC プロトコル（シリアル）のサーバー）につないで、コマンドを送る。コマンド（Modbus はファンクションコード、OPC UA は Read / Write / Browse）を選んで組み立てる方式と、16 進（Modbus は PDU、OPC UA はサービスのリクエスト本体）で直接入れる方式がある。送受信のバイト列・応答の解釈・履歴を表示する。読み取り項目を周期的に読むポーリングもできる。OPC UA は、サブスクリプション（値が変わったときに機器の側から知らせが届く）にも対応する。変数を接続先のアドレスにマッピングすると、ポーリング中に変数と同期する（通信エラー・書き込み未反映の状態を表示。Modbus TCP・Modbus RTU・Modbus ASCII・FINS・FINS（Host Link）・SLMP・MC プロトコル（シリアル））
 
 ## Build and Development Commands
@@ -223,7 +223,11 @@ internal/
 │       └── datastore.go    # emptyDataStore（OPC UA はレジスタを持たない）
 └── infrastructure/   # インフラ層（プロトコル固有実装は含まない）
     ├── httpapi/      # REST HTTP APIサーバー実装
-    │   └── server.go       # HTTPAPIServer（net/http ServeMux使用）
+    │   ├── server.go       # Server（起動・停止）・エンドポイントの一覧（routes()）・共通のヘルパー
+    │   ├── handlers_servers.go   # サーバー管理・メモリ操作・プロジェクト
+    │   ├── handlers_variables.go # 変数・値のまとめ読み書き・構造体型・マッピング先・同期の状態
+    │   ├── handlers_clients.go   # クライアント（接続先・送信・保存したコマンド・ポーリング・サブスクリプション・履歴）
+    │   └── openapi.json    # API の仕様（OpenAPI 3.0。exe に埋め込み、GET /api/openapi.json で返す）
     ├── appconfig/    # 設定フォルダの決定（旧フォルダからの移行を含む）
     ├── applog/       # アプリ全体のログの入れもの（直近 1000 件）と、標準のログ（log パッケージ）を取り込む Writer
     ├── adapter/      # アダプター層
@@ -638,7 +642,7 @@ JavaScript（goja）でPLC動作を記述。
   - 構造体型の定義を引く `TypeResolver` は、ストアの外では `VariableStore.TypeResolver()`（引くたびにロックを取る）を使う。`VariableStore` 自身は `TypeResolver` を実装しない。ストアのメソッドの中（ロック済み）では `s.unlocked()` を使う（`sync.RWMutex` は同じゴルーチンから重ねて取れないため）
 
 - **ホスト側のテストはフェイクのプロトコルで動かす**: `protocoltest.NewFactory()` を `PLCService.RegisterFactory()` に登録する。`internal/application` と `internal/infrastructure` のテストは、実際のプロトコルの実装を使わない
-- **REST API**（`internal/infrastructure/httpapi/server_test.go`）: `httptest` でハンドラーを直接呼ぶ。エンドポイントを追加・変更したらここに足す
+- **REST API**（`internal/infrastructure/httpapi/server_test.go` / `handlers_test.go`）: `httptest` でハンドラーを直接呼ぶ。エンドポイントを追加・変更したらここに足す。`openapi.json` と `routes()` のパス・メソッドが一致しているかも確かめる（`TestOpenAPI_MatchesRoutes`）
 - **変数とレジスタの同期**（`internal/infrastructure/adapter/variable_datastore_test.go`）: 複数の変数にまたがる書き込み、同時の書き込み、行き来しないこと
   - 同じメモリを指すエリア（`MemoryArea.BitsOf`）の間の反映は `variable_datastore_shared_test.go`（ワードのエリアと、それをビットごとに見るエリアを持つフェイクの DataStore を使う）
 - **組み込みの構成での確認**（`internal/protocols/integration_test.go`）: アプリと同じように `protocols.Factories()` を登録した `PLCService` に、実際の Modbus TCP / OPC UA のクライアントからつなぐ。サーバーの起動・停止をまたいだ状態（レジスタ、UnitID の設定）、変数との同期、プロジェクトの読み込みを確認する。**プロトコルを足したら、ここにそのプロトコルの確認を足す**
@@ -1029,6 +1033,7 @@ FINS のコマンドを Host Link（SYSMAC WAY）に載せて、シリアルで�
 - `Shutdown(ctx)` でグレースフルシャットダウン
 - `Restart(port int)` で既存サーバーをシャットダウンして新ポートで再起動
 - Go 1.22+ の `net/http` ServeMux を使用（`GET /path/{id}` 形式のメソッド + パスパラメーター指定）
+- **エンドポイントは `routes()` の表に 1 行ずつ書き、`openapi.json` にも同じものを書く**（テストが突き合わせる）。ハンドラーは `PLCService` の関数を呼ぶだけにする（Wails のバインディングと同じ関数を使う）
 
 #### ポート管理
 
@@ -1037,28 +1042,31 @@ FINS のコマンドを Host Link（SYSMAC WAY）に載せて、シリアルで�
 - `loadHTTPAPIPort()` / `saveHTTPAPIPort(port)` ヘルパー関数（`app.go` 内）
 - `App.httpAPIPort` フィールドで現在のポートを保持
 
+#### 決まり
+
+- **エラー**: `{"error": "理由"}`。入力の誤り・操作の失敗は 400、パスで指した変数・接続先・保存したコマンドがないときは 404。成功して返すものがなければ 204、作ったら 201
+- **変数・接続先は、パスに ID か名前のどちらでも書ける**（`{ref}`。ID を先に探す。接続先の名前が重なれば、追加した順で最初のもの）。保存したコマンド（`{cmd}`）も同じ
+- **値の JSON**: LINT / ULINT は、読むときは文字列（構造体・配列の中も。`PLCService.ReadVariableValue()`）。書くときは数値でも文字列でもよく、数値は桁を落とさずに読む（`decodeValueBody()` が `json.Number` を int64 / uint64 にする）
+- **フィールド・要素**: `/api/variables/{ref}/value?path=speed`（`[1]`、`[1].name`。添字は宣言どおり）。`/api/values` のキーは「名前 + パス」（`Motor1.speed`、`Values[1]`）。名前に `.` を含む変数があっても、いちばん長く一致する名前を選ぶ（`resolveValueKey()`）
+- **`PUT /api/values`**: 先にすべてのキーの変数があるかを確かめ、なければ 1 つも書かない。書くのは名前順で、途中で書けないものがあればそこで止まる（それより前は書かれている）
+- **メモリ**: アドレスは 0 始まり（画面の 1 始まりの表示とは違う）。`count` は 1〜65535。ワードの値は -32768〜65535（負の数は 2 の補数）。まとめての書き込み（`PUT .../words`・`PUT .../bits`）は、エリアの範囲に収まるかを先に確かめ、範囲外なら 1 つも書かない（`PLCService.WriteWords()` / `WriteBits()`）
+- **部分の更新**: `PUT /api/variables/{ref}`（名前・データ型）、`PUT /api/clients/{ref}`（名前・設定）、`PUT .../polling`（周期・失敗の回数）は、省いたものをいまの値のままにする。保存したコマンドの `PUT` は、`mode` を省くと名前だけを変える
+- **クライアントの送信**: タイムアウト・例外応答などの通信の結果も 200 で返し、結果の `status` に入れる（16 進が読めない・コマンドの項目が違うなど、送る前の誤りは 400）
+
 #### エンドポイント一覧
 
-| カテゴリ | メソッド | パス |
-|--------|---------|------|
-| サーバー管理 | GET | `/api/servers` |
-| | POST | `/api/servers` |
-| | DELETE | `/api/servers/{protocolType}` |
-| | POST | `/api/servers/{protocolType}/start` |
-| | POST | `/api/servers/{protocolType}/stop` |
-| | GET | `/api/servers/{protocolType}/status` |
-| | GET/PUT | `/api/servers/{protocolType}/config` |
-| メモリ操作 | GET | `/api/memory/{protocolType}/areas` |
-| | GET | `/api/memory/{protocolType}/{area}/words?address=N&count=N` |
-| | PUT | `/api/memory/{protocolType}/{area}/words/{address}` |
-| | GET | `/api/memory/{protocolType}/{area}/bits?address=N&count=N` |
-| | PUT | `/api/memory/{protocolType}/{area}/bits/{address}` |
-| 変数管理 | GET | `/api/variables` |
-| | POST | `/api/variables` |
-| | PUT | `/api/variables/{id}/value` |
-| | DELETE | `/api/variables/{id}` |
-| プロジェクト | GET | `/api/project/export` |
-| | POST | `/api/project/import` |
+一覧と入出力の形は `openapi.json`（`GET /api/openapi.json`）を見る。
+
+| カテゴリ | パス |
+|--------|------|
+| 仕様 | `GET /api/openapi.json` |
+| サーバー管理 | `/api/servers`、`/api/servers/{protocolType}`（削除・`/start`・`/stop`・`/status`・`/config`） |
+| メモリ操作 | `/api/memory/{protocolType}/areas`、`/api/memory/{protocolType}/{area}/words`・`/bits`（GET で読む・PUT でまとめて書く）、`.../words/{address}`・`.../bits/{address}`（1 つ書く） |
+| 変数 | `/api/variables`、`/api/variables/{ref}`（取得・名前と型の変更・削除）、`/value`、`/mappings`、`/node-publishings/{protocolType}` |
+| 値のまとめ読み書き | `/api/values`（`?names=A,B.x`） |
+| 型・マッピング | `/api/data-types`、`/api/struct-types`（`/{name}` で削除）、`/api/mapping-targets`、`/api/variable-statuses` |
+| クライアント | `/api/client-protocols`、`/api/clients`、`/api/clients/{ref}`（`/disconnect`・`/build`・`/send`・`/browse`）、`/commands`（`/{cmd}`・`/{cmd}/send`）、`/polling`（`/start`・`/stop`・`/items/{itemId}`）、`/subscription`（`/start`・`/stop`・`/items/{itemId}`）、`/api/client-logs` |
+| プロジェクト | `/api/project/export`、`/api/project/import` |
 
 #### CORS
 
