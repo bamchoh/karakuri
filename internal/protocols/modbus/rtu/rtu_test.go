@@ -434,3 +434,57 @@ func TestModbusException_Error(t *testing.T) {
 		t.Errorf("未知のコード: Error() = %q", got)
 	}
 }
+
+// 仕様に合わない個数・バイト数のリクエストには例外 03、終わりが 65536 を超えれば例外 02 を返す（RTU と ASCII で同じ）。
+// 上限ちょうどの個数は正常に応答する
+func TestProcess_QuantityLimits(t *testing.T) {
+	h := newMemHandler()
+	exceptions := []struct{ name, body, want string }{
+		{"FC01 個数 0", "01 01 00 00 00 00", "01 81 03"},
+		{"FC01 個数 2001", "01 01 00 00 07 D1", "01 81 03"},
+		{"FC02 個数 2001", "01 02 00 00 07 D1", "01 82 03"},
+		{"FC03 個数 0", "01 03 00 00 00 00", "01 83 03"},
+		{"FC03 個数 126", "01 03 00 00 00 7E", "01 83 03"},
+		{"FC04 個数 126", "01 04 00 00 00 7E", "01 84 03"},
+		{"FC03 終わりが 65536 を超える", "01 03 FF FF 00 02", "01 83 02"},
+		{"FC01 終わりが 65536 を超える", "01 01 FF F0 00 11", "01 81 02"},
+		{"FC15 個数 0", "01 0F 00 00 00 00 00", "01 8F 03"},
+		{"FC15 個数 1969", "01 0F 00 00 07 B1 F7" + strings.Repeat(" 00", 0xF7), "01 8F 03"},
+		{"FC15 個数 16 でバイト数 1", "01 0F 00 00 00 10 01 FF", "01 8F 03"},
+		{"FC15 個数 8 でバイト数 2", "01 0F 00 00 00 08 02 FF 00", "01 8F 03"},
+		{"FC16 個数 0", "01 10 00 00 00 00 00", "01 90 03"},
+		{"FC16 個数 124", "01 10 00 00 00 7C F8" + strings.Repeat(" 00", 0xF8), "01 90 03"},
+		{"FC16 個数 2 でバイト数 2", "01 10 00 00 00 02 02 00 01", "01 90 03"},
+		{"FC16 個数 1 でバイト数 4", "01 10 00 00 00 01 04 00 01 00 02", "01 90 03"},
+		{"FC16 終わりが 65536 を超える", "01 10 FF FF 00 02 04 00 01 00 02", "01 90 02"},
+	}
+	for _, c := range exceptions {
+		if got := process(t, h, c.body); !bytes.Equal(got, unhex(t, c.want)) {
+			t.Errorf("%s: got % X, want %s", c.name, got, c.want)
+		}
+	}
+	// 仕様に合わない書き込みでは、何も書かない
+	if len(h.registers) != 0 || len(h.coils) != 0 {
+		t.Errorf("例外にしたリクエストで書き込まれた: registers=%v coils=%v", h.registers, h.coils)
+	}
+
+	// 上限ちょうど
+	if got := process(t, h, "01 01 00 00 07 D0"); len(got) != 3+250 || got[2] != 250 {
+		t.Errorf("FC01 個数 2000: % X…（%d バイト）", got[:3], len(got))
+	}
+	if got := process(t, h, "01 03 00 00 00 7D"); len(got) != 3+250 || got[2] != 250 {
+		t.Errorf("FC03 個数 125: % X…（%d バイト）", got[:3], len(got))
+	}
+	if got := process(t, h, "01 03 FF FF 00 01"); !bytes.Equal(got, unhex(t, "01 03 02 00 00")) {
+		t.Errorf("FC03 最後のアドレス: % X", got)
+	}
+	if got := process(t, h, "01 0F 00 00 07 B0 F6"+strings.Repeat(" FF", 0xF6)); !bytes.Equal(got, unhex(t, "01 0F 00 00 07 B0")) {
+		t.Errorf("FC15 個数 1968: % X", got)
+	}
+	if got := process(t, h, "01 10 00 00 00 7B F6"+strings.Repeat(" 00 01", 0x7B)); !bytes.Equal(got, unhex(t, "01 10 00 00 00 7B")) {
+		t.Errorf("FC16 個数 123: % X", got)
+	}
+	if len(h.coils) != 1968 || len(h.registers) != 123 {
+		t.Errorf("上限ちょうどの書き込みの数: coils=%d registers=%d", len(h.coils), len(h.registers))
+	}
+}
