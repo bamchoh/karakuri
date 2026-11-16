@@ -535,6 +535,9 @@ func decodeResponse(req, resp []byte) (protocol.CommandStatus, []protocol.Result
 	if len(resp) < 1 {
 		return protocol.CommandError, nil, "応答の PDU が空です"
 	}
+	if len(req) < 1 { // 送る前に確かめているので、ふつうは来ない
+		return protocol.CommandError, nil, "リクエストの PDU が空です"
+	}
 	fc := req[0]
 	if resp[0] == fc|0x80 && fc < 0x80 {
 		if len(resp) < 2 {

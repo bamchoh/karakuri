@@ -376,6 +376,9 @@ func decodeResponse(req, frame []byte) (protocol.CommandStatus, []protocol.Resul
 	if frame[0]&icfResponse == 0 {
 		return protocol.CommandError, nil, "応答ではないフレームを受け取りました"
 	}
+	if len(req) < 2 { // 送る前に確かめているので、ふつうは来ない
+		return protocol.CommandError, nil, "リクエストにコマンドコードがありません"
+	}
 	cmd := binary.BigEndian.Uint16(req)
 	if got := binary.BigEndian.Uint16(frame[headerLength:]); got != cmd {
 		return protocol.CommandError, nil, fmt.Sprintf("応答のコマンドコード（%04X）がリクエスト（%04X）と違います", got, cmd)

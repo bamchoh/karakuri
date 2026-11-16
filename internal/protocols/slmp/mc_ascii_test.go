@@ -144,6 +144,30 @@ func TestMCASCII_Errors(t *testing.T) {
 	if _, err := requestToASCII(unhexMC(t, "01 08 00 00")); err == nil {
 		t.Error("扱えないコマンドを ASCII にできてしまった")
 	}
+
+	// ASCII の番号は 6 桁。10 進のデバイスは 999999 まで（はみ出すと、受け取った側が番号と点数を取り違える）
+	if got, err := requestToASCII(unhexMC(t, "01 04 00 00 3F 42 0F A8 01 00")); err != nil || string(got) != "04010000D*9999990001" { // D999999
+		t.Errorf("D999999: %q (%v)", got, err)
+	}
+	for name, req := range map[string]string{
+		"一括読み出し D1000000":       "01 04 00 00 40 42 0F A8 01 00",
+		"一括読み出し D16777215":      "01 04 00 00 FF FF FF A8 01 00",
+		"ランダム読み出し M1000000":     "03 04 00 00 01 00 40 42 0F 90",
+		"ランダム書き込み D1000000":     "02 14 00 00 01 00 40 42 0F A8 01 00",
+		"ビットのランダム書き込み M1000000": "02 14 01 00 01 40 42 0F 90 01",
+	} {
+		if got, err := requestToASCII(unhexMC(t, req)); err == nil {
+			t.Errorf("%s を ASCII にできてしまった: %q", name, got)
+		}
+	}
+	// ビット単位の一括書き込みで、データが点数より短い（利用者が 16 進で入れたもの）。以前は panic した
+	if got, err := requestToASCII(unhexMC(t, "01 14 01 00 64 00 00 90 08 00")); err == nil {
+		t.Errorf("データのないビットの書き込みを ASCII にできてしまった: %q", got)
+	}
+	// 16 進のデバイスは 6 桁で全部の番号を書ける
+	if got, err := requestToASCII(unhexMC(t, "01 04 00 00 FF FF FF B4 01 00")); err != nil || string(got) != "04010000W*FFFFFF0001" { // WFFFFFF
+		t.Errorf("WFFFFFF: %q (%v)", got, err)
+	}
 	// 上の桁の 0 は空白でもよい
 	if got, err := requestFromASCII([]byte("04010000D*   1000001")); err != nil || !bytes.Equal(got, unhexMC(t, "01 04 00 00 64 00 00 A8 01 00")) {
 		t.Errorf("空白の番号 % X (%v)", got, err)

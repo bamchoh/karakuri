@@ -382,10 +382,14 @@ func packNibbles(bits []bool) []byte {
 	return out
 }
 
-// unpackNibbles は、packNibbles の逆（count 点を取り出す）
+// unpackNibbles は、packNibbles の逆（count 点を取り出す）。data が足りなければ、足りない分は OFF
+// （呼ぶ側が長さを確かめる。ASCII への変換では、利用者が 16 進で入れた短いリクエストがそのまま来る）
 func unpackNibbles(data []byte, count int) []bool {
 	bits := make([]bool, count)
 	for i := range bits {
+		if i/2 >= len(data) {
+			break
+		}
 		if i%2 == 0 {
 			bits[i] = data[i/2]&0xF0 != 0
 		} else {

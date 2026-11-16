@@ -452,6 +452,9 @@ func decodeResponse(req []byte, resp frame) (protocol.CommandStatus, []protocol.
 		text := endCodeText(end)
 		return protocol.CommandException, []protocol.ResultValue{{Label: "終了コード", Value: text}}, "異常終了: " + text
 	}
+	if len(req) < 4 { // 送る前に確かめているので、ふつうは来ない
+		return protocol.CommandOK, []protocol.ResultValue{{Label: "データ", Value: hexBytes(data)}}, ""
+	}
 
 	switch cmd := binary.LittleEndian.Uint16(req); cmd {
 	case cmdBatchRead:
