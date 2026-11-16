@@ -1,5 +1,11 @@
 package application
 
+import (
+	"fmt"
+
+	"karakuri/internal/domain/protocol"
+)
+
 // === 汎用メモリ操作API ===
 
 // GetMemoryAreas は利用可能なメモリエリアの一覧を返す。
@@ -80,4 +86,60 @@ func (s *PLCService) WriteWord(protocolType, area string, address int, value int
 		return err
 	}
 	return nil
+}
+
+// WriteWords は指定エリアの address から続けて複数ワードを書き込む。
+// 先にエリアの範囲に収まるかを確かめるので、範囲外なら 1 つも書かない
+func (s *PLCService) WriteWords(protocolType, area string, address int, values []uint16) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	inst, err := s.getServerInstance(protocolType)
+	if err != nil {
+		return err
+	}
+	if err := checkAreaRange(inst.dataStore.GetAreas(), area, address, len(values)); err != nil {
+		return err
+	}
+	for i, v := range values {
+		if err := inst.dataStore.WriteWord(area, uint32(address+i), v); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// WriteBits は指定エリアの address から続けて複数ビットを書き込む。
+// 先にエリアの範囲に収まるかを確かめるので、範囲外なら 1 つも書かない
+func (s *PLCService) WriteBits(protocolType, area string, address int, values []bool) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	inst, err := s.getServerInstance(protocolType)
+	if err != nil {
+		return err
+	}
+	if err := checkAreaRange(inst.dataStore.GetAreas(), area, address, len(values)); err != nil {
+		return err
+	}
+	for i, v := range values {
+		if err := inst.dataStore.WriteBit(area, uint32(address+i), v); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// checkAreaRange は、エリアの address から count 個が、エリアの大きさに収まるかを確かめる
+func checkAreaRange(areas []protocol.MemoryArea, areaID string, address, count int) error {
+	for _, a := range areas {
+		if a.ID != areaID {
+			continue
+		}
+		if address < 0 || count < 0 || uint64(address)+uint64(count) > uint64(a.Size) {
+			return fmt.Errorf("エリア %s の範囲外です（アドレス %d から %d 個。エリアの大きさは %d）", areaID, address, count, a.Size)
+		}
+		return nil
+	}
+	return fmt.Errorf("エリアがありません: %s", areaID)
 }

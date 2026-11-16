@@ -92,6 +92,10 @@ func updateAtPath(root interface{}, path []fieldPathSegment, newVal interface{})
 	if !ok {
 		return nil, false
 	}
+	// ないフィールドは失敗にする（足すと、あとの型変換で黙って捨てられ、書けたように見えるため）
+	if _, exists := m[seg.field]; !exists {
+		return nil, false
+	}
 	newMap := make(map[string]interface{}, len(m))
 	for k, v := range m {
 		newMap[k] = v
