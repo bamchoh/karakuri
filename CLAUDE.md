@@ -673,6 +673,13 @@ JavaScript（goja）でPLC動作を記述。
   - 実際の COM ポートでの試験: `rtu/serial_hw_test.go`（配線・RTU と ASCII の読み書き・応答の時間）と `rtu/serial_hw_unplug_test.go`（手で抜き差しする）、`internal/protocols/integration_serial_hw_test.go`（Karakuri の Modbus RTU / ASCII・FINS の Host Link・MC プロトコル（シリアル）のサーバーに、同じプロトコルのクライアントからつなぐ。ポーリングと変数マッピングも）。COM ポートを取り合うので、パッケージをまたいで流すときは `go test -p 1` にする。2 つのポートをクロスでつなぎ、環境変数 `KARAKURI_SERIAL_PAIR`（`COM4,COM6` の形。サーバー側, マスター側）を設定したときだけ動く（CI では飛ばす）。抜き差しは `KARAKURI_SERIAL_UNPLUG=1` も要る。CPU の使い方は OS の側（`Get-Process rtu.test` の `TotalProcessorTime`）で見る（Go の `runtime/metrics` の CPU 時間は、システムコールの中の時間を数えない）
 - **OPC UA**（`internal/protocols/opcua/`）: 実際の OPC UA クライアントでつなぐ。`host_integration_test.go` は実際の変数ストアを使う（他のテストはフェイクの変数ストアを使うため、変数ストアが持つ値の型や型変換を通らない）
 - 設定フォルダに書き込むパッケージのテストは、`TestMain` で `KARAKURI_CONFIG_DIR` を一時フォルダに向ける
+- **プロジェクトのファイルの互換**（`internal/protocols/project_compat_test.go`）: `testdata/projects/` の各ファイル（そのバージョンのアプリで保存したもの。いまは `v0.0.48.json`）を読み込んで保存し直し、元と同じになることを確かめる。読み込みは、読めない変数・構造体型・コマンドなどを黙って読み飛ばすので、エラーにならないだけでは足りない
+  - 置いたファイルは書き換えない（利用者の手元にあるファイルの代わり）。保存の形を変えて、保存し直したものが元と違うのが正しいときは、期待する内容を `<名前>.expected.json` に置く
+  - 保存の形を変えたら、新しいバージョンのファイルを足す: `KARAKURI_WRITE_PROJECT_FIXTURE=v0.0.49 go test -run TestWriteProjectFixture ./internal/protocols`（全プロトコルのサーバーと接続先・全部の型の変数・構造体型・マッピング・公開・スクリプト・モニタリングを、既定値でない値で作る）
+- **後片付けの漏れ**（`internal/protocols/leak_test.go`）: サーバーの起動・停止、クライアントの送信・切断・削除、ポーリングとサブスクリプションの開始・停止、スクリプトの開始・停止を 20 回くり返して、ゴルーチンが増えないことを確かめる（Modbus TCP・FINS・SLMP・OPC UA。シリアルは COM ポートがないので対象外）
+- **ベンチマーク**（`internal/protocols/bench_test.go`）: 主な経路（Modbus TCP の読み書き・変数の書き込み・OPC UA の読み取り）を、変数 100 個をマッピングした状態で測る。ふだんの `go test` では流れない。`go test -run '^$' -bench . -benchmem ./internal/protocols`
+  - 2026-11-17 の開発 PC（i7-11800H）: 保持レジスタ 125 個の読み取り 20µs、100 個の書き込み 2.1ms（変数 100 個と FINS の DM に反映）、変数 1 つの書き込み 15µs、OPC UA の読み取り 45µs
+  - 書き込みが重いのは、変数が 1 つ変わるたびに、ほかのサーバーの `VariableBackedDataStore.syncSharedAreas()` がそのプロトコルのマッピングを全部読み直すため（変数の数の 2 乗で増える）
 - **ファズテスト**（各プロトコルの `fuzz_test.go`）: 外から届くバイト列を読む処理に、でたらめな入力を与えて、panic しないこと（panic するとアプリ全体が落ちる）と、出力の形が正しいこと（応答がフレームとして読める・RTU の応答は 256 バイト以内など）を確かめる
   - 対象: サーバーがリクエストを処理する入口（FINS / SLMP の `handler.handle()`、Host Link / MC プロトコル（シリアル）の `receive()`、Modbus の `rtu.ParseRequest` → `Process`・TCP のサーバーの `serve()`・TCP のフレームの読み取り）と、クライアントが応答を解釈する処理（`decodeResponse()` など。リクエストも、利用者が 16 進で入れたものがそのまま来るので、両方をでたらめにする）、MC プロトコルの ASCII の変換、OPC UA のリクエスト本体の読み取り
   - ふだんの `go test` では、種（`f.Add`）と `testdata/fuzz/` に残った入力だけを流す（CI でも流れる）。探すときは、パッケージごとに 1 つずつ `go test -run '^$' -fuzz='^FuzzHandler$' -fuzztime=1m ./internal/protocols/fins` のように流す
