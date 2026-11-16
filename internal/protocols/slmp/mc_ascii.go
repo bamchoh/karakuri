@@ -160,9 +160,18 @@ func (r *binReader) device() target {
 	t, end := parseTarget(b, false)
 	if end != endOK {
 		r.err = fmt.Errorf("デバイスの指定を読めません")
+		return t
+	}
+	// ASCII コードの番号は 6 桁。10 進で書くデバイスは 999999 まで（はみ出すと、受け取った側が番号と点数を取り違える）
+	if !t.def.Hex && t.number > maxASCIIDecimalNumber {
+		r.err = fmt.Errorf("デバイス番号 %d は、ASCII コードでは送れません（10 進のデバイスは %d まで）", t.number, maxASCIIDecimalNumber)
 	}
 	return t
 }
+
+// maxASCIIDecimalNumber は、ASCII コードで送れる、10 進で書くデバイスの番号の最大（6 桁）
+const maxASCIIDecimalNumber = 999999
+
 func (r *binReader) done() error {
 	if r.err == nil && len(r.b) != 0 {
 		return fmt.Errorf("データが長すぎます（%d バイト余っています）", len(r.b))
@@ -340,6 +349,9 @@ func bitChar(on bool) byte {
 
 // responseToASCII は、バイナリの形の応答データを ASCII にする。req はバイナリの形のリクエスト
 func responseToASCII(req, data []byte) ([]byte, error) {
+	if len(req) < 4 { // ASCII から戻した要求を渡すので、ふつうは来ない
+		return nil, fmt.Errorf("リクエストが短すぎます")
+	}
 	command := binary.LittleEndian.Uint16(req)
 	sub := binary.LittleEndian.Uint16(req[2:])
 	r := &binReader{b: data}
@@ -357,6 +369,9 @@ func responseToASCII(req, data []byte) ([]byte, error) {
 			}
 		}
 	case cmdRandomRead:
+		if len(req) < 6 {
+			return nil, fmt.Errorf("リクエストが短すぎます")
+		}
 		words, dwords := int(req[4]), int(req[5])
 		for range words {
 			out = fmt.Appendf(out, "%04X", r.u16())
@@ -382,6 +397,9 @@ func responseToASCII(req, data []byte) ([]byte, error) {
 
 // responseFromASCII は、ASCII の応答データを、バイナリの形にする。req はバイナリの形のリクエスト
 func responseFromASCII(req, a []byte) ([]byte, error) {
+	if len(req) < 4 { // 送る前に確かめているので、ふつうは来ない
+		return nil, fmt.Errorf("リクエストが短すぎます")
+	}
 	command := binary.LittleEndian.Uint16(req)
 	sub := binary.LittleEndian.Uint16(req[2:])
 	r := &asciiReader{b: a}
@@ -401,6 +419,9 @@ func responseFromASCII(req, a []byte) ([]byte, error) {
 			}
 		}
 	case cmdRandomRead:
+		if len(req) < 6 {
+			return nil, fmt.Errorf("リクエストが短すぎます")
+		}
 		words, dwords := int(req[4]), int(req[5])
 		for range words {
 			out = binary.LittleEndian.AppendUint16(out, uint16(r.hex(4)))
