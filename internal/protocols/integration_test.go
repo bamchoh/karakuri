@@ -45,7 +45,7 @@ const (
 )
 
 // newService はアプリと同じように、組み込みのプロトコルを登録した PLCService を作る
-func newService(t *testing.T) *application.PLCService {
+func newService(t testing.TB) *application.PLCService {
 	t.Helper()
 	svc := application.NewPLCService()
 	for _, f := range protocols.Factories() {
@@ -59,7 +59,7 @@ func newService(t *testing.T) *application.PLCService {
 	return svc
 }
 
-func freePort(t *testing.T) int {
+func freePort(t testing.TB) int {
 	t.Helper()
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
@@ -69,7 +69,7 @@ func freePort(t *testing.T) int {
 	return ln.Addr().(*net.TCPAddr).Port
 }
 
-func must(t *testing.T, err error) {
+func must(t testing.TB, err error) {
 	t.Helper()
 	if err != nil {
 		t.Fatal(err)
@@ -77,7 +77,7 @@ func must(t *testing.T, err error) {
 }
 
 // addModbus は Modbus TCP サーバーを追加し、127.0.0.1 の空きポートを設定する（起動はしない）
-func addModbus(t *testing.T, svc *application.PLCService) int {
+func addModbus(t testing.TB, svc *application.PLCService) int {
 	t.Helper()
 	must(t, svc.AddServer(modbusTCP, ""))
 	port := freePort(t)
@@ -88,7 +88,7 @@ func addModbus(t *testing.T, svc *application.PLCService) int {
 	return port
 }
 
-func modbusClient(t *testing.T, port int) *modbus.ModbusClient {
+func modbusClient(t testing.TB, port int) *modbus.ModbusClient {
 	t.Helper()
 	c, err := modbus.NewClient(&modbus.ClientConfiguration{
 		URL:     fmt.Sprintf("tcp://127.0.0.1:%d", port),
@@ -102,7 +102,7 @@ func modbusClient(t *testing.T, port int) *modbus.ModbusClient {
 }
 
 // variableValue は変数の現在の値を文字列で返す
-func variableValue(t *testing.T, svc *application.PLCService, id string) string {
+func variableValue(t testing.TB, svc *application.PLCService, id string) string {
 	t.Helper()
 	for _, v := range svc.GetVariables() {
 		if v.ID == id {
