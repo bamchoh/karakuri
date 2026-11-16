@@ -663,6 +663,9 @@ JavaScript（goja）でPLC動作を記述。
   - 対象: サーバーがリクエストを処理する入口（FINS / SLMP の `handler.handle()`、Host Link / MC プロトコル（シリアル）の `receive()`、Modbus の `rtu.ParseRequest` → `Process`・TCP の中継の `forwardRequests()`・TCP のフレームの読み取り）と、クライアントが応答を解釈する処理（`decodeResponse()` など。リクエストも、利用者が 16 進で入れたものがそのまま来るので、両方をでたらめにする）、MC プロトコルの ASCII の変換、OPC UA のリクエスト本体の読み取り
   - ふだんの `go test` では、種（`f.Add`）と `testdata/fuzz/` に残った入力だけを流す（CI でも流れる）。探すときは、パッケージごとに 1 つずつ `go test -run '^$' -fuzz='^FuzzHandler$' -fuzztime=1m ./internal/protocols/fins` のように流す
   - 見つかった入力は `testdata/fuzz/<関数名>/` に書かれる。不具合なら直して、その入力は残す（次から毎回流れる）。確かめ方の誤りなら、確かめ方を直して入力を消す
+- **同時の接続**（各プロトコルの `concurrency_test.go`）: 1 つのサーバーに複数のクライアントを同時につなぎ、それぞれが自分の受け持ちのアドレスに書いては読む。応答が取り違えられないこと・どの書き込みも反映されることを確かめる（競合は CI の `-race` で見つける）
+  - FINS（UDP / TCP）・SLMP（TCP / UDP × 3E / 4E を混ぜる）・Modbus TCP（他社製の simonvetter/modbus のクライアント。UnitID の応答設定を同時に切り替え続ける）・OPC UA（実際の変数ストア。同じ構造体の別のフィールドへの同時の書き込み・ホストの側の変数の更新も同時に走らせる）
+  - FINS と SLMP は、読み書きの最中に Stop しても固まらず、また Start できることも確かめる（`TestStopDuringTraffic`）
 
 ## 新プロトコル追加手順
 
