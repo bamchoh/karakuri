@@ -11,7 +11,7 @@ import (
 )
 
 // ファズテスト。外から届くバイト列で panic しない（panic するとアプリ全体が落ちる）ことと、出力の形が正しいことを確かめる。
-// ふだんの go test では種（f.Add）だけを流す。探すときは go test -fuzz=FuzzTCPForwardRequests -fuzztime=1m ./internal/protocols/modbus
+// ふだんの go test では種（f.Add）だけを流す。探すときは go test -fuzz=FuzzTCPServe -fuzztime=1m ./internal/protocols/modbus
 
 func seedBytes(s string) []byte {
 	b, err := hex.DecodeString(strings.ReplaceAll(s, " ", ""))
@@ -21,38 +21,51 @@ func seedBytes(s string) []byte {
 	return b
 }
 
-// Modbus TCP の中継は、届いたバイト列を MBAP ヘッダーで区切り、オフにした UnitID 宛て以外をそのまま送る。
-// 送ったものは、区切りどおりのフレームが並んだものになる
-func FuzzTCPForwardRequests(f *testing.F) {
+// Modbus TCP のサーバーは、届いたバイト列を MBAP ヘッダーで区切って処理する。
+// 応答は、区切りどおりのフレーム（トランザクション ID はリクエストのもの、長さは 254 以下）が並んだものになり、
+// オフにした UnitID 宛てには応答しない
+func FuzzTCPServe(f *testing.F) {
 	f.Add(seedBytes("00 01 00 00 00 06 01 03 00 00 00 01"))
 	f.Add(seedBytes("00 01 00 00 00 06 05 03 00 00 00 01 00 02 00 00 00 06 01 03 00 00 00 01")) // オフにした UnitID 5 宛てと、1 宛て
-	f.Add(seedBytes("00 01 00 00 00 00 01"))                                                    // 長さ 0
-	f.Add(seedBytes("00 01 00 00 FF FF 01 03"))                                                 // 長さが大きく、途中で切れる
+	f.Add(seedBytes("00 01 00 00 00 06 01 03 00 00 00 00"))                                     // 個数 0
+	f.Add(seedBytes("00 01 00 00 00 03 01 10 00"))                                              // データが短い
+	f.Add(seedBytes("00 01 00 07 00 06 01 03 00 00 00 01"))                                     // プロトコル ID が 0 でない
+	f.Add(seedBytes("00 01 00 00 00 01 01"))                                                    // 機能コードがない
+	f.Add(seedBytes("00 01 00 00 FF FF 01 03"))                                                 // 長さが大きすぎる
 	f.Add([]byte{})
 	f.Fuzz(func(t *testing.T, data []byte) {
 		handler := NewDataStoreHandler(NewModbusDataStore(16, 16, 16, 16))
 		handler.SetUnitIdEnabled(5, false)
-		tr := &TCPTransport{handler: handler}
+		tr := newTCPTransport(DefaultTCPConfig(), handler)
 		var out bytes.Buffer
-		tr.forwardRequests(bytes.NewReader(data), &out)
+		tr.serve(bytes.NewReader(data), &out)
 
-		// 送ったものを、同じ区切りで読み直す
-		b := out.Bytes()
-		for len(b) > 0 {
-			if len(b) < mbapHeaderSize {
-				t.Fatalf("フレームの途中で終わっている: % X", b)
-			}
-			n := mbapHeaderSize + max(int(binary.BigEndian.Uint16(b[4:6]))-1, 0)
-			if len(b) < n {
-				t.Fatalf("長さの欄より短い: % X", b)
-			}
-			if b[6] == 5 {
-				t.Fatalf("オフにした UnitID 5 宛てを送った: % X", b[:n])
+		// 届いたリクエストのトランザクション ID（区切りの読めたところまで）
+		txIDs := map[uint16]bool{}
+		for b := data; len(b) >= mbapHeaderSize; {
+			n := mbapHeaderSize - 1 + int(binary.BigEndian.Uint16(b[4:6]))
+			txIDs[binary.BigEndian.Uint16(b[0:2])] = true
+			if n <= mbapHeaderSize || n > len(b) {
+				break
 			}
 			b = b[n:]
 		}
-		if out.Len() > len(data) {
-			t.Fatalf("届いたより多く送った: %d > %d", out.Len(), len(data))
+		b := out.Bytes()
+		for len(b) > 0 {
+			if len(b) < mbapHeaderSize+1 {
+				t.Fatalf("フレームの途中で終わっている: % X", b)
+			}
+			length := int(binary.BigEndian.Uint16(b[4:6]))
+			if length < 2 || length > maxMBAPLength || len(b) < mbapHeaderSize-1+length {
+				t.Fatalf("長さの欄が正しくない: % X", b)
+			}
+			if b[6] == 5 {
+				t.Fatalf("オフにした UnitID 5 宛てに応答した: % X", b)
+			}
+			if !txIDs[binary.BigEndian.Uint16(b[0:2])] || binary.BigEndian.Uint16(b[2:4]) != 0 {
+				t.Fatalf("トランザクション ID・プロトコル ID が、リクエストのものでない: % X", b)
+			}
+			b = b[mbapHeaderSize-1+length:]
 		}
 	})
 }

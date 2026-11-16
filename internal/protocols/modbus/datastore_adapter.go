@@ -2,100 +2,10 @@ package modbus
 
 import (
 	"karakuri/internal/protocols/modbus/rtu"
-
-	"github.com/simonvetter/modbus"
 )
 
-// DataStoreRequestHandler はDataStoreHandlerをsimonvetter/modbusのRequestHandlerに適合させるアダプター
-type DataStoreRequestHandler struct {
-	handler *DataStoreHandler
-}
-
-// NewDataStoreRequestHandler は新しいDataStoreRequestHandlerを作成する
-func NewDataStoreRequestHandler(handler *DataStoreHandler) *DataStoreRequestHandler {
-	return &DataStoreRequestHandler{handler: handler}
-}
-
-// readOrIllegalAddress は、DataStore の読み取りエラー（範囲外のアドレスなど）を
-// 例外応答 Illegal Data Address にする。そのまま返すと Server Device Failure になる
-func readOrIllegalAddress[T any](values []T, err error) ([]T, error) {
-	if err != nil {
-		return nil, modbus.ErrIllegalDataAddress
-	}
-	return values, nil
-}
-
-// HandleCoils はコイル読み取りを処理する (Function Code 1)
-func (h *DataStoreRequestHandler) HandleCoils(req *modbus.CoilsRequest) ([]bool, error) {
-	if !h.handler.IsUnitIdEnabled(req.UnitId) {
-		return nil, modbus.ErrIllegalFunction
-	}
-
-	if req.IsWrite {
-		// 書き込みリクエスト (Function Code 5, 15)
-		if err := h.handler.store.WriteBits(AreaCoils, uint32(req.Addr), req.Args); err != nil {
-			return nil, modbus.ErrIllegalDataAddress
-		}
-		return req.Args, nil
-	}
-
-	return readOrIllegalAddress(h.handler.store.ReadBits(AreaCoils, uint32(req.Addr), req.Quantity))
-}
-
-// HandleDiscreteInputs はディスクリート入力読み取りを処理する (Function Code 2)
-func (h *DataStoreRequestHandler) HandleDiscreteInputs(req *modbus.DiscreteInputsRequest) ([]bool, error) {
-	if !h.handler.IsUnitIdEnabled(req.UnitId) {
-		return nil, modbus.ErrIllegalFunction
-	}
-	return readOrIllegalAddress(h.handler.store.ReadBits(AreaDiscreteInputs, uint32(req.Addr), req.Quantity))
-}
-
-// HandleHoldingRegisters は保持レジスタ読み取りを処理する (Function Code 3)
-func (h *DataStoreRequestHandler) HandleHoldingRegisters(req *modbus.HoldingRegistersRequest) ([]uint16, error) {
-	if !h.handler.IsUnitIdEnabled(req.UnitId) {
-		return nil, modbus.ErrIllegalFunction
-	}
-
-	if req.IsWrite {
-		// 書き込みリクエスト (Function Code 6, 16)
-		if err := h.handler.store.WriteWords(AreaHoldingRegs, uint32(req.Addr), req.Args); err != nil {
-			return nil, modbus.ErrIllegalDataAddress
-		}
-		return req.Args, nil
-	}
-
-	// 読み取りリクエスト
-	return readOrIllegalAddress(h.handler.store.ReadWords(AreaHoldingRegs, uint32(req.Addr), req.Quantity))
-}
-
-// HandleInputRegisters は入力レジスタ読み取りを処理する (Function Code 4)
-func (h *DataStoreRequestHandler) HandleInputRegisters(req *modbus.InputRegistersRequest) ([]uint16, error) {
-	if !h.handler.IsUnitIdEnabled(req.UnitId) {
-		return nil, modbus.ErrIllegalFunction
-	}
-	return readOrIllegalAddress(h.handler.store.ReadWords(AreaInputRegs, uint32(req.Addr), req.Quantity))
-}
-
-// HandleWriteSingleCoil は単一コイル書き込みを処理する (Function Code 5)
-func (h *DataStoreRequestHandler) HandleWriteSingleCoil(req *modbus.CoilsRequest) error {
-	if !h.handler.IsUnitIdEnabled(req.UnitId) {
-		return modbus.ErrIllegalFunction
-	}
-	if len(req.Args) == 0 {
-		return modbus.ErrIllegalDataValue
-	}
-	return h.handler.store.WriteBit(AreaCoils, uint32(req.Addr), req.Args[0])
-}
-
-// HandleWriteMultipleCoils は複数コイル書き込みを処理する (Function Code 15)
-func (h *DataStoreRequestHandler) HandleWriteMultipleCoils(req *modbus.CoilsRequest) error {
-	if !h.handler.IsUnitIdEnabled(req.UnitId) {
-		return modbus.ErrIllegalFunction
-	}
-	return h.handler.store.WriteBits(AreaCoils, uint32(req.Addr), req.Args)
-}
-
-// RTUDataStoreAdapter はDataStoreHandlerをrtu.RequestHandlerに適合させるアダプター
+// RTUDataStoreAdapter はDataStoreHandlerをrtu.RequestHandlerに適合させるアダプター。
+// Modbus TCP / RTU / ASCII のサーバーはどれも、rtu.Processor からこれを通して DataStore を読み書きする
 type RTUDataStoreAdapter struct {
 	handler *DataStoreHandler
 }

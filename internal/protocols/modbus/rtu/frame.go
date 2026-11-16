@@ -45,12 +45,12 @@ func ParseRequest(frame []byte) (*Request, error) {
 	}
 
 	// CRCを除いたデータ部分
-	return parseRequestBody(frame[:len(frame)-2])
+	return ParseRequestBody(frame[:len(frame)-2])
 }
 
-// parseRequestBody は UnitID・機能コード・データ（CRC / LRC を除いたもの）からリクエストを作る。
-// RTU と ASCII で共通。
-func parseRequestBody(data []byte) (*Request, error) {
+// ParseRequestBody は UnitID・機能コード・データ（CRC / LRC を除いたもの）からリクエストを作る。
+// RTU・ASCII・TCP で共通（TCP は MBAP ヘッダーの UnitID と PDU を並べて渡す）。
+func ParseRequestBody(data []byte) (*Request, error) {
 	if len(data) < 2 {
 		return nil, ErrFrameTooShort
 	}

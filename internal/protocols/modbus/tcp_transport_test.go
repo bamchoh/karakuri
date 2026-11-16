@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"strings"
 	"testing"
 	"time"
 
@@ -145,7 +146,7 @@ func TestTCP_FiltersEachFrameInOneWrite(t *testing.T) {
 	}
 }
 
-// 中継を入れても、クライアントからの読み書きはこれまでどおり動く
+// 他社製のクライアント（simonvetter/modbus）から、全部の機能コードで読み書きできる
 func TestTCP_ClientReadWrite(t *testing.T) {
 	srv, port := startTCPServer(t)
 	client, err := modbus.NewClient(&modbus.ClientConfiguration{
@@ -174,7 +175,7 @@ func TestTCP_ClientReadWrite(t *testing.T) {
 	if got, _ := srv.store.ReadWords(AreaHoldingRegs, 10, 1); fmt.Sprint(got) != "[1234]" {
 		t.Errorf("DataStore の保持レジスタ = %v", got)
 	}
-	// 大きなリクエスト・応答（125 レジスタは範囲外なので、範囲内の最大で確認する）
+	// 大きなリクエスト・応答（DataStore が 100 個なので、範囲内の最大で確認する）
 	if got, err := client.ReadRegisters(0, 100, modbus.HOLDING_REGISTER); err != nil || len(got) != 100 {
 		t.Errorf("100 レジスタの読み取り = %d 件, %v", len(got), err)
 	}
@@ -269,5 +270,82 @@ func TestTCP_StopClosesConnectionsAndRestartWorks(t *testing.T) {
 	}
 	if readResponse(t, conn2, 2*time.Second) == nil {
 		t.Fatal("起動し直したあと応答がない")
+	}
+}
+
+// 仕様に合わないリクエストには、RTU / ASCII と同じ例外応答を返し、接続は閉じない。
+// 以前は simonvetter/modbus のサーバーを使っていて、個数の誤りには例外を返さずに接続を閉じていた
+func TestTCP_InvalidRequestsGetExceptions(t *testing.T) {
+	srv, port := startTCPServer(t)
+	srv.SetUnitIdEnabled(2, false)
+	conn := dialTCP(t, port)
+
+	cases := []struct {
+		name string
+		pdu  string // 機能コード + データ
+		want string // 応答の PDU
+	}{
+		{"FC03 の個数 0", "03 00 00 00 00", "83 03"},
+		{"FC03 の個数 126", "03 00 00 00 7E", "83 03"},
+		{"FC01 の個数 2001", "01 00 00 07 D1", "81 03"},
+		{"FC16 のバイト数が個数と合わない", "10 00 00 00 02 02 00 01", "90 03"},
+		{"FC15 の個数 1969", "0F 00 00 07 B1 F7" + strings.Repeat(" 00", 247), "8F 03"},
+		{"開始 + 個数が 65536 を超える", "03 FF FF 00 02", "83 02"},
+		{"DataStore の範囲外", "03 00 64 00 01", "83 02"},
+		{"データが短すぎる", "06 00 01", "86 03"},
+		{"FC05 の値が FF00 / 0000 でない", "05 00 01 12 34", "85 03"},
+		{"対応していない機能コード", "2B 0E 01 00", "AB 01"},
+		{"正しいリクエスト", "03 00 00 00 01", "03 02 00 00"},
+	}
+	for i, c := range cases {
+		pdu := seedBytes(c.pdu)
+		req := append([]byte{0, byte(i), 0, 0, 0, byte(len(pdu) + 1), 1}, pdu...)
+		if _, err := conn.Write(req); err != nil {
+			t.Fatalf("%s: %v", c.name, err)
+		}
+		res := readResponse(t, conn, 2*time.Second)
+		if res == nil {
+			t.Fatalf("%s: 応答がない（接続を閉じた？）", c.name)
+		}
+		if res[1] != byte(i) || res[6] != 1 || !bytes.Equal(res[7:], seedBytes(c.want)) {
+			t.Errorf("%s: 応答 = % X, want PDU %s", c.name, res, c.want)
+		}
+	}
+
+	// オフにした UnitID 宛ては、誤ったリクエストにも応答しない
+	for _, pdu := range []string{"03 00 00 00 00", "06 00 01"} {
+		b := seedBytes(pdu)
+		if _, err := conn.Write(append([]byte{0, 99, 0, 0, 0, byte(len(b) + 1), 2}, b...)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if got := readResponse(t, conn, 300*time.Millisecond); got != nil {
+		t.Fatalf("オフにした UnitID 2 に応答した: % X", got)
+	}
+
+	// プロトコル ID が 0 でないフレームは読み捨て、次のフレームには応答する
+	if _, err := conn.Write(append(seedBytes("00 50 00 01 00 06 01 03 00 00 00 01"), readHoldingRequest(51, 1)...)); err != nil {
+		t.Fatal(err)
+	}
+	if got := readResponse(t, conn, 2*time.Second); got == nil || got[1] != 51 {
+		t.Fatalf("プロトコル ID が 0 でないフレームのあとの応答 = % X, want トランザクション ID 51 の応答", got)
+	}
+}
+
+// 長さの欄が正しくない（機能コードがない・254 を超える）フレームは、区切りを信用できないので接続を閉じる
+func TestTCP_ClosesOnBadLength(t *testing.T) {
+	_, port := startTCPServer(t)
+	for _, frame := range []string{"00 01 00 00 00 01 01", "00 01 00 00 00 FF 01 03", "00 01 00 00 00 00 01"} {
+		conn := dialTCP(t, port)
+		if _, err := conn.Write(seedBytes(frame)); err != nil {
+			t.Fatal(err)
+		}
+		_ = conn.SetReadDeadline(time.Now().Add(2 * time.Second))
+		// 読み残したバイトがあると、閉じたときに RST が届く（EOF ではなくエラーになる）。どちらも閉じている
+		n, err := conn.Read(make([]byte, 16))
+		var netErr net.Error
+		if err == nil || (errors.As(err, &netErr) && netErr.Timeout()) {
+			t.Errorf("%s: 接続が閉じない（%d バイト, %v）", frame, n, err)
+		}
 	}
 }
