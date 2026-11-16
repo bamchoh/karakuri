@@ -467,3 +467,24 @@ func TestClients_Subscription(t *testing.T) {
 		t.Errorf("削除したあとの項目: %+v", sub.Items)
 	}
 }
+
+// 型に収まらない値・小数は 400 で断り、値は変わらない。符号なしの範囲の値は、ビットの並びとして読む（INT の 65535 は -1）
+func TestVariables_ValueRange(t *testing.T) {
+	api := newTestAPI(t)
+	api.do("POST", "/api/variables", `{"name":"C","dataType":"INT","value":5}`).status(http.StatusCreated)
+	api.do("PUT", "/api/variables/C/value", `{"value":70000}`).isError(http.StatusBadRequest)
+	api.do("PUT", "/api/variables/C/value", `{"value":1.5}`).isError(http.StatusBadRequest)
+	api.do("PUT", "/api/values", `{"C":-40000}`).isError(http.StatusBadRequest)
+	api.do("POST", "/api/variables", `{"name":"D","dataType":"USINT","value":256}`).isError(http.StatusBadRequest)
+
+	var body struct{ Value interface{} }
+	api.do("GET", "/api/variables/C/value", "").status(http.StatusOK).json(&body)
+	if body.Value != float64(5) {
+		t.Errorf("断った書き込みのあとの C = %v, want 5", body.Value)
+	}
+	api.do("PUT", "/api/variables/C/value", `{"value":65535}`).status(http.StatusNoContent)
+	api.do("GET", "/api/variables/C/value", "").status(http.StatusOK).json(&body)
+	if body.Value != float64(-1) {
+		t.Errorf("C に 65535 を書いたあと = %v, want -1", body.Value)
+	}
+}

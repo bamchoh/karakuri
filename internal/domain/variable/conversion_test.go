@@ -91,6 +91,24 @@ func TestConvertValue_StringFixed(t *testing.T) {
 	if err != nil || v != "hello" {
 		t.Errorf("ConvertValue(hello world!, STRING[5]) = (%v, %v)", v, err)
 	}
+	// 複数バイトの文字の途中では切らない（「日本」は 6 バイト。5 バイトで切ると「日」と壊れた 2 バイトになっていた）
+	for _, c := range []struct {
+		in   string
+		n    int
+		want string
+	}{
+		{"日本", 5, "日"},
+		{"日本", 6, "日本"},
+		{"日本", 3, "日"},
+		{"日本", 2, ""},
+		{"aé", 2, "a"}, // é は 2 バイト
+		{"aé", 3, "aé"},
+	} {
+		v, err := ConvertValue(c.in, NewStringType(c.n))
+		if err != nil || v != c.want {
+			t.Errorf("ConvertValue(%q, STRING[%d]) = (%q, %v), want %q", c.in, c.n, v, err, c.want)
+		}
+	}
 }
 
 func TestConvertValue_TIME_DATE(t *testing.T) {
@@ -759,5 +777,136 @@ func TestUpdateFieldValue_UnknownFieldFails(t *testing.T) {
 	}
 	if err := store.UpdateFieldValue(v.ID, "x", float64(3)); err != nil {
 		t.Errorf("あるフィールドへの書き込み: %v", err)
+	}
+}
+
+// 整数型には、その幅に符号付きか符号なしとして収まる値だけを書ける（INT なら -32768〜65535）。
+// 符号なしの範囲の値はビットの並びとして読む（INT の 65535 は -1）。収まらない値・小数のある値はエラー
+// （以前は黙って切り詰めていて、INT に 70000 を書くと 4464 になった）
+func TestConvertValue_IntegerRange(t *testing.T) {
+	ok := []struct {
+		input    interface{}
+		dataType DataType
+		want     interface{}
+	}{
+		{float64(-128), TypeSINT, int8(-128)},
+		{float64(127), TypeSINT, int8(127)},
+		{float64(255), TypeSINT, int8(-1)}, // ビットの並びとして読む
+		{float64(-32768), TypeINT, int16(-32768)},
+		{float64(32767), TypeINT, int16(32767)},
+		{float64(32768), TypeINT, int16(-32768)}, // カウンターが 32767 を超えたとき（PLC と同じように回る）
+		{float64(65535), TypeINT, int16(-1)},     // 画面の 16 進の入力 0xFFFF
+		{int64(-1), TypeINT, int16(-1)},
+		{uint64(65535), TypeINT, int16(-1)},
+		{float64(-2147483648), TypeDINT, int32(-2147483648)},
+		{float64(4294967295), TypeDINT, int32(-1)},
+		{float64(0), TypeUSINT, uint8(0)},
+		{float64(255), TypeUSINT, uint8(255)},
+		{float64(-1), TypeUSINT, uint8(255)},
+		{float64(65535), TypeUINT, uint16(65535)},
+		{float64(-32768), TypeUINT, uint16(32768)},
+		{float64(4294967295), TypeUDINT, uint32(4294967295)},
+		{int64(-9223372036854775808), TypeLINT, int64(-9223372036854775808)},
+		{uint64(18446744073709551615), TypeLINT, int64(-1)},
+		{int64(-1), TypeULINT, uint64(18446744073709551615)},
+		{uint64(18446744073709551615), TypeULINT, uint64(18446744073709551615)},
+		{float64(100), TypeINT, int16(100)}, // JSON の数値（float64）の整数
+		{int(7), TypeINT, int16(7)},
+		{int32(7), TypeINT, int16(7)}, // 以前は受け付けなかった型の整数も、範囲内なら受け付ける
+		{uint16(7), TypeDINT, int32(7)},
+	}
+	for _, c := range ok {
+		got, err := ConvertValue(c.input, c.dataType)
+		if err != nil || got != c.want {
+			t.Errorf("ConvertValue(%v (%T), %s) = %#v, %v, want %#v", c.input, c.input, c.dataType, got, err, c.want)
+		}
+	}
+
+	ng := []struct {
+		input    interface{}
+		dataType DataType
+	}{
+		{float64(-129), TypeSINT},
+		{float64(256), TypeSINT},
+		{float64(70000), TypeINT},
+		{float64(-32769), TypeINT},
+		{float64(65536), TypeINT},
+		{int64(65536), TypeINT},
+		{uint64(65536), TypeINT},
+		{float64(4294967296), TypeDINT},
+		{float64(-2147483649), TypeDINT},
+		{float64(256), TypeUSINT},
+		{float64(-129), TypeUSINT},
+		{float64(65536), TypeUINT},
+		{float64(4294967296), TypeUDINT},
+		{float64(18446744073709551616), TypeLINT}, // 2^64
+		{float64(-9223372036854777856), TypeLINT}, // -2^63 より小さい
+		{float64(18446744073709551616), TypeULINT},
+		{float64(1.7), TypeINT},
+		{float64(-0.5), TypeDINT},
+		{math.NaN(), TypeINT},
+		{math.Inf(1), TypeLINT},
+		{"12", TypeINT}, // 文字列は LINT / ULINT だけ
+		{true, TypeINT},
+	}
+	for _, c := range ng {
+		if got, err := ConvertValue(c.input, c.dataType); err == nil {
+			t.Errorf("ConvertValue(%v (%T), %s) = %#v, want エラー", c.input, c.input, c.dataType, got)
+		}
+	}
+}
+
+// REAL は float32 に収まらない値をエラーにする（以前は +Inf になった）。LREAL は float64 のまま
+func TestConvertValue_RealRange(t *testing.T) {
+	if got, err := ConvertValue(float64(math.MaxFloat32), TypeREAL); err != nil || got != float32(math.MaxFloat32) {
+		t.Errorf("REAL の最大 = %v, %v", got, err)
+	}
+	if got, err := ConvertValue(float64(-math.MaxFloat32), TypeREAL); err != nil || got != float32(-math.MaxFloat32) {
+		t.Errorf("REAL の最小 = %v, %v", got, err)
+	}
+	for _, f := range []float64{1e39, -1e39, math.MaxFloat64} {
+		if got, err := ConvertValue(f, TypeREAL); err == nil {
+			t.Errorf("REAL に %v を書けた: %v", f, got)
+		}
+	}
+	if got, err := ConvertValue(float64(1e300), TypeLREAL); err != nil || got != float64(1e300) {
+		t.Errorf("LREAL 1e300 = %v, %v", got, err)
+	}
+	if got, err := ConvertValue(int64(5), TypeREAL); err != nil || got != float32(5) {
+		t.Errorf("REAL に整数 = %v, %v", got, err)
+	}
+	if _, err := ConvertValue("1.5", TypeREAL); err == nil {
+		t.Error("REAL に文字列を書けた")
+	}
+}
+
+// 構造体・配列の中の値も同じように確かめる（OPC UA の構造体のノードや REST API は、JSON の数値を書く）
+func TestConvertValue_RangeInsideStructAndArray(t *testing.T) {
+	store := NewVariableStore()
+	motor, _ := NewStructTypeDef("Motor", []StructField{{Name: "speed", DataType: TypeINT}, {Name: "on", DataType: TypeBOOL}}, store.TypeResolver())
+	_ = store.RegisterStructType(motor)
+	m, err := store.CreateVariable("M", "Motor", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := store.UpdateValue(m.ID, map[string]interface{}{"speed": float64(70000), "on": true}); err == nil {
+		t.Error("構造体のフィールドに収まらない値を書けた")
+	}
+	if err := store.UpdateFieldValue(m.ID, "speed", float64(70000)); err == nil {
+		t.Error("UpdateFieldValue で収まらない値を書けた")
+	}
+	if v, _ := store.GetVariable(m.ID); v.Value.(map[string]interface{})["speed"] != int16(0) {
+		t.Errorf("断った書き込みで値が変わった: %v", v.Value)
+	}
+
+	arr, err := store.CreateVariable("A", "ARRAY[1..3] OF USINT", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := store.UpdateValue(arr.ID, []interface{}{float64(1), float64(256), float64(3)}); err == nil {
+		t.Error("配列の要素に収まらない値を書けた")
+	}
+	if err := store.UpdateFieldValue(arr.ID, "[2]", float64(1.5)); err == nil {
+		t.Error("配列の要素に小数を書けた")
 	}
 }

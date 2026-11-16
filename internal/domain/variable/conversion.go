@@ -4,10 +4,12 @@ import (
 	"encoding/binary"
 	"fmt"
 	"math"
+	"reflect"
 	"regexp"
 	"strconv"
 	"strings"
 	"time"
+	"unicode/utf8"
 )
 
 // ConvertValue は値を指定されたデータ型に変換する
@@ -25,94 +27,13 @@ func ConvertValue(value interface{}, dataType DataType) (interface{}, error) {
 			return v != 0, nil
 		}
 	case TypeSINT:
-		switch v := value.(type) {
-		case int8:
-			return v, nil
-		case float64:
-			return int8(v), nil
-		case int:
-			return int8(v), nil
-		case int64:
-			return int8(v), nil
-		case uint64:
-			return int8(v), nil
-		}
+		return convertInt(value, dataType, 8, func(b uint64) interface{} { return int8(b) })
 	case TypeINT:
-		switch v := value.(type) {
-		case int16:
-			return v, nil
-		case float64:
-			return int16(v), nil
-		case int:
-			return int16(v), nil
-		case int64:
-			return int16(v), nil
-		case uint64:
-			return int16(v), nil
-		}
+		return convertInt(value, dataType, 16, func(b uint64) interface{} { return int16(b) })
 	case TypeDINT:
-		switch v := value.(type) {
-		case int32:
-			return v, nil
-		case float64:
-			return int32(v), nil
-		case int:
-			return int32(v), nil
-		case int64:
-			return int32(v), nil
-		case uint64:
-			return int32(v), nil
-		}
-	case TypeUSINT:
-		switch v := value.(type) {
-		case uint8:
-			return v, nil
-		case float64:
-			return uint8(v), nil
-		case int:
-			return uint8(v), nil
-		case int64:
-			return uint8(v), nil
-		case uint64:
-			return uint8(v), nil
-		}
-	case TypeUINT:
-		switch v := value.(type) {
-		case uint16:
-			return v, nil
-		case float64:
-			return uint16(v), nil
-		case int:
-			return uint16(v), nil
-		case int64:
-			return uint16(v), nil
-		case uint64:
-			return uint16(v), nil
-		}
-	case TypeUDINT:
-		switch v := value.(type) {
-		case uint32:
-			return v, nil
-		case float64:
-			return uint32(v), nil
-		case int:
-			return uint32(v), nil
-		case int64:
-			return uint32(v), nil
-		case uint64:
-			return uint32(v), nil
-		}
+		return convertInt(value, dataType, 32, func(b uint64) interface{} { return int32(b) })
 	case TypeLINT:
-		switch v := value.(type) {
-		case int64:
-			return v, nil
-		case float64:
-			return int64(v), nil
-		case int:
-			return int64(v), nil
-		case uint64:
-			return int64(v), nil
-		case string:
+		if v, ok := value.(string); ok {
 			// JSONを文字列で転送した場合（精度損失防止）
 			n, err := strconv.ParseInt(v, 10, 64)
 			if err != nil {
@@ -120,17 +41,15 @@ func ConvertValue(value interface{}, dataType DataType) (interface{}, error) {
 			}
 			return n, nil
 		}
+		return convertInt(value, dataType, 64, func(b uint64) interface{} { return int64(b) })
+	case TypeUSINT:
+		return convertInt(value, dataType, 8, func(b uint64) interface{} { return uint8(b) })
+	case TypeUINT:
+		return convertInt(value, dataType, 16, func(b uint64) interface{} { return uint16(b) })
+	case TypeUDINT:
+		return convertInt(value, dataType, 32, func(b uint64) interface{} { return uint32(b) })
 	case TypeULINT:
-		switch v := value.(type) {
-		case uint64:
-			return v, nil
-		case float64:
-			return uint64(v), nil
-		case int:
-			return uint64(v), nil
-		case int64:
-			return uint64(v), nil
-		case string:
+		if v, ok := value.(string); ok {
 			// JSONを文字列で転送した場合（精度損失防止）
 			n, err := strconv.ParseUint(v, 10, 64)
 			if err != nil {
@@ -138,31 +57,19 @@ func ConvertValue(value interface{}, dataType DataType) (interface{}, error) {
 			}
 			return n, nil
 		}
+		return convertInt(value, dataType, 64, func(b uint64) interface{} { return b })
 	case TypeREAL:
-		switch v := value.(type) {
-		case float32:
-			return v, nil
-		case float64:
-			return float32(v), nil
-		case int:
-			return float32(v), nil
-		case int64:
-			return float32(v), nil
-		case uint64:
-			return float32(v), nil
+		f, ok := toFloat(value)
+		if !ok {
+			break
 		}
+		if math.Abs(f) > math.MaxFloat32 && !math.IsInf(f, 0) {
+			return nil, fmt.Errorf("値 %v は REAL（32 ビットの実数）に収まりません", f)
+		}
+		return float32(f), nil
 	case TypeLREAL:
-		switch v := value.(type) {
-		case float64:
-			return v, nil
-		case float32:
-			return float64(v), nil
-		case int:
-			return float64(v), nil
-		case int64:
-			return float64(v), nil
-		case uint64:
-			return float64(v), nil
+		if f, ok := toFloat(value); ok {
+			return f, nil
 		}
 	case TypeSTRING:
 		switch v := value.(type) {
@@ -182,10 +89,7 @@ func ConvertValue(value interface{}, dataType DataType) (interface{}, error) {
 		switch v := value.(type) {
 		case string:
 			maxLen, _ := ParseStringType(dataType)
-			if maxLen > 0 && len(v) > maxLen {
-				v = v[:maxLen]
-			}
-			return v, nil
+			return truncateBytes(v, maxLen), nil
 		}
 		return nil, fmt.Errorf("cannot convert %T to %s", value, dataType)
 	}
@@ -966,4 +870,80 @@ func ParseDATE_AND_TIME(s string) (uint64, error) {
 func FormatDATE_AND_TIME(timestamp uint64) string {
 	t := time.Unix(int64(timestamp), 0).UTC()
 	return "DT#" + t.Format("2006-01-02-15:04:05")
+}
+
+// convertInt は数値を、bits ビットの整数型にする。build はビットの並び（2 の補数）から型の値を作る。
+//
+// 受け付けるのは、その幅に「符号付きか符号なしのどちらかとして」収まる値（INT なら -32768〜65535）。
+// 符号なしの範囲の値は、ビットの並びとして読む（INT に 65535 を書くと -1。画面の 16 進の入力 0xFFFF や、
+// スクリプトでカウンターが 32767 を超えたときに、PLC と同じように回る）。
+// それより大きい・小さい値と、小数のある値はエラーにする（以前は黙って切り詰めていた。70000 が 4464 になる）
+func convertInt(value interface{}, dataType DataType, bits uint, build func(uint64) interface{}) (interface{}, error) {
+	var (
+		pattern uint64
+		inRange bool
+	)
+	switch v := value.(type) {
+	case float64:
+		return convertIntFromFloat(v, dataType, bits, build)
+	case float32:
+		return convertIntFromFloat(float64(v), dataType, bits, build)
+	case int, int8, int16, int32, int64:
+		n := reflect.ValueOf(v).Int()
+		inRange = bits == 64 || (n >= -(1<<(bits-1)) && n <= (1<<bits)-1)
+		pattern = uint64(n)
+	case uint, uint8, uint16, uint32, uint64, uintptr:
+		n := reflect.ValueOf(v).Uint()
+		inRange = bits == 64 || n <= (1<<bits)-1
+		pattern = n
+	default:
+		return nil, fmt.Errorf("cannot convert %T to %s", value, dataType)
+	}
+	if !inRange {
+		return nil, fmt.Errorf("値 %v は %s（%d ビット）に収まりません", value, dataType, bits)
+	}
+	return build(pattern), nil
+}
+
+func convertIntFromFloat(f float64, dataType DataType, bits uint, build func(uint64) interface{}) (interface{}, error) {
+	if math.IsNaN(f) || math.IsInf(f, 0) || math.Trunc(f) != f {
+		return nil, fmt.Errorf("値 %v は整数ではありません（%s）", f, dataType)
+	}
+	lo := -math.Ldexp(1, int(bits)-1) // -2^(bits-1)
+	hi := math.Ldexp(1, int(bits))    // 2^bits（含まない）
+	if f < lo || f >= hi {
+		return nil, fmt.Errorf("値 %v は %s（%d ビット）に収まりません", f, dataType, bits)
+	}
+	if f < 0 {
+		return build(uint64(int64(f))), nil
+	}
+	return build(uint64(f)), nil
+}
+
+// toFloat は数値を float64 にする（数値でなければ false）
+func toFloat(value interface{}) (float64, bool) {
+	switch v := value.(type) {
+	case float64:
+		return v, true
+	case float32:
+		return float64(v), true
+	case int, int8, int16, int32, int64:
+		return float64(reflect.ValueOf(v).Int()), true
+	case uint, uint8, uint16, uint32, uint64, uintptr:
+		return float64(reflect.ValueOf(v).Uint()), true
+	}
+	return 0, false
+}
+
+// truncateBytes は s を maxLen バイトまでに切る（maxLen が 0 以下なら切らない）。
+// 複数バイトの文字（日本語など）の途中では切らない（途中で切ると、正しくない UTF-8 になる）ので、maxLen より短くなることがある
+func truncateBytes(s string, maxLen int) string {
+	if maxLen <= 0 || len(s) <= maxLen {
+		return s
+	}
+	i := maxLen
+	for i > 0 && !utf8.RuneStart(s[i]) {
+		i--
+	}
+	return s[:i]
 }

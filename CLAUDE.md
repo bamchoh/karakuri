@@ -604,6 +604,19 @@ JavaScript（goja）でPLC動作を記述。
 - **展開/折りたたみ**: 構造体・配列のヘッダー行で子要素の表示を制御
 - **再帰的編集**: ネストされたデータ構造を再帰的に編集可能
 
+#### 値の変換（`ConvertValue()`、`internal/domain/variable/conversion.go`）
+
+変数に書く値は、どの経路（画面・スクリプト・REST API・OPC UA・プロジェクトの読み込み）も、ここで型に合わせる。
+
+- **整数型**: その幅に「符号付きか符号なしのどちらかとして」収まる値だけを受け付ける（INT なら -32768〜65535）。符号なしの範囲の値は、ビットの並び（2 の補数）として読む（INT の 65535 は -1）
+  - 画面の 16 進の入力（`0xFFFF`）や、スクリプトでカウンターが 32767 を超えたとき（PLC と同じように -32768 に回る）のため
+  - それより大きい・小さい値と、小数のある値（1.7）は、エラーにする（以前は黙って切り詰めていて、INT に 70000 を書くと 4464 になった）
+  - LINT / ULINT は、10 進の文字列も受け付ける（JSON の数値で桁を落とさないため）
+- **REAL**: float32 に収まらない値はエラー（以前は +Inf になった）
+- **STRING[n]**: n バイトを超えたら切る。複数バイトの文字（日本語など）の途中では切らない（n バイトより短くなることがある。以前は途中で切って、正しくない UTF-8 になった）
+- **変数の作成**: 初期値を指定したのに変換できなければ、エラーにする（初期値がなければ既定値。以前は、変換できない初期値も黙って既定値にしていた）
+- テスト: `conversion_test.go` の `TestConvertValue_IntegerRange` / `TestConvertValue_RealRange` / `TestConvertValue_RangeInsideStructAndArray`
+
 #### プロトコルマッピング
 
 変数を複数プロトコルのメモリアドレスにマッピング可能：
@@ -810,6 +823,9 @@ JavaScript（goja）でPLC動作を記述。
 
 - 書き込みは uastack が DataType / ValueRank を検査する（INT ノードには Int16 で書く必要がある）
 - 構造体ノードへの書き込みは JSON 文字列を `map[string]interface{}` に変換してホストへ送る
+  - JSON の数値は、整数なら int64（収まらなければ uint64）、それ以外は float64 にする（`parseJSON()`。構造体の LINT / ULINT のフィールドを、64 ビットの全範囲で書けるように）。JSON のあとに余分な文字があればエラー
+  - 構造体のノードは String なので、uastack の型の検査を通らない。型に収まらない値（`{"speed": 70000}`）は、変数ストアの `ConvertValue()` が断る（クライアントには Bad のステータス）
+  - 型の端の値の行き来と、型に収まらない値の書き込みは `boundary_test.go`
 - アクセスモード: `read` → CurrentRead、`write` → CurrentWrite、`readwrite` → 両方
 
 #### 値の同期

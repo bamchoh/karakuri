@@ -86,7 +86,7 @@ func TestFromVariant(t *testing.T) {
 		t.Errorf("USINT array: %#v, %v", got, err)
 	}
 	got, err = fromVariant(ua.NewVariant(`{"speed":5}`), "Motor")
-	if err != nil || !reflect.DeepEqual(got, map[string]interface{}{"speed": float64(5)}) {
+	if err != nil || !reflect.DeepEqual(got, map[string]interface{}{"speed": int64(5)}) {
 		t.Errorf("struct: %#v, %v", got, err)
 	}
 	if _, err := fromVariant(ua.NewVariant("not json"), "Motor"); err == nil {
@@ -156,7 +156,7 @@ func TestFromVariant_Matrix(t *testing.T) {
 	if err != nil {
 		t.Fatalf("struct matrix: %v", err)
 	}
-	if m := got.([]interface{})[1].([]interface{})[0].(map[string]interface{}); m["a"] != float64(3) {
+	if m := got.([]interface{})[1].([]interface{})[0].(map[string]interface{}); m["a"] != int64(3) {
 		t.Errorf("struct matrix [1][0] = %#v", m)
 	}
 
