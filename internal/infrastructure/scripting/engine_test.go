@@ -197,6 +197,10 @@ func TestScriptEngine_VariableFunctionsFailLoudly(t *testing.T) {
 		{"配列を名前で読む", `vars.Values.first`, `vars: Values は配列です`},
 		{"構造体でない変数のフィールド", `vars.Count.speed.x`, `TypeError`},
 		{"型に合わない値を書く", `vars.Count = "abc"`, `vars: Count に書けません`},
+		{"型に収まらない値を書く", `vars.Count = 70000`, `INT（16 ビット）に収まりません`},
+		{"整数の型に小数を書く", `vars.Count = 1.5`, `整数ではありません`},
+		{"構造体のフィールドに収まらない値", `vars.M1.speed = -40000`, `収まりません`},
+		{"配列の要素に収まらない値", `vars.Values[1] = 1e9`, `収まりません`},
 		{"64 ビットを超える BigInt を書く", `vars.Big = 2n ** 64n`, `64 ビットの整数の範囲`},
 		{"構造体の中の 64 ビットを超える BigInt", `vars.M1 = {speed: -(2n ** 63n) - 1n}`, `speed: BigInt`},
 		{"変数は消せない", `delete vars.Count`, `vars: 変数 "Count" は消せません`},
@@ -839,5 +843,29 @@ func TestScriptEngine_ClientPolling(t *testing.T) {
 	// running は書けない
 	if _, err := engine.RunOnce(`"use strict"; clients("PLC-A").polling.running = true`); err == nil {
 		t.Error("running に書けた")
+	}
+}
+
+// INT のカウンターが 32767 を超えると、PLC と同じように -32768 に回る（符号なしの範囲の値は、ビットの並びとして読む）。
+// 型の幅に収まらない値は、エラーにする
+func TestScriptEngine_IntegerWrapsLikePLC(t *testing.T) {
+	engine, vs := newTestEngine()
+	if _, err := vs.CreateVariable("C", variable.TypeINT, int16(32767)); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := engine.RunOnce(`vars.C = vars.C + 1`); err != nil {
+		t.Fatalf("32767 + 1: %v", err)
+	}
+	if v, _ := vs.GetVariableByName("C"); v.Value != int16(-32768) {
+		t.Errorf("C = %#v, want -32768", v.Value)
+	}
+	if _, err := engine.RunOnce(`vars.C = 0xFFFF`); err != nil {
+		t.Fatalf("0xFFFF: %v", err)
+	}
+	if v, _ := vs.GetVariableByName("C"); v.Value != int16(-1) {
+		t.Errorf("C = %#v, want -1", v.Value)
+	}
+	if _, err := engine.RunOnce(`vars.C = 0x10000`); err == nil {
+		t.Error("INT に 0x10000 を書けた")
 	}
 }

@@ -482,10 +482,41 @@ func toAnySlice[T any](s []T) []interface{} {
 	return out
 }
 
+// parseJSON は構造体の値（JSON 文字列）を読む。数値は桁を落とさないよう、整数なら int64（収まらなければ uint64）、
+// それ以外は float64 にする（構造体の LINT / ULINT のフィールドを、64 ビットの全範囲で書けるようにするため）
 func parseJSON(s string) (interface{}, error) {
+	dec := json.NewDecoder(strings.NewReader(s))
+	dec.UseNumber()
 	var v interface{}
-	if err := json.Unmarshal([]byte(s), &v); err != nil {
+	if err := dec.Decode(&v); err != nil {
 		return nil, fmt.Errorf("JSON として解釈できません: %w", err)
 	}
-	return v, nil
+	if dec.More() {
+		return nil, fmt.Errorf("JSON として解釈できません: 値のあとに余分な文字があります")
+	}
+	return normalizeJSONNumbers(v), nil
+}
+
+// normalizeJSONNumbers は json.Number を int64 / uint64 / float64 に直す（配列・オブジェクトの中も）
+func normalizeJSONNumbers(v interface{}) interface{} {
+	switch x := v.(type) {
+	case json.Number:
+		if i, err := strconv.ParseInt(x.String(), 10, 64); err == nil {
+			return i
+		}
+		if u, err := strconv.ParseUint(x.String(), 10, 64); err == nil {
+			return u
+		}
+		f, _ := x.Float64()
+		return f
+	case []interface{}:
+		for i, e := range x {
+			x[i] = normalizeJSONNumbers(e)
+		}
+	case map[string]interface{}:
+		for k, e := range x {
+			x[k] = normalizeJSONNumbers(e)
+		}
+	}
+	return v
 }

@@ -309,11 +309,16 @@ func (s *VariableStore) CreateVariable(name string, dataType DataType, initialVa
 
 	if dataType.IsValid() {
 		// スカラー型
-		converted, err := ConvertValue(initialValue, dataType)
-		if err != nil {
-			converted = dataType.DefaultValue()
+		if initialValue == nil {
+			value = dataType.DefaultValue()
+		} else {
+			// 初期値を指定したのに変換できない（型に収まらないなど）なら、既定値にせずエラーにする
+			converted, err := ConvertValue(initialValue, dataType)
+			if err != nil {
+				return nil, fmt.Errorf("初期値を %s にできません: %w", dataType, err)
+			}
+			value = converted
 		}
-		value = converted
 	} else if dataType.IsArrayType() {
 		// 配列型
 		elemType, size, err := ParseArrayType(dataType)
