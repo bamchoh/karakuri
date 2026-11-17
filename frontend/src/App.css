@@ -3237,3 +3237,28 @@ input.address-invalid:focus,
   color: var(--danger);
   font-size: 0.85rem;
 }
+
+/* モニタリングの中身の行（構造体のフィールド・配列の要素・接続先の値の 1 つずつ） */
+.watch-table tr.watch-child td {
+  border-bottom-color: var(--border-subtle);
+}
+
+.watch-table td.watch-label.watch-more {
+  color: var(--text-muted);
+}
+
+.watch-collapse {
+  display: inline-flex;
+  align-items: center;
+  vertical-align: middle;
+  margin-right: 0.2rem;
+  padding: 0.1rem;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.watch-collapse:hover {
+  color: var(--text-main);
+}

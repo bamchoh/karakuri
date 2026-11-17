@@ -1,16 +1,12 @@
 package application
 
 import (
-	"encoding/json"
 	"fmt"
 	"strings"
 )
 
 // モニタリングに出せるのは、レジスタのほかに、変数・接続先のサブスクリプションの監視項目・ポーリングの読み取り項目。
 // レジスタの値は、画面がメモリを読んで作る（ビット幅・表示形式を画面が持つため）。ほかの項目の値は、ここで作る
-
-// 1 つの項目の値を並べて出すときの上限（配列を監視している項目など）
-const monitoringMaxValues = 16
 
 // removeMonitoringItems は、match が true を返す項目を消す（変数・接続先を消したときに、それを指す項目を消す）
 func (s *PLCService) removeMonitoringItems(match func(*MonitoringItemDTO) bool) {
@@ -86,9 +82,14 @@ func (s *PLCService) monitoringVariableValue(item *MonitoringItemDTO) Monitoring
 		v.Status, v.Error = "error", err.Error()
 		return v
 	}
+	v.Status = "ok"
+	if isComposite(value) {
+		// 構造体・配列は、中身を 1 つずつの行にする
+		v.Rows = s.variableRows(s.typeAtPath(variable.DataType, item.FieldPath), value, item.FieldPath)
+		return v
+	}
 	v.Value = value
 	v.Text = monitoringText(value)
-	v.Status = "ok"
 	return v
 }
 
@@ -100,7 +101,7 @@ func fieldPathSuffix(path string) string {
 	return "." + path
 }
 
-// monitoringText は、変数の値を 1 行の文字にする（構造体・配列は JSON）
+// monitoringText は、変数の値（数値・真偽・文字列）を表示の文字にする
 func monitoringText(value interface{}) string {
 	switch x := value.(type) {
 	case nil:
@@ -112,37 +113,17 @@ func monitoringText(value interface{}) string {
 			return "TRUE"
 		}
 		return "FALSE"
-	case map[string]interface{}, []interface{}:
-		b, err := json.Marshal(x)
-		if err != nil {
-			return fmt.Sprint(x)
-		}
-		return string(b)
 	}
 	return fmt.Sprint(value)
 }
 
-// resultValuesText は、接続先から読んだ値を 1 行の文字にする（1 つなら値だけ、いくつもあればラベルを付けて並べる）
-func resultValuesText(values []ClientResultValueDTO) string {
-	if len(values) == 0 {
-		return ""
-	}
+// fillResultValues は、接続先から読んだ値を入れる（1 つなら項目の行に、いくつもあれば中身の行に）
+func fillResultValues(v *MonitoringValueDTO, values []ClientResultValueDTO) {
 	if len(values) == 1 {
-		return values[0].Value
+		v.Text = values[0].Value
+		return
 	}
-	parts := make([]string, 0, len(values))
-	for i, rv := range values {
-		if i == monitoringMaxValues {
-			parts = append(parts, fmt.Sprintf("…（全 %d 個）", len(values)))
-			break
-		}
-		if rv.Label == "" {
-			parts = append(parts, rv.Value)
-		} else {
-			parts = append(parts, rv.Label+": "+rv.Value)
-		}
-	}
-	return strings.Join(parts, ", ")
+	v.Rows = resultValueRows(values)
 }
 
 func fillSubscriptionValue(v *MonitoringValueDTO, sub *ClientSubscriptionDTO, summary string) {
@@ -151,7 +132,7 @@ func fillSubscriptionValue(v *MonitoringValueDTO, sub *ClientSubscriptionDTO, su
 			if it.Summary != summary {
 				continue
 			}
-			v.Text = resultValuesText(it.Values)
+			fillResultValues(v, it.Values)
 			switch {
 			case !sub.Running:
 				v.Status, v.Error = "stale", "監視していません"
@@ -178,7 +159,7 @@ func fillPollValue(v *MonitoringValueDTO, poll *ClientPollingDTO, summary string
 			if it.Summary != summary {
 				continue
 			}
-			v.Text = resultValuesText(it.Values)
+			fillResultValues(v, it.Values)
 			switch {
 			case !poll.Running:
 				v.Status, v.Error = "stale", "ポーリングしていません"

@@ -870,11 +870,36 @@ export namespace application {
 	        this.summary = source["summary"];
 	    }
 	}
+	export class MonitoringValueRowDTO {
+	    path?: string;
+	    label: string;
+	    depth: number;
+	    text: string;
+	    value?: any;
+	    composite?: boolean;
+	    more?: boolean;
+	
+	    static createFrom(source: any = {}) {
+	        return new MonitoringValueRowDTO(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.path = source["path"];
+	        this.label = source["label"];
+	        this.depth = source["depth"];
+	        this.text = source["text"];
+	        this.value = source["value"];
+	        this.composite = source["composite"];
+	        this.more = source["more"];
+	    }
+	}
 	export class MonitoringValueDTO {
 	    id: string;
 	    source: string;
 	    label: string;
 	    text: string;
+	    rows?: MonitoringValueRowDTO[];
 	    value?: any;
 	    status: string;
 	    error?: string;
@@ -889,11 +914,31 @@ export namespace application {
 	        this.source = source["source"];
 	        this.label = source["label"];
 	        this.text = source["text"];
+	        this.rows = this.convertValues(source["rows"], MonitoringValueRowDTO);
 	        this.value = source["value"];
 	        this.status = source["status"];
 	        this.error = source["error"];
 	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
 	}
+	
 	export class NodeAddressDTO {
 	    variableId: string;
 	    address: string;

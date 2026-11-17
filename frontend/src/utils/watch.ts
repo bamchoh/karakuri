@@ -61,3 +61,44 @@ export function filterCandidates<T extends WatchCandidate>(
       (c.detail ?? "").toLowerCase().includes(q),
   );
 }
+
+// 値の中身の 1 行（application.MonitoringValueRowDTO の一部）。構造体・配列の行（composite）は、中身が下の行に続く
+export interface ValueRowLike {
+  depth: number;
+  path?: string;
+  composite?: boolean;
+}
+
+// visibleRows は、中身の行のうち、畳んだ行（isCollapsed が true の構造体・配列の行）より下にぶら下がる行を除く。
+// 行は、親のすぐ下に子が続く並び（depth は、親より 1 深い）
+export function visibleRows<T extends ValueRowLike>(
+  rows: T[],
+  isCollapsed: (row: T) => boolean,
+): T[] {
+  const out: T[] = [];
+  // この深さより深い行は、畳まれた行の中身なので出さない
+  let hideBelow = Infinity;
+  for (const row of rows) {
+    if (row.depth > hideBelow) continue;
+    hideBelow = Infinity;
+    out.push(row);
+    if (row.composite && isCollapsed(row)) hideBelow = row.depth;
+  }
+  return out;
+}
+
+// variablePathLabel は、変数名とパスをつないだ名前（"Motor1" + "speed" → "Motor1.speed"、"Values" + "[1]" → "Values[1]"）
+export function variablePathLabel(name: string, path: string): string {
+  if (!path) return name;
+  return path.startsWith("[") || path.startsWith(".")
+    ? name + path
+    : `${name}.${path}`;
+}
+
+// variableNameOf は、項目の名前（変数名 + 項目のパス）から変数名を取り出す
+export function variableNameOf(label: string, fieldPath: string): string {
+  const suffix = variablePathLabel("", fieldPath);
+  return suffix && label.endsWith(suffix)
+    ? label.slice(0, label.length - suffix.length)
+    : label;
+}
