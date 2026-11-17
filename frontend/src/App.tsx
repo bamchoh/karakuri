@@ -12,7 +12,7 @@ import { WindowSetTitle } from "../wailsjs/runtime/runtime";
 import { windowTitle } from "./utils/windowTitle";
 import { PageActiveContext } from "./components/usePageActive";
 
-const APP_VERSION = "v0.0.51";
+const APP_VERSION = "v0.0.52";
 
 type Tab = "server" | "variables" | "scripts";
 
