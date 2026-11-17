@@ -1,7 +1,7 @@
 package adapter
 
 import (
-	"slices"
+	"sync"
 
 	"karakuri/internal/domain/protocol"
 	"karakuri/internal/domain/variable"
@@ -32,6 +32,14 @@ type VariableBackedDataStore struct {
 	// 同じメモリを指すエリア。作ったあとは変えない
 	wordAreaOf map[string]string   // ビットのエリア → 同じメモリのワードのエリア
 	bitAreasOf map[string][]string // ワードのエリア → 同じメモリのビットのエリア
+
+	// このプロトコルのマッピングの、エリアごとの索引（mappingsIn）。
+	// 書き込みのたびに全部のマッピングを探すと、変数の数の 2 乗で遅くなるため。
+	// 変数ストアの LayoutVersion が変わったら作り直す
+	indexMu      sync.Mutex
+	indexVersion uint64
+	indexValid   bool
+	index        map[string][]variable.MappedVariable // エリア → そのエリアのマッピング
 }
 
 // NewVariableBackedDataStore は新しいVariableBackedDataStoreを作成する
@@ -98,6 +106,29 @@ func (a *VariableBackedDataStore) sharedAreas(area string) []string {
 	return a.bitAreasOf[area]
 }
 
+// mappingsIn は、area にマッピングした変数の一覧を返す（返したスライスは書き換えない）
+func (a *VariableBackedDataStore) mappingsIn(area string) []variable.MappedVariable {
+	a.indexMu.Lock()
+	defer a.indexMu.Unlock()
+	if !a.indexValid || a.varStore.LayoutVersion() != a.indexVersion {
+		version, all := a.varStore.MappingIndex(a.protocolType)
+		index := make(map[string][]variable.MappedVariable)
+		for _, mv := range all {
+			index[mv.Mapping.MemoryArea] = append(index[mv.Mapping.MemoryArea], mv)
+		}
+		a.index, a.indexVersion, a.indexValid = index, version, true
+	}
+	return a.index[area]
+}
+
+// entryBitRange は、索引の 1 件が占める範囲を、ビットの番号で返す（mappingBitRange と同じ）
+func (a *VariableBackedDataStore) entryBitRange(mv *variable.MappedVariable) (start, end uint64) {
+	if mv.DataType.IsBitType() {
+		return uint64(mv.Mapping.Address), uint64(mv.Mapping.Address) + 1
+	}
+	return a.wordsBitRange(mv.Mapping.MemoryArea, mv.Mapping.Address, mv.WordCount)
+}
+
 // mappingBitRange は、変数がマッピング先で占める範囲を、ビットの番号（ワード × 16 + ビット）で返す
 func (a *VariableBackedDataStore) mappingBitRange(v *variable.Variable, m *variable.ProtocolMapping) (start, end uint64) {
 	if v.DataType.IsBitType() {
@@ -119,27 +150,23 @@ func (a *VariableBackedDataStore) wordsBitRange(area string, address uint32, cou
 // 同じメモリを指すほかのエリアにマッピングした変数を、メモリの値で更新する。
 // except は、書き込みのもとになった変数の ID（その変数は更新しない）
 func (a *VariableBackedDataStore) syncSharedAreas(area string, start, end uint64, except string) {
-	others := a.sharedAreas(area)
-	if len(others) == 0 {
-		return
-	}
-	for varID, mappings := range a.varStore.GetAllMappingsForProtocol(a.protocolType) {
-		if varID == except {
-			continue
-		}
-		for i := range mappings {
-			m := &mappings[i]
-			if !slices.Contains(others, m.MemoryArea) {
+	for _, other := range a.sharedAreas(area) {
+		entries := a.mappingsIn(other)
+		for i := range entries {
+			mv := &entries[i]
+			if mv.VariableID == except {
 				continue
 			}
-			v, err := a.varStore.GetVariable(varID)
-			if err != nil {
-				break
+			if s, e := a.entryBitRange(mv); s >= end || start >= e {
+				continue
 			}
-			if s, e := a.mappingBitRange(v, m); s < end && start < e {
-				if value, ok := a.readVariableFromInner(v, m); ok {
-					a.varStore.UpdateValueFrom(v.ID, value, a)
-				}
+			v, err := a.varStore.GetVariable(mv.VariableID)
+			if err != nil {
+				continue
+			}
+			m := mv.Mapping
+			if value, ok := a.readVariableFromInner(v, &m); ok {
+				a.varStore.UpdateValueFrom(v.ID, value, a)
 			}
 		}
 	}
@@ -198,31 +225,45 @@ func (a *VariableBackedDataStore) readVariableFromInner(v *variable.Variable, m 
 // 変数ごとに 1 回だけ、変数全体を読み直して更新する（変数の一部のワードだけが書かれた場合も正しい値になる）
 func (a *VariableBackedDataStore) syncWordsToVariables(area string, address uint32, count int) {
 	updated := make(map[string]bool)
-	for i := 0; i < count; i++ {
-		v, m := a.varStore.FindVariableByMapping(a.protocolType, area, address+uint32(i))
-		if v == nil || m == nil || updated[v.ID] {
+	entries := a.mappingsIn(area)
+	for i := range entries {
+		mv := &entries[i]
+		if updated[mv.VariableID] || !overlaps(mv, address, count) {
 			continue
 		}
-		updated[v.ID] = true
-		if value, ok := a.readVariableFromInner(v, m); ok {
+		updated[mv.VariableID] = true
+		v, err := a.varStore.GetVariable(mv.VariableID)
+		if err != nil {
+			continue
+		}
+		m := mv.Mapping
+		if value, ok := a.readVariableFromInner(v, &m); ok {
 			a.varStore.UpdateValueFrom(v.ID, value, a)
 		}
 	}
 }
 
+// overlaps は、マッピングの範囲（アドレスからワード数の分）と、address から count 個の範囲が重なるかを返す
+func overlaps(mv *variable.MappedVariable, address uint32, count int) bool {
+	start, end := uint64(mv.Mapping.Address), uint64(mv.Mapping.Address)+uint64(mv.WordCount)
+	return start < uint64(address)+uint64(count) && uint64(address) < end
+}
+
 // syncBitsToVariables は、書き込まれたビットの範囲にマッピングされた変数を、ビットの値で更新する
 func (a *VariableBackedDataStore) syncBitsToVariables(area string, address uint32, count int) {
-	for i := 0; i < count; i++ {
-		addr := address + uint32(i)
-		v, _ := a.varStore.FindVariableByMapping(a.protocolType, area, addr)
-		if v == nil {
+	entries := a.mappingsIn(area)
+	for i := range entries {
+		mv := &entries[i]
+		if !overlaps(mv, address, count) {
 			continue
 		}
-		bit, err := a.inner.ReadBit(area, addr)
+		// 重なりのうち最後のビットの値にする（BOOL なら、マッピングしたビットそのもの）
+		last := min(uint64(mv.Mapping.Address)+uint64(mv.WordCount), uint64(address)+uint64(count)) - 1
+		bit, err := a.inner.ReadBit(area, uint32(last))
 		if err != nil {
 			continue
 		}
-		a.varStore.UpdateValueFrom(v.ID, bit, a)
+		a.varStore.UpdateValueFrom(mv.VariableID, bit, a)
 	}
 }
 

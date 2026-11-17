@@ -29,6 +29,10 @@ type VariableStore struct {
 	structTypes     map[string]*StructTypeDef             // 構造体型名 -> 型定義
 	nodePublishings map[string]map[string]*NodePublishing // variableID -> protocolType -> NodePublishing
 	listeners       []ChangeListener
+
+	// layoutVersion は、マッピング・変数の追加と削除・変数の型・構造体型が変わるたびに増える（値の変更では変わらない）。
+	// マッピングから変数を引く索引を持つ側（VariableBackedDataStore）が、作り直すかを決めるのに使う
+	layoutVersion uint64
 }
 
 // NewVariableStore は新しいVariableStoreを作成する
@@ -134,6 +138,7 @@ func (s *VariableStore) unlocked() TypeResolver {
 // RegisterStructType は構造体型を登録する
 func (s *VariableStore) RegisterStructType(def *StructTypeDef) error {
 	s.mu.Lock()
+	s.layoutVersion++
 	defer s.mu.Unlock()
 
 	if _, exists := s.structTypes[def.Name]; exists {
@@ -170,6 +175,7 @@ func (s *VariableStore) GetAllStructTypes() []*StructTypeDef {
 // DeleteStructType は構造体型を削除する（使用中の変数がないかチェック）
 func (s *VariableStore) DeleteStructType(name string) error {
 	s.mu.Lock()
+	s.layoutVersion++
 	defer s.mu.Unlock()
 
 	if _, ok := s.structTypes[name]; !ok {
@@ -260,6 +266,7 @@ func (s *VariableStore) generateDefaultValue(dataType DataType) (interface{}, er
 // データタイプが変更された場合は値をデフォルト値にリセットする
 func (s *VariableStore) UpdateMetadata(id string, newName string, newDataType DataType) (*Variable, error) {
 	s.mu.Lock()
+	s.layoutVersion++
 
 	v, exists := s.variables[id]
 	if !exists {
@@ -299,6 +306,7 @@ func (s *VariableStore) UpdateMetadata(id string, newName string, newDataType Da
 // CreateVariable は新しい変数を作成する
 func (s *VariableStore) CreateVariable(name string, dataType DataType, initialValue interface{}) (*Variable, error) {
 	s.mu.Lock()
+	s.layoutVersion++
 	defer s.mu.Unlock()
 
 	if _, exists := s.byName[name]; exists {
@@ -479,6 +487,7 @@ func (s *VariableStore) UpdateValueByName(name string, value interface{}) error 
 // DeleteVariable は変数を削除する
 func (s *VariableStore) DeleteVariable(id string) error {
 	s.mu.Lock()
+	s.layoutVersion++
 	defer s.mu.Unlock()
 
 	v, exists := s.variables[id]
@@ -515,6 +524,7 @@ func (s *VariableStore) getMappingsCopy(variableID string) []ProtocolMapping {
 // SetMappings は変数のマッピングを設定する
 func (s *VariableStore) SetMappings(variableID string, mappings []ProtocolMapping) error {
 	s.mu.Lock()
+	s.layoutVersion++
 	if _, exists := s.variables[variableID]; !exists {
 		s.mu.Unlock()
 		return fmt.Errorf("variable %s not found", variableID)
@@ -550,6 +560,46 @@ func (s *VariableStore) FindVariableByMapping(protocolType, area string, address
 		}
 	}
 	return nil, nil
+}
+
+// MappedVariable は、あるプロトコルにマッピングした変数の、マッピング 1 つ分
+type MappedVariable struct {
+	VariableID string
+	DataType   DataType
+	WordCount  int // 変数が占めるワード数
+	Mapping    ProtocolMapping
+}
+
+// LayoutVersion は、マッピング・変数の追加と削除・変数の型・構造体型の版を返す（値の変更では変わらない）
+func (s *VariableStore) LayoutVersion() uint64 {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.layoutVersion
+}
+
+// MappingIndex は、protocolType にマッピングした変数の一覧と、その時点の版（LayoutVersion）を返す。
+// 版が変わるまで、一覧はそのまま使える
+func (s *VariableStore) MappingIndex(protocolType string) (uint64, []MappedVariable) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	var result []MappedVariable
+	for varID, mappings := range s.mappings {
+		v, ok := s.variables[varID]
+		if !ok {
+			continue
+		}
+		for _, m := range mappings {
+			if m.ProtocolType == protocolType {
+				result = append(result, MappedVariable{
+					VariableID: varID,
+					DataType:   v.DataType,
+					WordCount:  v.DataType.WordCountWithResolver(s.unlocked()),
+					Mapping:    m,
+				})
+			}
+		}
+	}
+	return s.layoutVersion, result
 }
 
 // GetAllMappingsForProtocol は指定プロトコルの全マッピングを返す
@@ -635,6 +685,7 @@ func (s *VariableStore) Snapshot() map[string]interface{} {
 // Restore はスナップショットから状態を復元する
 func (s *VariableStore) Restore(data map[string]interface{}) error {
 	s.mu.Lock()
+	s.layoutVersion++
 	defer s.mu.Unlock()
 
 	s.variables = make(map[string]*Variable)
@@ -771,6 +822,7 @@ func (s *VariableStore) Restore(data map[string]interface{}) error {
 // ClearAll はすべての変数をクリアする
 func (s *VariableStore) ClearAll() {
 	s.mu.Lock()
+	s.layoutVersion++
 	defer s.mu.Unlock()
 
 	s.variables = make(map[string]*Variable)
