@@ -272,6 +272,8 @@ internal/
   - レジスタ → 変数: この DataStore に書かれると（`Write*`）、その範囲にマッピングされた変数に反映する。プロトコルのサーバーにはこの DataStore を渡すので、クライアントの書き込み・画面・スクリプトのどれもここを通る
   - **どちらも、呼び出しが戻った時点で反映が終わっている**（別のゴルーチンに回さない。Modbus のクライアントに応答が返った時点で、変数は更新済み）
   - 行き来を防ぐ仕組み: 変数 → レジスタは内側の DataStore に直接書く。レジスタ → 変数は `VariableStore.UpdateValueFrom()` で自分を通知先から外す
+  - **書かれた範囲の変数は、エリアごとの索引（`mappingsIn()`）から引く**。索引は、変数ストアの `LayoutVersion()`（マッピング・変数の追加と削除・型・構造体型を変えるたびに増える。値の変更では変わらない）が変わったときだけ `MappingIndex()` から作り直す。以前は、書いたアドレスごと・変わった変数ごとに全部のマッピングを探していて、変数の数の 2 乗で遅くなった（100 個の書き込みで 2.1ms → 0.29ms）
+    - 変数ストアに、マッピングや型を変える関数を足すときは、`layoutVersion` を増やす（増やさないと、古い索引のまま同期する。`variable_datastore_index_test.go`）
   - **同じメモリを指すエリア**（`MemoryArea.BitsOf`）: 片方に書かれたら（レジスタへの書き込みでも、変数の変更でも）、もう片方にマッピングした変数を、メモリの値で更新する（`syncSharedAreas()`。範囲は「ワード × 16 + ビット」の番号で比べる）
 - **plcNodes** (`internal/protocols/opcua/nodes.go`): 公開変数を uastack の `AddressSpace` に実ノードとして登録する
   - `rebuild()`: `GetEnabledNodePublishings("opcua")` からノード構成を計画し、差分（追加・削除・型変更）だけノードを作り直す
@@ -678,8 +680,8 @@ JavaScript（goja）でPLC動作を記述。
   - 保存の形を変えたら、新しいバージョンのファイルを足す: `KARAKURI_WRITE_PROJECT_FIXTURE=v0.0.49 go test -run TestWriteProjectFixture ./internal/protocols`（全プロトコルのサーバーと接続先・全部の型の変数・構造体型・マッピング・公開・スクリプト・モニタリングを、既定値でない値で作る）
 - **後片付けの漏れ**（`internal/protocols/leak_test.go`）: サーバーの起動・停止、クライアントの送信・切断・削除、ポーリングとサブスクリプションの開始・停止、スクリプトの開始・停止を 20 回くり返して、ゴルーチンが増えないことを確かめる（Modbus TCP・FINS・SLMP・OPC UA。シリアルは COM ポートがないので対象外）
 - **ベンチマーク**（`internal/protocols/bench_test.go`）: 主な経路（Modbus TCP の読み書き・変数の書き込み・OPC UA の読み取り）を、変数 100 個をマッピングした状態で測る。ふだんの `go test` では流れない。`go test -run '^$' -bench . -benchmem ./internal/protocols`
-  - 2026-11-17 の開発 PC（i7-11800H）: 保持レジスタ 125 個の読み取り 20µs、100 個の書き込み 2.1ms（変数 100 個と FINS の DM に反映）、変数 1 つの書き込み 15µs、OPC UA の読み取り 45µs
-  - 書き込みが重いのは、変数が 1 つ変わるたびに、ほかのサーバーの `VariableBackedDataStore.syncSharedAreas()` がそのプロトコルのマッピングを全部読み直すため（変数の数の 2 乗で増える）
+  - 2026-11-17 の開発 PC（i7-11800H）: 保持レジスタ 125 個の読み取り 20µs、100 個の書き込み 0.29ms（変数 100 個と FINS の DM に反映）、変数 1 つの書き込み 3µs、OPC UA の読み取り 45µs
+  - 変数の数に比例して増えること（2 乗で増えないこと）は、`internal/infrastructure/adapter` の `BenchmarkVariableBackedDataStore_WriteWords`（変数 100 個と 1000 個で、1 変数あたりの時間を比べる）で見る
 - **ファズテスト**（各プロトコルの `fuzz_test.go`）: 外から届くバイト列を読む処理に、でたらめな入力を与えて、panic しないこと（panic するとアプリ全体が落ちる）と、出力の形が正しいこと（応答がフレームとして読める・RTU の応答は 256 バイト以内など）を確かめる
   - 対象: サーバーがリクエストを処理する入口（FINS / SLMP の `handler.handle()`、Host Link / MC プロトコル（シリアル）の `receive()`、Modbus の `rtu.ParseRequest` → `Process`・TCP のサーバーの `serve()`・TCP のフレームの読み取り）と、クライアントが応答を解釈する処理（`decodeResponse()` など。リクエストも、利用者が 16 進で入れたものがそのまま来るので、両方をでたらめにする）、MC プロトコルの ASCII の変換、OPC UA のリクエスト本体の読み取り
   - ふだんの `go test` では、種（`f.Add`）と `testdata/fuzz/` に残った入力だけを流す（CI でも流れる）。探すときは、パッケージごとに 1 つずつ `go test -run '^$' -fuzz='^FuzzHandler$' -fuzztime=1m ./internal/protocols/fins` のように流す
