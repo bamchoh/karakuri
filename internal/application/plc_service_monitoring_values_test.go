@@ -264,3 +264,68 @@ func TestMonitoringValues_RowLimit(t *testing.T) {
 		t.Fatalf("値が 1 つ: %+v", v)
 	}
 }
+
+// 起動した直後は変数も接続先もないので、前に使っていたときの変数・接続先の項目は消す（レジスタの項目は残す）
+func TestMonitoring_StartupDropsItemsOfMissingVariablesAndClients(t *testing.T) {
+	svc, _ := newClientTestService(t)
+	v, err := svc.CreateVariable("Counter", "INT", 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	c, _ := svc.AddClient("fake-client", "PLC", nil)
+	reg, _ := svc.AddMonitoringItem(&MonitoringItemDTO{ProtocolType: "modbus-tcp", MemoryArea: "holdingRegisters", Address: 3, BitWidth: 16})
+	if _, err := svc.AddMonitoringItem(&MonitoringItemDTO{Kind: MonitoringKindVariable, VariableID: v.ID}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.AddMonitoringItem(&MonitoringItemDTO{Kind: MonitoringKindSubscription, ClientID: c.ID, Summary: "watch a"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := svc.SaveMonitoringConfig(); err != nil {
+		t.Fatal(err)
+	}
+	if got := len(readSavedMonitoringItems(t)); got != 3 {
+		t.Fatalf("保存した項目 = %d 個, want 3", got)
+	}
+
+	// アプリを起動し直す（設定ファイルは残り、変数と接続先はない）
+	restarted := NewPLCService()
+	t.Cleanup(restarted.Shutdown)
+	items := restarted.GetMonitoringItems()
+	if len(items) != 1 || items[0].ID != reg.ID {
+		t.Fatalf("起動した直後の項目: %+v", items)
+	}
+	if values := restarted.GetMonitoringValues(); len(values) != 0 {
+		t.Fatalf("起動した直後の値（「変数がありません」が出ない）: %+v", values)
+	}
+}
+
+// プロジェクトを読み込んだあとも、もうない変数・接続先を指す項目は残さない
+func TestMonitoring_ImportDropsItemsOfMissingVariablesAndClients(t *testing.T) {
+	svc, _ := newClientTestService(t)
+	v, _ := svc.CreateVariable("Counter", "INT", 1)
+	kept, _ := svc.AddMonitoringItem(&MonitoringItemDTO{Kind: MonitoringKindVariable, VariableID: v.ID})
+	reg, _ := svc.AddMonitoringItem(&MonitoringItemDTO{ProtocolType: "modbus-tcp", MemoryArea: "holdingRegisters", Address: 3, BitWidth: 16})
+	project := svc.ExportProject()
+	// 手で書き足した・古いプロジェクトに残っていた、指す先のない項目
+	project.MonitoringItems = append(project.MonitoringItems,
+		&MonitoringItemDTO{ID: "orphan-var", Order: 10, Kind: MonitoringKindVariable, VariableID: "nope"},
+		&MonitoringItemDTO{ID: "orphan-client", Order: 11, Kind: MonitoringKindPoll, ClientID: "nope", Summary: "x"},
+	)
+	if err := svc.ImportProject(project); err != nil {
+		t.Fatal(err)
+	}
+	ids := map[string]bool{}
+	for _, item := range svc.GetMonitoringItems() {
+		ids[item.ID] = true
+	}
+	if len(ids) != 2 || !ids[kept.ID] || !ids[reg.ID] {
+		t.Fatalf("読み込んだあとの項目: %v", ids)
+	}
+	// 変数の ID は読み込むと変わるが、項目は同じ変数を指し続ける
+	if vars := svc.GetVariables(); len(vars) != 1 || vars[0].ID == v.ID {
+		t.Fatalf("読み込んだあとの変数（ID は作り直す）: %+v", vars)
+	}
+	if val := monitoringValue(t, svc, kept.ID); val.Status != "ok" || val.Text != "1" {
+		t.Fatalf("残った変数の項目: %+v", val)
+	}
+}

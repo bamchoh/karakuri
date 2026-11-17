@@ -357,3 +357,45 @@ test("構造体は、フィールドを定義の順に 1 行ずつ出し、入�
     "limits",
   ]);
 });
+
+test("サーバーがないレジスタの項目は出さない（サーバーを足すと、また出る）", async ({
+  page,
+}) => {
+  await api(page, "AddServer", "modbus-tcp", "");
+  await api(page, "AddMonitoringItem", {
+    id: "",
+    order: 0,
+    protocolType: "modbus-tcp",
+    memoryArea: "holdingRegisters",
+    address: 0,
+    bitWidth: 16,
+    endianness: "big",
+    displayFormat: "decimal",
+  });
+  const v = await createVariable(page, "Counter", "INT", 5);
+  await api(page, "AddMonitoringItem", {
+    id: "",
+    order: 0,
+    protocolType: "",
+    memoryArea: "",
+    address: 0,
+    bitWidth: 0,
+    endianness: "",
+    displayFormat: "",
+    kind: "variable",
+    variableId: v.id,
+  });
+  await openApp(page);
+  await watchTab(page).click();
+  await expect(rows(page)).toHaveCount(2);
+
+  // サーバーを消すと、そのレジスタの行は出なくなる（「サーバーがありません」とは出さない）
+  await api(page, "RemoveServer", "modbus-tcp");
+  await expect(rows(page)).toHaveCount(1);
+  await expect(rows(page).locator(".watch-label")).toHaveText(["Counter"]);
+  await expect(page.locator(".watch-note")).toHaveText([""]);
+
+  // 同じプロトコルのサーバーを足すと、また出る
+  await api(page, "AddServer", "modbus-tcp", "");
+  await expect(rows(page)).toHaveCount(2);
+});
