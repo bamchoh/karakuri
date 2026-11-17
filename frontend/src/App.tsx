@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, ReactNode } from "react";
 import "./App.css";
 import { ServerPanel, ServerPanelHandle } from "./components/ServerPanel";
 import { UnsavedChangesDialog } from "./components/UnsavedChangesDialog";
@@ -10,10 +10,33 @@ import { HttpApiIndicator } from "./components/HttpApiIndicator";
 import { ExportProject, ImportProject } from "../wailsjs/go/main/App";
 import { WindowSetTitle } from "../wailsjs/runtime/runtime";
 import { windowTitle } from "./utils/windowTitle";
+import { PageActiveContext } from "./components/usePageActive";
 
 const APP_VERSION = "v0.0.51";
 
 type Tab = "server" | "variables" | "scripts";
+
+// Page は、ページ 1 つの枠。出ていない間は隠し、中の周期的な読み直しを止める（usePageActive）
+function Page({
+  name,
+  active,
+  children,
+}: {
+  name: Tab;
+  active: boolean;
+  children: ReactNode;
+}) {
+  return (
+    <div
+      className={`app-page${active ? "" : " app-page-hidden"}`}
+      data-page={name}
+    >
+      <PageActiveContext.Provider value={active}>
+        {children}
+      </PageActiveContext.Provider>
+    </div>
+  );
+}
 
 function App() {
   const [activeTab, setActiveTab] = useState<Tab>("server");
@@ -100,27 +123,34 @@ function App() {
           onSaveProject={handleSaveProject}
         />
         <main className="app-main">
-          {activeTab === "server" && (
+          {/* ページは、ほかのページを見ている間も作り直さずに隠すだけ（選んでいたもの・入力中の内容を保つ） */}
+          <Page name="server" active={activeTab === "server"}>
             <ServerPanel
               ref={serverPanelRef}
               onDirtyChange={setServerPanelDirty}
               selectRequest={
-                navRequest && navRequest.kind !== "script"
+                activeTab === "server" &&
+                navRequest &&
+                navRequest.kind !== "script"
                   ? { kind: navRequest.kind, id: navRequest.id }
                   : null
               }
               onSelectRequestHandled={clearNavRequest}
             />
-          )}
-          {activeTab === "variables" && <VariableView />}
-          {activeTab === "scripts" && (
+          </Page>
+          <Page name="variables" active={activeTab === "variables"}>
+            <VariableView />
+          </Page>
+          <Page name="scripts" active={activeTab === "scripts"}>
             <ScriptPanel
               selectRequest={
-                navRequest?.kind === "script" ? navRequest.id : null
+                activeTab === "scripts" && navRequest?.kind === "script"
+                  ? navRequest.id
+                  : null
               }
               onSelectRequestHandled={clearNavRequest}
             />
-          )}
+          </Page>
         </main>{" "}
         {pendingTab && (
           <UnsavedChangesDialog

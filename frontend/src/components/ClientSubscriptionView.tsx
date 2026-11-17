@@ -1,3 +1,4 @@
+import { usePageActive } from "./usePageActive";
 import { useState, useEffect, useCallback } from "react";
 import {
   GetClientSubscription,
@@ -72,11 +73,13 @@ export function ClientSubscriptionView({
     }
   }, [client.id]);
 
+  const pageActive = usePageActive();
   useEffect(() => {
+    if (!pageActive) return;
     load();
     const timer = setInterval(load, REFRESH_MS);
     return () => clearInterval(timer);
-  }, [load]);
+  }, [load, pageActive]);
 
   const actualInterval = subscription?.intervalMs;
   useEffect(() => {

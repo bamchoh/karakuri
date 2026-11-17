@@ -1,3 +1,4 @@
+import { usePageActive } from "./usePageActive";
 import React, { useState, useEffect, useCallback, useRef } from "react";
 import {
   GetVariables,
@@ -174,8 +175,13 @@ export function VariableView() {
     };
     loadDataTypes();
     loadStructTypes();
-    loadServerInstancesAndAreas();
-  }, [loadStructTypes, loadServerInstancesAndAreas]);
+  }, [loadStructTypes]);
+
+  // サーバーとエリアは、ページが出るたびに読み直す（ほかのページでサーバーを足したあとに戻ってきたときのため）
+  const pageActive = usePageActive();
+  useEffect(() => {
+    if (pageActive) loadServerInstancesAndAreas();
+  }, [pageActive, loadServerInstancesAndAreas]);
 
   // 変数一覧の初回読み込みとイベント購読
   useEffect(() => {
@@ -198,6 +204,7 @@ export function VariableView() {
       setDeviceStatuses({});
       return;
     }
+    if (!pageActive) return;
     const load = async () => {
       try {
         const list = (await GetVariableDeviceStatuses()) || [];
@@ -213,7 +220,7 @@ export function VariableView() {
     load();
     const timer = setInterval(load, DEVICE_STATUS_REFRESH_MS);
     return () => clearInterval(timer);
-  }, [hasClientMappings]);
+  }, [hasClientMappings, pageActive]);
 
   // キーボードナビゲーション: focusedRowKey が変わったらその行にフォーカスを移す
   useEffect(() => {

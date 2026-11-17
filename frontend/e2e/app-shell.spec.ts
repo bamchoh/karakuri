@@ -1,5 +1,12 @@
 import { test, expect } from "@playwright/test";
-import { api, openApp, resetApp, shot } from "./helpers";
+import {
+  addModbusServer,
+  api,
+  openApp,
+  openRegisters,
+  resetApp,
+  shot,
+} from "./helpers";
 
 // 画面の外枠の配置を確認する:
 //   - 上のヘッダーはない。アプリの名前とバージョンは、ウィンドウのタイトルに出す
@@ -100,4 +107,64 @@ test("HTTP API の URL は下の帯の右端に出て、ポートを変更でき
   } finally {
     await api(page, "SetHTTPAPIPort", original);
   }
+});
+
+test("ページを移って戻っても、選んでいたサーバー・タブ・レジスタの表示が残る", async ({
+  page,
+}) => {
+  await addModbusServer(page);
+  await api(page, "AddServer", "fins", "");
+  await api(page, "WriteWord", "modbus-tcp", "holdingRegisters", 100, 0x1234);
+  await openApp(page);
+
+  // 2 つ目ではなく Modbus TCP のレジスタを、開始アドレスと表示形式を変えて出す
+  await openRegisters(page, "一覧表示", "Modbus TCP");
+  const control = (label: string) =>
+    page
+      .locator(".register-controls .form-group", {
+        has: page.locator("label", { hasText: new RegExp("^" + label + "$") }),
+      })
+      .locator("input, select");
+  await control("表示形式").selectOption({ label: "16進数" });
+  await control("開始アドレス").fill("101");
+  await control("開始アドレス").blur();
+  const firstCell = page.locator("td.matrix-cell").first();
+  await expect(firstCell).toHaveText(/1234/i);
+
+  // スクリプトの画面へ移る（通信画面は隠れるだけ）
+  await page.getByTitle("Scripts").click();
+  await expect(page.locator('[data-page="scripts"]')).toBeVisible();
+  await expect(page.locator('[data-page="server"]')).toBeHidden();
+
+  // 隠れている間に変わった値も、戻れば出る
+  await api(page, "WriteWord", "modbus-tcp", "holdingRegisters", 100, 0xabcd);
+  await page.getByTitle("Connections", { exact: true }).click();
+  await expect(page.locator(".server-config-pane-name")).toHaveText(
+    "Modbus TCP",
+  );
+  await expect(
+    page.locator(".server-sub-tabs .sub-tab-button.active"),
+  ).toHaveText("レジスタ");
+  await expect(control("表示形式")).toHaveValue(/hex/i);
+  await expect(control("開始アドレス")).toHaveValue("101");
+  await expect(firstCell).toHaveText(/abcd/i);
+  await shot(page, "app-shell-keep-state");
+});
+
+test("スクリプトの画面で選んでいたスクリプトと入力中のコードは、ほかのページから戻っても残る", async ({
+  page,
+}) => {
+  await api(page, "CreateScript", "first", "vars.A = 1;", 100);
+  await api(page, "CreateScript", "second", "vars.B = 2;", 100);
+  await openApp(page);
+  await page.getByTitle("Scripts").click();
+  const scripts = page.locator('[data-page="scripts"]');
+  await scripts.getByText("second", { exact: true }).click();
+  const code = scripts.locator("textarea").first();
+  await code.fill("vars.B = 3; // 入力中");
+
+  await page.getByTitle("Variables").click();
+  await expect(scripts).toBeHidden();
+  await page.getByTitle("Scripts").click();
+  await expect(code).toHaveValue("vars.B = 3; // 入力中");
 });

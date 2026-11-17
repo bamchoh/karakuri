@@ -1,3 +1,4 @@
+import { usePageActive } from "./usePageActive";
 import { useCallback, useEffect, useState } from "react";
 import {
   GetMonitoringItems,
@@ -113,12 +114,13 @@ export function useMonitoringItems(
   }, [loadItems]);
 
   // 自動更新
+  const pageActive = usePageActive();
   useEffect(() => {
-    if (autoRefresh) {
+    if (autoRefresh && pageActive) {
       const interval = setInterval(loadItems, 100);
       return () => clearInterval(interval);
     }
-  }, [autoRefresh, loadItems]);
+  }, [autoRefresh, pageActive, loadItems]);
 
   return { items, setItems, loadItems };
 }

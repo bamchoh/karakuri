@@ -282,6 +282,8 @@ export function ScriptPanel({
         DEFAULT_CODE,
         1000,
       );
+      // 一覧に入ってから選ぶ（先に選ぶと「選んでいたものがなくなった」として、選択が外れる）
+      await loadScripts();
       setSelectedId(created.id);
     });
 

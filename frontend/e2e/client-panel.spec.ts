@@ -342,10 +342,10 @@ test("右側はタブ（設定 / コマンド / ポーリング）で切り替�
   await expect(tabs.nth(0)).toHaveText("設定");
   await expect(setting(page, "ポート")).toHaveValue(String(MODBUS_PORT));
 
-  // 選んでいるタブは、別の画面に移って戻ると、コマンドに戻る（通信画面を作り直すため）
+  // 選んでいるタブは、別の画面に移って戻っても、そのまま（通信画面は隠すだけで、作り直さない）
   await page.getByTitle("Variables").click();
   await openClient(page, "自分");
-  await expect(tabs.nth(1)).toHaveClass(/active/);
+  await expect(tabs.nth(0)).toHaveClass(/active/);
 });
 
 test("接続先を追加した直後は、設定のタブが開く", async ({ page }) => {
