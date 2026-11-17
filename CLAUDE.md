@@ -76,7 +76,7 @@ go build ./...
 
 `frontend/src/**/*.test.ts` に、state に依存しない純粋な関数の単体テストがある（`npm test`。開発サーバーなしで走り、CI でも実行する）。
 
-- 対象: `utils/address.ts`（アドレスの表示と入力の変換・範囲の検査・マッピング先のエリアの決め方）、`utils/register.ts`（ワードの結合・分解・書式）、`components/registerList.ts`（行の組み立て・選択の移動）、`utils/windowTitle.ts`（タイトルバーの文字）、`utils/rows.ts`（行を足せる表の行の追加・削除・更新）
+- 対象: `utils/address.ts`（アドレスの表示と入力の変換・範囲の検査・マッピング先のエリアの決め方）、`utils/register.ts`（ワードの結合・分解・書式）、`components/registerList.ts`（行の組み立て・選択の移動）、`utils/windowTitle.ts`（タイトルバーの文字）、`utils/rows.ts`（行を足せる表の行の追加・削除・更新）、`utils/certificates.ts`（証明書の一覧の分け方・書式）
 - 画面の動き（クリック・入力・表示）は、こちらではなく Playwright で確かめる。**計算や変換を足すときは、コンポーネントの中に書かず純粋な関数にして、ここにテストを足す**
 - 設定は `frontend/vite.config.ts` の `test`（`src/**/*.test.ts` だけを対象にする。`e2e/*.spec.ts` は Playwright のテスト）。Vitest のバージョンは固定
 - テストのファイルも `npm run build` の型検査の対象
@@ -97,7 +97,7 @@ go build ./...
 
 `frontend/e2e/` に、ブラウザで画面を操作して確認するテストがある。`task dev` が立てる開発用サーバー（`http://localhost:34115`）に接続するため、Go 側の API とプロトコルの実装を含めた動作を確認できる。手順と注意は `frontend/e2e/README.md` を参照。
 
-- 画面ごとのテスト: 画面の外枠（タイトル・左の帯・HTTP API の表示）`app-shell.spec.ts`、通信画面の右側の配置 `pane-layout.spec.ts`、アプリ全体のログ `app-log.spec.ts`、アドレスの範囲 `register-range.spec.ts`、FINS（「ワード.ビット」のアドレス・項目の表示条件）`fins.spec.ts`、SLMP（16 進のアドレス）`slmp.spec.ts`、通信画面（サーバー）`server-panel.spec.ts`、変数画面 `variable-dialogs.spec.ts` / `node-publishing.spec.ts`、サーバーの「レジスタ」「モニタリング」のタブ `register-panel.spec.ts` / `monitoring.spec.ts`、スクリプト画面 `script-panel.spec.ts`、通信画面（クライアント）`client-panel.spec.ts` / `client-polling.spec.ts` / `client-mapping.spec.ts` / `client-saved-commands.spec.ts` / `client-opcua.spec.ts` / `client-serial.spec.ts`（Modbus RTU / ASCII・FINS の Host Link・MC プロトコル（シリアル）。実機の確認は、テストを流す側で `KARAKURI_SERIAL_PAIR` を設定したときだけ）
+- 画面ごとのテスト: 画面の外枠（タイトル・左の帯・HTTP API の表示）`app-shell.spec.ts`、通信画面の右側の配置 `pane-layout.spec.ts`、アプリ全体のログ `app-log.spec.ts`、アドレスの範囲 `register-range.spec.ts`、FINS（「ワード.ビット」のアドレス・項目の表示条件）`fins.spec.ts`、SLMP（16 進のアドレス）`slmp.spec.ts`、通信画面（サーバー）`server-panel.spec.ts`、変数画面 `variable-dialogs.spec.ts` / `node-publishing.spec.ts`、サーバーの「レジスタ」「モニタリング」のタブ `register-panel.spec.ts` / `monitoring.spec.ts`、スクリプト画面 `script-panel.spec.ts`、通信画面（クライアント）`client-panel.spec.ts` / `client-polling.spec.ts` / `client-mapping.spec.ts` / `client-saved-commands.spec.ts` / `client-opcua.spec.ts` / `client-serial.spec.ts`、OPC UA の暗号化・ユーザー認証・証明書のタブ `opcua-security.spec.ts`（Modbus RTU / ASCII・FINS の Host Link・MC プロトコル（シリアル）。実機の確認は、テストを流す側で `KARAKURI_SERIAL_PAIR` を設定したときだけ）
 - 画面を変更したら、該当するテストを実行する（なければ追加する）。`shot()` で撮ったスクリーンショット（`frontend/e2e/.screenshots/`）で見た目も確認する
 - データの準備は `api(page, "メソッド名", ...)` で Go 側の API を直接呼び、確認したい操作だけを画面で行う
 - **テストはアプリのサーバー・変数・モニタリング項目・スクリプトをすべて削除する。** 開発サーバーは `KARAKURI_CONFIG_DIR` を一時フォルダに向けて起動する
@@ -299,6 +299,11 @@ internal/
   - `NodePublishingAware`: `OnNodePublishingUpdated()` でノード公開設定変更通知を受け付ける
   - `NodeAddressResolver`: `NodeAddresses(variables)`（`NodeVariable{ID, Name}` のスライス）で公開変数のノードアドレス（OPC UA なら NodeID 文字列）と、公開できない場合の理由（`NodeAddress.Error`）を返す。書式と判定はプロトコルが決める
   - `ProtocolCapabilities.SupportsNodePublishing: true` のプロトコルで利用される
+- **CertificateManager** (`internal/domain/protocol/certificate.go`): 証明書のストア（自分の証明書・信頼した相手・拒否した相手）を持つプロトコルが、サーバーのファクトリーかクライアントのファクトリーに実装する（いまは OPC UA の両方）
+  - `Certificates()` / `SetCertificateTrusted(thumbprint, trusted)` / `DeleteCertificate(thumbprint)`。証明書は拇印（SHA-1 の 16 進の大文字）で指す。自分の証明書は消せない
+  - ホスト（`plc_service_certificates.go`）は `kind`（`server` / `client`）とプロトコルタイプでストアを選ぶ。実装していれば `ServerInstanceDTO.supportsCertificates` / `ClientProtocolDTO.supportsCertificates` が立ち、画面に「証明書」のタブが出る。信頼・拒否・削除はアプリ全体のログに出す
+  - ストアはファクトリーごとに 1 つ（クライアントは、そのプロトコルの全部の接続先で共通）
+  - テストのフェイクは `protocoltest.CertificateStore`（ファクトリーに埋め込む）
 - **UnitIDConfigurable** (`internal/domain/protocol/server.go`): UnitID ごとの応答有効・無効を設定できる ProtocolServer 用インターフェース（`GetDisabledUnitIDs` / `SetUnitIdEnabled` / `SetDisabledUnitIDs`）
   - `ProtocolCapabilities.SupportsUnitID: true` のプロトコルで利用される。ホストはこの型で判定する（個別のローカル定義は持たない）
   - 応答しない UnitID の一覧は、サーバーのオブジェクト（Modbus は `ModbusServer` の `DataStoreHandler`）が持つ。サーバーは削除するまで同じものを使うので、起動前から設定でき、起動し直しても残る
@@ -354,6 +359,7 @@ frontend/src/
 │   ├── ClientPollingView.tsx   # ポーリング（周期・読み取り項目の追加・最後の結果と値）
 │   ├── ClientBrowseDialog.tsx  # 機器のアドレス（OPC UA ならノード）をツリーでたどって選ぶダイアログ。選んだものを入力欄に入れる `applyBrowsePick()` もここ
 │   ├── ClientSubscriptionView.tsx # サブスクリプション（通知の間隔・監視項目の追加・届いた値）。対応するプロトコルの接続先だけ
+│   ├── CertificatesView.tsx    # 証明書のタブ（サーバーと接続先で共通。自分の証明書・拒否・信頼の一覧と、信頼・拒否・削除）。証明書のストアを持つプロトコルだけ
 │   ├── clientFormat.ts         # クライアント（通信画面の右側）で共通の表示の書式（状態の名前・時刻・かかった時間）
 │   ├── AppLogPanel.tsx     # アプリ全体のログの欄（どのページでも画面の下に出す。開閉できる）
 │   ├── Sidebar.tsx         # 左のアイコンの帯（上にページの切り替え、下にプロジェクトを開く・保存）
@@ -376,8 +382,9 @@ frontend/src/
 #### ServerPanel.tsx
 通信画面（サイドバーの「Connections」）。サーバー（Karakuri が待ち受ける側）とクライアント（外部の機器へつなぐ側・マスター）を 1 つの画面で扱う。左に一覧、右に選んだものの設定（サーバーは `ServerConfigPane`、クライアントは `ClientDetailPane`）を並べる。
 - **右側の配置**（サーバー・クライアントで共通。`.server-config-pane`）: 見出し・タブ・保存の欄は動かず、その間の中身だけがスクロールする。スクロールするのは `.server-config-pane > .vscode-settings-list`（設定、クライアントの各タブ）と `.server-sub-tab-body`（サーバーのレジスタ・モニタリング）で、外側の `.server-tab-content` はスクロールさせない。クライアントの保存の欄（「元に戻す」「保存」）は、設定のタブにだけ、サーバーと同じ位置（下）に出す
-- **サーバーのタブ**: サーバーを選ぶと、右側に「設定 / レジスタ / モニタリング」のタブが出る（`ServerSubTab`。選んでいるタブは `ServerPanel` が持ち、サーバーを選び直しても保つ）。レジスタとモニタリングは、選んだサーバーのものだけを扱う（レジスタ専用のページはない）
-  - レジスタを持たないサーバー（`supportsNodePublishing` のプロトコル。OPC UA）には、タブを出さず設定だけにする
+- **サーバーのタブ**: サーバーを選ぶと、右側に「設定 / レジスタ / モニタリング / 証明書」のタブが出る（`ServerSubTab`。選んでいるタブは `ServerPanel` が持ち、サーバーを選び直しても保つ）。レジスタとモニタリングは、選んだサーバーのものだけを扱う（レジスタ専用のページはない）
+  - 出すタブは `serverSubTabs(instance)`（`ServerConfigPane.tsx`）が決める: レジスタを持たないサーバー（`supportsNodePublishing` のプロトコル。OPC UA）にはレジスタとモニタリングを出さず、証明書のストアを持つサーバー（`supportsCertificates`）には証明書を出す。設定だけなら、タブの並びを出さない
+  - 選んでいたタブが、選び直したサーバーにないときは、設定を出す
   - 「レジスタ」「モニタリング」の中身は、`ServerPanel` が `ServerConfigPane` に children で渡す。設定のフォームは、ほかのタブを見ている間も隠すだけ（`.server-sub-tab-hidden`）なので、入力中の内容と「保存していない変更」は消えない
 - **一覧**: 上に「SERVERS」、下に「CLIENTS」のグループ。それぞれに追加ボタン（「サーバーを追加」「接続先を追加」）。どちらも、押すとダイアログが開く（サーバーは `AddServerDialog`、クライアントは `AddClientDialog`。プロトコルを選び、クライアントは名前も付けられる）。クライアントの行は `.server-tab-item.client-tab-item`
 - **選択**: `{ kind: "server" | "client", id }` で持つ。選んでいるものが消えたら、先頭のサーバー、なければ先頭のクライアントを選ぶ
@@ -570,6 +577,8 @@ JavaScript（goja）でPLC動作を記述。
   - `GetClientSubscription(id)`: サブスクリプションの状態（間隔・監視中か・全体の状態・監視項目と最後に届いた値）
   - `AddClientSubscriptionItems(id, params)`（1 回の入力から、いくつも足されることがある）, `RemoveClientSubscriptionItem(id, itemID)`, `SetClientSubscriptionInterval(id, ms)`, `StartClientSubscription(id)`, `StopClientSubscription(id)`
   - `GetMappingTargets()`: 変数をマッピングできる先（サーバーと、マッピングできる接続先）
+- **証明書**（`kind` は `server` か `client`）:
+  - `GetCertificates(kind, protocolType)`, `SetCertificateTrusted(kind, protocolType, thumbprint, trusted)`, `DeleteCertificate(kind, protocolType, thumbprint)`
   - `GetVariableDeviceStatuses()`: 接続先にマッピングした変数の同期の状態（`state`: `""`（まだ読めていない）/ `ok` / `comm_error` / `invalid` / `stopped`、`writePending`、`error`）
 - **HTTP API 設定**:
   - `GetHTTPAPIPort()`: 現在のHTTP APIポート番号を返す
@@ -678,7 +687,7 @@ JavaScript（goja）でPLC動作を記述。
   - 実際の COM ポートでの試験: `rtu/serial_hw_test.go`（配線・RTU と ASCII の読み書き・応答の時間）と `rtu/serial_hw_unplug_test.go`（手で抜き差しする）、`internal/protocols/integration_serial_hw_test.go`（Karakuri の Modbus RTU / ASCII・FINS の Host Link・MC プロトコル（シリアル）のサーバーに、同じプロトコルのクライアントからつなぐ。ポーリングと変数マッピングも）。COM ポートを取り合うので、パッケージをまたいで流すときは `go test -p 1` にする。2 つのポートをクロスでつなぎ、環境変数 `KARAKURI_SERIAL_PAIR`（`COM4,COM6` の形。サーバー側, マスター側）を設定したときだけ動く（CI では飛ばす）。抜き差しは `KARAKURI_SERIAL_UNPLUG=1` も要る。CPU の使い方は OS の側（`Get-Process rtu.test` の `TotalProcessorTime`）で見る（Go の `runtime/metrics` の CPU 時間は、システムコールの中の時間を数えない）
 - **OPC UA**（`internal/protocols/opcua/`）: 実際の OPC UA クライアントでつなぐ。`host_integration_test.go` は実際の変数ストアを使う（他のテストはフェイクの変数ストアを使うため、変数ストアが持つ値の型や型変換を通らない）
 - 設定フォルダに書き込むパッケージのテストは、`TestMain` で `KARAKURI_CONFIG_DIR` を一時フォルダに向ける
-- **プロジェクトのファイルの互換**（`internal/protocols/project_compat_test.go`）: `testdata/projects/` の各ファイル（そのバージョンのアプリで保存したもの。いまは `v0.0.48.json`）を読み込んで保存し直し、元と同じになることを確かめる。読み込みは、読めない変数・構造体型・コマンドなどを黙って読み飛ばすので、エラーにならないだけでは足りない
+- **プロジェクトのファイルの互換**（`internal/protocols/project_compat_test.go`）: `testdata/projects/` の各ファイル（そのバージョンのアプリで保存したもの。いまは `v0.0.48.json` と `v0.0.51.json`。v0.0.48 は、OPC UA のセキュリティの項目が既定値で増えるので `v0.0.48.expected.json` と比べる）を読み込んで保存し直し、元と同じになることを確かめる。読み込みは、読めない変数・構造体型・コマンドなどを黙って読み飛ばすので、エラーにならないだけでは足りない
   - 置いたファイルは書き換えない（利用者の手元にあるファイルの代わり）。保存の形を変えて、保存し直したものが元と違うのが正しいときは、期待する内容を `<名前>.expected.json` に置く
   - 保存の形を変えたら、新しいバージョンのファイルを足す: `KARAKURI_WRITE_PROJECT_FIXTURE=v0.0.49 go test -run TestWriteProjectFixture ./internal/protocols`（全プロトコルのサーバーと接続先・全部の型の変数・構造体型・マッピング・公開・スクリプト・モニタリングを、既定値でない値で作る）
 - **後片付けの漏れ**（`internal/protocols/leak_test.go`）: サーバーの起動・停止、クライアントの送信・切断・削除、ポーリングとサブスクリプションの開始・停止、スクリプトの開始・停止を 20 回くり返して、ゴルーチンが増えないことを確かめる（Modbus TCP・FINS・SLMP・OPC UA）。シリアル（Modbus RTU / ASCII・Host Link・MC プロトコル）は、実機の試験 `TestHW_NoGoroutineLeak_Serial`（`integration_serial_hw_test.go`。`KARAKURI_SERIAL_PAIR` を設定したときだけ）
@@ -865,16 +874,28 @@ JavaScript（goja）でPLC動作を記述。
 | | `manufacture_name` | メーカー名 | `karakuri` | BuildInfo.ManufacturerName |
 | | `product_uri` | プロダクト URI | `urn:karakuri` | ApplicationDescription.ProductUri、BuildInfo.ProductUri |
 | | `namespace` | ネームスペース | `urn:karakuri:plc` | 公開変数ノードの名前空間 URI |
+| セキュリティ | `securityEndpoints` | エンドポイント（行を足せる表: `policy` / `mode`） | None だけ | `server.Config.Security`（1 行が 1 つのポリシー。`mode` は `Sign` / `SignAndEncrypt` / `Both`。None では使わない） |
+| | `trustClients` | クライアントの証明書 | `all`（すべて受け入れる） | `trusted` なら `AutoAcceptUntrustedCertificates` を切る |
+| ユーザー認証 | `allowAnonymous` | 匿名のログイン | `yes` | `server.Config.UserTokens` |
+| | `users` | ユーザー（行を足せる表: `userName` / `password`） | なし | `AuthenticateUser`（1 人でもいれば UserName のトークンを出す） |
 
 - アプリケーション情報のキー名は旧 C# 版 [opcua-plugin](https://github.com/bamchoh/opcua-plugin) と同じ（`manufacture_name` の綴りも同じ）
 - `MapToConfig()` はマップにないキーを既定値にする（項目追加前に保存された設定も読める）。文字列は前後の空白を除く
 - 検証: アプリケーション情報はすべて必須。ネームスペースに `http://opcfoundation.org/UA/`（名前空間 0）は使えない
+- セキュリティ（`security.go`）の検証: エンドポイントは 1 つ以上・同じポリシーは 1 行だけ。ユーザー名は空でなく重ならない（50 人まで）。匿名を許さないなら、ユーザーが 1 人以上
+  - 既定は、以前と同じ（None・匿名・すべて受け入れる）。項目のない古いプロジェクトも、そのまま読める
+  - ポリシーは、クライアントと同じ 6 つ（`securityPolicies`）。uastack が対応していない Basic128Rsa15 / Basic256（仕様で非推奨）は使えない
+  - None のエンドポイントでも、ユーザー名のパスワードは、サーバーの証明書で暗号化して届く（uastack）
+  - パスワードはプロジェクトにそのまま保存する（クライアントの接続先と同じ）
+  - テストは `security_test.go`（Karakuri のクライアントから、エンドポイントの一覧・ポリシーとユーザーの組み合わせ・信頼の一覧を両側で切り替える流れ）
 
 #### OPC UA ライブラリ
 
 - **bamchoh/uastack v0.1.2**（サーバーは `github.com/bamchoh/uastack/server`、クライアントは `github.com/bamchoh/uastack/client`）
 - v0.1.2 より前は、自動のつなぎ直し（`AutoReconnect`）でセッションを作り直すと keep-alive とデータ競合になる（`go test -race` が落ちる）。サブスクリプションが `AutoReconnect` を使うので、v0.1.2 以上にする
-- セキュリティなし・匿名認証のみ（証明書は作られない。`PKIDir` はアプリの exe と同じフォルダの `pki`）
+- 証明書のストア（`PKIDir`）は、サーバーはアプリの exe と同じフォルダの `pki`、クライアントは `pki-client`（`Factory.PKIDir` / `ClientFactory.PKIDir` で差し替えられる。テストは一時フォルダにする）
+  - 自分の証明書は、サーバーは暗号化したエンドポイントで起動したとき、クライアントは None 以外でつないだときに uastack が作る（`own/certs`）
+  - 「すべて受け入れる」では、知らない相手の証明書を `trusted/certs` に足してつなぐ。「信頼したものだけ」では `rejected/certs` に置いて断る。uastack はつなぐたびに `trusted` を読み直すので、証明書のタブで移せば、起動し直さなくても効く（`certs.go`）
 - `Start()` で `net.Listen` してから `server.Serve(ln)` をゴルーチンで実行（ポート使用中を Start のエラーで返すため）
 - `Stop()` は `server.Close()` を呼んで `Serve` の終了を待つ（v0.1.1 以降は Serve の開始前に Close しても Serve が終了する）
 - `server.Server` は Close 後に再利用できないため、Start のたびに作り直す
@@ -915,7 +936,7 @@ JavaScript（goja）でPLC動作を記述。
   - 結果の種類: サーバーがサービスやノードごとの結果を Bad のステータスにしたもの（`BadNodeIdUnknown`・`BadTypeMismatch` など）は `exception`（接続は閉じない）。タイムアウト・通信エラーでは接続を閉じ、次の送信でセッションを作り直す。セッションが無効になったステータス（`BadSessionIdInvalid` など）でも閉じる
   - 読み取った値は型付きなので `ResultValue.Value` の文字列だけで返す（`Bit` / `Word` は入れない。ポーリングの表示形式の選択は出ない）。スカラーは「Value（Int16）」の 1 行、配列は型の行と要素ごとの行（1000 行まで）
   - 接続先の設定: エンドポイント URL・セキュリティポリシー（None / Basic256Sha256 / Aes128_Sha256_RsaOaep / Aes256_Sha256_RsaPss / ECC_nistP256 / ECC_nistP384）・セキュリティモード・ユーザー名とパスワード（空なら匿名）・タイムアウト。パスワードはプロジェクトにそのまま保存する
-  - None 以外のポリシーでは、クライアントの証明書を exe と同じフォルダの `pki-client` に作る（サーバーの `pki` とは分ける）。サーバーの証明書は確かめずに受け入れる（`AutoAcceptUntrustedCertificates`）
+  - None 以外のポリシーでは、クライアントの証明書を exe と同じフォルダの `pki-client` に作る（サーバーの `pki` とは分ける）。サーバーの証明書は、接続先の設定「サーバーの証明書」（`trustServers`）が `all`（既定）なら確かめずに受け入れ、`trusted` なら信頼した証明書だけにつなぐ（知らない証明書は、証明書のタブの「拒否した証明書」に出る）
   - **ノードの参照**（`client_browse.go`）: NodeId の欄の「参照」ボタンで、アドレス空間をツリーでたどって選べる。`Browse(parent)` は親ノードの子（階層の参照の先。親が空なら Objects フォルダの子）を返す。コマンドと同じセッションを使う
     - 1 回の呼び出しで送るのは、子の Browse（続きも読む）、子ごとに子があるかを調べる Browse（1 件だけ頼む。100 ノードずつ）、変数の DataType と ValueRank の Read（100 ノードずつ）。1 つの親について 2000 個まで
     - 選べるのは変数のノード（`Selectable`）。Browse コマンドの欄だけは、どのノードも選べる（`BrowseAll`）
@@ -1124,6 +1145,7 @@ FINS のコマンドを Host Link（SYSMAC WAY）に載せて、シリアルで�
 | 型・マッピング | `/api/data-types`、`/api/struct-types`（`/{name}` で削除）、`/api/mapping-targets`、`/api/variable-statuses` |
 | クライアント | `/api/client-protocols`、`/api/clients`、`/api/clients/{ref}`（`/disconnect`・`/build`・`/send`・`/browse`）、`/commands`（`/{cmd}`・`/{cmd}/send`）、`/polling`（`/start`・`/stop`・`/items/{itemId}`）、`/subscription`（`/start`・`/stop`・`/items/{itemId}`）、`/api/client-logs` |
 | プロジェクト | `/api/project/export`、`/api/project/import` |
+| 証明書 | `/api/certificates/{kind}/{protocolType}`（GET で一覧）、`.../{thumbprint}`（PUT `{"trusted": true}` で信頼・拒否、DELETE で削除） |
 
 #### CORS
 

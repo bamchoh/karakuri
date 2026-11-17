@@ -30,6 +30,8 @@ export function CreateScript(arg1:string,arg2:string,arg3:number):Promise<applic
 
 export function CreateVariable(arg1:string,arg2:string,arg3:any):Promise<application.VariableDTO>;
 
+export function DeleteCertificate(arg1:string,arg2:string,arg3:string):Promise<void>;
+
 export function DeleteMonitoringItem(arg1:string):Promise<void>;
 
 export function DeleteScript(arg1:string):Promise<void>;
@@ -45,6 +47,8 @@ export function ExportProject():Promise<string>;
 export function GetAppLogs():Promise<Array<application.AppLogDTO>>;
 
 export function GetAvailableProtocols():Promise<Array<application.ProtocolInfoDTO>>;
+
+export function GetCertificates(arg1:string,arg2:string):Promise<application.CertificateListDTO>;
 
 export function GetClientCommandLogs():Promise<Array<application.ClientCommandLogDTO>>;
 
@@ -129,6 +133,8 @@ export function RunScriptOnce(arg1:string):Promise<any>;
 export function SendClientRequest(arg1:string,arg2:string):Promise<application.ClientCommandLogDTO>;
 
 export function SendClientSavedCommand(arg1:string,arg2:string):Promise<application.ClientCommandLogDTO>;
+
+export function SetCertificateTrusted(arg1:string,arg2:string,arg3:string,arg4:boolean):Promise<void>;
 
 export function SetClientFailThreshold(arg1:string,arg2:number):Promise<void>;
 

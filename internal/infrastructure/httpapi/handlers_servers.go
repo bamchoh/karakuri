@@ -330,3 +330,28 @@ func (s *Server) handleImportProject(w http.ResponseWriter, r *http.Request) {
 	}
 	noContent(w, s.svc.ImportProject(&data))
 }
+
+// --- 証明書 ---
+
+func (s *Server) handleGetCertificates(w http.ResponseWriter, r *http.Request) {
+	list, err := s.svc.GetCertificates(r.PathValue("kind"), r.PathValue("protocolType"))
+	jsonOr400(w, list, err)
+}
+
+func (s *Server) handleSetCertificateTrusted(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		Trusted *bool `json:"trusted"`
+	}
+	if !decodeBody(w, r, &body) {
+		return
+	}
+	if body.Trusted == nil {
+		writeError(w, http.StatusBadRequest, "trusted（true か false）を指定してください")
+		return
+	}
+	noContent(w, s.svc.SetCertificateTrusted(r.PathValue("kind"), r.PathValue("protocolType"), r.PathValue("thumbprint"), *body.Trusted))
+}
+
+func (s *Server) handleDeleteCertificate(w http.ResponseWriter, r *http.Request) {
+	noContent(w, s.svc.DeleteCertificate(r.PathValue("kind"), r.PathValue("protocolType"), r.PathValue("thumbprint")))
+}

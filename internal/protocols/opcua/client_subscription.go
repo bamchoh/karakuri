@@ -224,8 +224,8 @@ func (c *Client) dialConfig() uaclient.Config {
 		RequestTimeout:  c.timeout,
 	}
 	if c.settings.SecurityPolicy != policyNone {
-		cfg.PKIDir = clientPKIDir()
-		cfg.AutoAcceptUntrustedCertificates = true
+		cfg.PKIDir = c.pki
+		cfg.AutoAcceptUntrustedCertificates = c.settings.TrustServers != trustTrusted
 	}
 	if c.settings.UserName != "" {
 		cfg.Identity = uaclient.UserName(c.settings.UserName, c.settings.Password)

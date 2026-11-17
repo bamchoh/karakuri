@@ -25,6 +25,7 @@ type Server struct {
 	config   *Config
 	accessor protocol.VariableStoreAccessor
 	logger   *log.Logger
+	pki      string // 証明書のストアのフォルダ
 
 	srv    *server.Server
 	nodes  *plcNodes
@@ -41,6 +42,7 @@ func NewServer(config *Config, accessor protocol.VariableStoreAccessor) *Server 
 		// 標準のログの出力先に出す（アプリは log.SetOutput でこれを取り込み、画面のログの欄に出す）
 		logger: log.New(log.Writer(), "[opcua] ", log.LstdFlags),
 		status: protocol.StatusStopped,
+		pki:    pkiDir(),
 	}
 }
 
@@ -64,7 +66,7 @@ func (s *Server) Start(_ context.Context) error {
 	if host == "" {
 		host = "localhost"
 	}
-	srv, err := server.New(server.Config{
+	sc := server.Config{
 		ApplicationName:  s.config.ApplicationName,
 		ApplicationURI:   "urn:" + host + ":karakuri",
 		ProductURI:       s.config.ProductURI,
@@ -73,9 +75,11 @@ func (s *Server) Start(_ context.Context) error {
 		SoftwareVersion:  VERSION,
 		ListenAddr:       s.config.listenAddr(),
 		EndpointURL:      s.config.endpointURL(),
-		PKIDir:           pkiDir(),
+		PKIDir:           s.pki,
 		Logger:           s.logger,
-	})
+	}
+	s.config.applySecurity(&sc)
+	srv, err := server.New(sc)
 	if err != nil {
 		s.status = protocol.StatusError
 		return fmt.Errorf("OPC UA サーバーの作成に失敗: %w", err)

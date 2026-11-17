@@ -34,6 +34,12 @@ type Config struct {
 	ProductURI       string `json:"product_uri"`
 	// NamespaceURI は公開変数ノードの名前空間 URI
 	NamespaceURI string `json:"namespace"`
+
+	// セキュリティとユーザー認証（security.go）
+	Endpoints       []SecurityEndpoint `json:"securityEndpoints"`
+	TrustAllClients bool               `json:"trustAllClients"`
+	AllowAnonymous  bool               `json:"allowAnonymous"`
+	Users           []User             `json:"users"`
 }
 
 // DefaultConfig はデフォルト設定を返す
@@ -45,6 +51,9 @@ func DefaultConfig() *Config {
 		ManufacturerName: DefaultManufacturerName,
 		ProductURI:       DefaultProductURI,
 		NamespaceURI:     DefaultNamespaceURI,
+		Endpoints:        defaultSecurityEndpoints(),
+		TrustAllClients:  true,
+		AllowAnonymous:   true,
 	}
 }
 
@@ -74,11 +83,13 @@ func (c *Config) Validate() error {
 	if ns == opcuaBaseNamespace {
 		return fmt.Errorf("ネームスペースに %s（OPC UA 標準の名前空間）は使えません", opcuaBaseNamespace)
 	}
-	return nil
+	return c.validateSecurity()
 }
 
 func (c *Config) Clone() protocol.ProtocolConfig {
 	cp := *c
+	cp.Endpoints = append([]SecurityEndpoint(nil), c.Endpoints...)
+	cp.Users = append([]User(nil), c.Users...)
 	return &cp
 }
 

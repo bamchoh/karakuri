@@ -34,6 +34,7 @@ const (
 type Client struct {
 	settings clientSettings
 	timeout  time.Duration
+	pki      string // 証明書のストアのフォルダ
 
 	mu   sync.Mutex                      // Send と Close を 1 つずつにする
 	conn atomic.Pointer[uaclient.Client] // 書くのは mu の中だけ。Connected はロックなしで読む

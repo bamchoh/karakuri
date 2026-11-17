@@ -209,6 +209,23 @@ func (a *App) GetNodeAddresses(protocolType string, variableIDs []string) []appl
 	return a.plcService.GetNodeAddresses(protocolType, variableIDs)
 }
 
+// === 証明書（kind は "server" か "client"） ===
+
+// GetCertificates は、証明書のストアの一覧（自分の証明書・信頼した相手・拒否した相手）を返す
+func (a *App) GetCertificates(kind, protocolType string) (*application.CertificateListDTO, error) {
+	return a.plcService.GetCertificates(kind, protocolType)
+}
+
+// SetCertificateTrusted は、相手の証明書を信頼する（trusted = true）か、拒否の一覧に戻す
+func (a *App) SetCertificateTrusted(kind, protocolType, thumbprint string, trusted bool) error {
+	return a.plcService.SetCertificateTrusted(kind, protocolType, thumbprint, trusted)
+}
+
+// DeleteCertificate は、相手の証明書を消す
+func (a *App) DeleteCertificate(kind, protocolType, thumbprint string) error {
+	return a.plcService.DeleteCertificate(kind, protocolType, thumbprint)
+}
+
 // === プロトコル管理API ===
 
 // GetAvailableProtocols は利用可能なプロトコル一覧を返す

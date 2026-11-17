@@ -302,6 +302,15 @@ func changedSettings(fields []application.FieldDTO) map[string]interface{} {
 			settings[f.Name] = n
 		case f.Type == "password":
 			settings[f.Name] = "secret"
+		case f.Type == "rows":
+			// 列も既定でない値にした 1 行（既定値のない文字の列は、列の名前 + 1）
+			row := changedSettings(f.Columns)
+			for _, c := range f.Columns {
+				if c.Type == "text" && row[c.Name] == "" {
+					row[c.Name] = c.Name + "1"
+				}
+			}
+			settings[f.Name] = []interface{}{row}
 		case len(f.Options) > 0:
 			settings[f.Name] = f.Options[len(f.Options)-1].Value
 		case f.Default != nil:
