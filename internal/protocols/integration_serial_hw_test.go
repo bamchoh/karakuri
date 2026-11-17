@@ -1,9 +1,11 @@
 package protocols_test
 
 import (
+	"bytes"
 	"fmt"
 	"os"
 	"reflect"
+	"runtime/pprof"
 	"strings"
 	"testing"
 	"time"
@@ -415,4 +417,95 @@ func TestHW_MCSerial_RandomCommands(t *testing.T) {
 			svc.Shutdown()
 		})
 	}
+}
+
+// シリアルのサーバー・クライアントの起動・停止、送信・切断、ポーリングの開始・停止をくり返しても、ゴルーチンが残らない
+// （TestNoGoroutineLeak_RepeatedLifecycle のシリアル版。COM ポートが要るので、ここに置く）。
+// ポートは 1 組なので、プロトコルを 1 つずつ動かす
+func TestHW_NoGoroutineLeak_Serial(t *testing.T) {
+	serverPort, clientPort := serialPair(t)
+	svc := newService(t)
+	type target struct{ pt, id, request string }
+	var targets []target
+	for _, cp := range svc.GetClientProtocols() {
+		switch cp.ProtocolType {
+		case modbusRTU, modbusASCII, finsHostLink, mcSerial:
+		default:
+			continue
+		}
+		pt := cp.ProtocolType
+		must(t, svc.AddServer(pt, ""))
+		cfg := svc.GetServerConfig(pt)
+		cfg.Settings["serialPort"] = serverPort
+		cfg.Settings["baudRate"] = 115200
+		must(t, svc.UpdateServerConfig(cfg))
+		c, err := svc.AddClient(pt, "シリアル "+pt, map[string]interface{}{"serialPort": clientPort, "baudRate": 115200, "timeoutMs": 2000})
+		must(t, err)
+		tg := target{pt: pt, id: c.ID}
+		for _, cmd := range cp.Commands {
+			if cmd.Pollable {
+				params := defaultParams(cmd.Fields)
+				tg.request, err = svc.BuildClientRequest(pt, cmd.ID, params)
+				must(t, err)
+				_, err = svc.AddClientPollItem(c.ID, cmd.ID, params, "")
+				must(t, err)
+				break
+			}
+		}
+		must(t, svc.SetClientPollInterval(c.ID, 50))
+		targets = append(targets, tg)
+	}
+	if len(targets) != 4 {
+		t.Fatalf("シリアルの接続先が %d 個（want 4）", len(targets))
+	}
+
+	cycle := func() {
+		for _, tg := range targets {
+			must(t, svc.StartServer(tg.pt))
+			r, err := svc.SendClientRequest(tg.id, tg.request)
+			must(t, err)
+			if r.Status != "ok" {
+				t.Fatalf("%s: 送信の結果 %s（%s）", tg.pt, r.Status, r.Error)
+			}
+			must(t, svc.StartClientPolling(tg.id))
+			deadline := time.Now().Add(5 * time.Second)
+			for {
+				p, err := svc.GetClientPolling(tg.id)
+				if err == nil && p.Cycles > 1 {
+					break
+				}
+				if time.Now().After(deadline) {
+					t.Fatalf("%s: 5 秒待っても、ポーリングが回らない", tg.pt)
+				}
+				time.Sleep(10 * time.Millisecond)
+			}
+			must(t, svc.StopClientPolling(tg.id))
+			must(t, svc.DisconnectClient(tg.id)) // 次のプロトコルが同じポートを開けるよう、閉じる
+			must(t, svc.StopServer(tg.pt))
+		}
+	}
+
+	for range 2 {
+		cycle()
+	}
+	before := settledGoroutines()
+	const rounds = 10
+	for range rounds {
+		cycle()
+	}
+	var after int
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		after = settledGoroutines()
+		if after <= before+2 || time.Now().After(deadline) {
+			break
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	if after > before+2 {
+		var buf bytes.Buffer
+		_ = pprof.Lookup("goroutine").WriteTo(&buf, 1)
+		t.Fatalf("%d 回くり返したら、ゴルーチンが %d → %d に増えた\n%s", rounds, before, after, buf.String())
+	}
+	t.Logf("ゴルーチン: %d → %d（%d 回くり返したあと）", before, after, rounds)
 }

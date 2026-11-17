@@ -61,6 +61,11 @@ jobs:
       - name: Go のテスト
         run: go test -count=1 ./...
 
+      # ベンチマークを 1 回ずつ流す（壊れていないかだけを見る。速さは比べない: 実行環境の速さがぶれるため）。
+      # 遅くなる作りに戻っていないかは、ふだんのテストが回数で確かめる（variable_datastore_scaling_test.go）
+      - name: ベンチマーク（1 回ずつ）
+        run: go test -count=1 -run '^$' -bench . -benchtime=1x ./internal/...
+
   # Linux で、整形の検査と、競合検出を有効にしたテストを実行する。
   # Windows の実行環境は改行を CRLF に変えるので、gofmt の検査はこちらで行う
   race:

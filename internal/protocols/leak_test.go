@@ -14,7 +14,7 @@ import (
 // サーバーの起動・停止、クライアントの接続・送信・切断、ポーリングとサブスクリプションの開始・停止、
 // 接続先の追加・削除、スクリプトの開始・停止をくり返しても、ゴルーチンが残らない（増え続けない）。
 // アプリは長く動かし続けるので、後片付けの漏れは時間がたってから効いてくる。
-// シリアルのサーバー・クライアントは、COM ポートがないので対象外（Stop → Start は各パッケージの試験で確かめている）
+// シリアルのサーバー・クライアントは、COM ポートが要るので TestHW_NoGoroutineLeak_Serial（integration_serial_hw_test.go）
 func TestNoGoroutineLeak_RepeatedLifecycle(t *testing.T) {
 	if testing.Short() {
 		t.Skip("-short では飛ばす")
