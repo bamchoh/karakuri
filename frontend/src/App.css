@@ -163,38 +163,6 @@
   display: none;
 }
 
-/* 2 画面: 左右に並べる。DOM の順は変えず、order で左右を決める（順を変えるとページを作り直すことになる） */
-.app-main-split .app-page {
-  border-top: 2px solid transparent;
-}
-
-.app-main-split .app-page-left {
-  order: 1;
-}
-
-.app-main-split .app-page-right {
-  order: 3;
-}
-
-/* 最後に使った欄（左の帯でページを選ぶと、この欄のページが替わる） */
-.app-main-split .app-page-focused {
-  border-top-color: var(--accent);
-}
-
-.pane-splitter {
-  order: 2;
-  flex: 0 0 5px;
-  cursor: col-resize;
-  background: var(--border);
-  touch-action: none;
-}
-
-.pane-splitter:hover,
-.pane-splitter:focus-visible {
-  background: var(--accent);
-  outline: none;
-}
-
 /* ----- アプリ全体のログの欄（どのページでも下に出す） ----- */
 .app-log {
   flex-shrink: 0;
@@ -1782,21 +1750,6 @@ button:disabled {
   box-shadow: inset 2px 0 0 var(--accent);
 }
 
-/* 2 画面で、もう片方の欄に出ているページ */
-.sidebar-item.shown {
-  color: var(--text-main);
-  box-shadow: inset 2px 0 0 var(--border);
-}
-
-/* 2 画面の切り替え（ページの切り替えと区切る） */
-.sidebar-split {
-  border-top: 1px solid var(--border);
-}
-
-.sidebar-split.on {
-  color: var(--accent);
-}
-
 .toolbar-icon-button {
   background: none;
   border: none;
@@ -3096,33 +3049,4 @@ input.address-invalid:focus,
 }
 .certificate-actions .btn-small + .btn-small {
   margin-left: 0.4rem;
-}
-
-/* ----- 2 画面などで、ページの幅が狭いとき ----- */
-/* 幅はウィンドウではなく、ページの枠（.app-page）で見る（2 画面では、ウィンドウが広くても 1 つの欄は狭い） */
-.app-page {
-  container-type: inline-size;
-  container-name: page;
-}
-
-@container page (max-width: 900px) {
-  /* 通信画面の一覧を細くして、右の中身に幅を回す */
-  .server-vertical-tabs > .server-tab-list {
-    width: 220px;
-  }
-
-  /* レジスタの表は、10 列が収まるよう詰める */
-  .register-matrix th,
-  .register-matrix td {
-    padding: 0.25rem 0.2rem;
-  }
-
-  .register-matrix .col-header,
-  .register-matrix .matrix-cell {
-    min-width: 41px;
-  }
-
-  .register-matrix .row-header {
-    min-width: 44px;
-  }
 }

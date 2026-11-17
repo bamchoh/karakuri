@@ -76,7 +76,7 @@ go build ./...
 
 `frontend/src/**/*.test.ts` に、state に依存しない純粋な関数の単体テストがある（`npm test`。開発サーバーなしで走り、CI でも実行する）。
 
-- 対象: `utils/address.ts`（アドレスの表示と入力の変換・範囲の検査・マッピング先のエリアの決め方）、`utils/register.ts`（ワードの結合・分解・書式）、`components/registerList.ts`（行の組み立て・選択の移動）、`utils/windowTitle.ts`（タイトルバーの文字）、`utils/rows.ts`（行を足せる表の行の追加・削除・更新）、`utils/certificates.ts`（証明書の一覧の分け方・書式）、`utils/panes.ts`（1 画面・2 画面の並べ方）
+- 対象: `utils/address.ts`（アドレスの表示と入力の変換・範囲の検査・マッピング先のエリアの決め方）、`utils/register.ts`（ワードの結合・分解・書式）、`components/registerList.ts`（行の組み立て・選択の移動）、`utils/windowTitle.ts`（タイトルバーの文字）、`utils/rows.ts`（行を足せる表の行の追加・削除・更新）、`utils/certificates.ts`（証明書の一覧の分け方・書式）
 - 画面の動き（クリック・入力・表示）は、こちらではなく Playwright で確かめる。**計算や変換を足すときは、コンポーネントの中に書かず純粋な関数にして、ここにテストを足す**
 - 設定は `frontend/vite.config.ts` の `test`（`src/**/*.test.ts` だけを対象にする。`e2e/*.spec.ts` は Playwright のテスト）。Vitest のバージョンは固定
 - テストのファイルも `npm run build` の型検査の対象
@@ -97,7 +97,7 @@ go build ./...
 
 `frontend/e2e/` に、ブラウザで画面を操作して確認するテストがある。`task dev` が立てる開発用サーバー（`http://localhost:34115`）に接続するため、Go 側の API とプロトコルの実装を含めた動作を確認できる。手順と注意は `frontend/e2e/README.md` を参照。
 
-- 画面ごとのテスト: 画面の外枠（タイトル・左の帯・HTTP API の表示）`app-shell.spec.ts`、2 画面 `split-view.spec.ts`、通信画面の右側の配置 `pane-layout.spec.ts`、アプリ全体のログ `app-log.spec.ts`、アドレスの範囲 `register-range.spec.ts`、FINS（「ワード.ビット」のアドレス・項目の表示条件）`fins.spec.ts`、SLMP（16 進のアドレス）`slmp.spec.ts`、通信画面（サーバー）`server-panel.spec.ts`、変数画面 `variable-dialogs.spec.ts` / `node-publishing.spec.ts`、サーバーの「レジスタ」「モニタリング」のタブ `register-panel.spec.ts` / `monitoring.spec.ts`、スクリプト画面 `script-panel.spec.ts`、通信画面（クライアント）`client-panel.spec.ts` / `client-polling.spec.ts` / `client-mapping.spec.ts` / `client-saved-commands.spec.ts` / `client-opcua.spec.ts` / `client-serial.spec.ts`、OPC UA の暗号化・ユーザー認証・証明書のタブ `opcua-security.spec.ts`（Modbus RTU / ASCII・FINS の Host Link・MC プロトコル（シリアル）。実機の確認は、テストを流す側で `KARAKURI_SERIAL_PAIR` を設定したときだけ）
+- 画面ごとのテスト: 画面の外枠（タイトル・左の帯・HTTP API の表示）`app-shell.spec.ts`、通信画面の右側の配置 `pane-layout.spec.ts`、アプリ全体のログ `app-log.spec.ts`、アドレスの範囲 `register-range.spec.ts`、FINS（「ワード.ビット」のアドレス・項目の表示条件）`fins.spec.ts`、SLMP（16 進のアドレス）`slmp.spec.ts`、通信画面（サーバー）`server-panel.spec.ts`、変数画面 `variable-dialogs.spec.ts` / `node-publishing.spec.ts`、サーバーの「レジスタ」「モニタリング」のタブ `register-panel.spec.ts` / `monitoring.spec.ts`、スクリプト画面 `script-panel.spec.ts`、通信画面（クライアント）`client-panel.spec.ts` / `client-polling.spec.ts` / `client-mapping.spec.ts` / `client-saved-commands.spec.ts` / `client-opcua.spec.ts` / `client-serial.spec.ts`、OPC UA の暗号化・ユーザー認証・証明書のタブ `opcua-security.spec.ts`（Modbus RTU / ASCII・FINS の Host Link・MC プロトコル（シリアル）。実機の確認は、テストを流す側で `KARAKURI_SERIAL_PAIR` を設定したときだけ）
 - 画面を変更したら、該当するテストを実行する（なければ追加する）。`shot()` で撮ったスクリーンショット（`frontend/e2e/.screenshots/`）で見た目も確認する
 - データの準備は `api(page, "メソッド名", ...)` で Go 側の API を直接呼び、確認したい操作だけを画面で行う
 - **テストはアプリのサーバー・変数・モニタリング項目・スクリプトをすべて削除する。** 開発サーバーは `KARAKURI_CONFIG_DIR` を一時フォルダに向けて起動する
@@ -363,9 +363,9 @@ frontend/src/
 │   ├── CertificatesView.tsx    # 証明書のタブ（サーバーと接続先で共通。自分の証明書・拒否・信頼の一覧と、信頼・拒否・削除）。証明書のストアを持つプロトコルだけ
 │   ├── clientFormat.ts         # クライアント（通信画面の右側）で共通の表示の書式（状態の名前・時刻・かかった時間）
 │   ├── AppLogPanel.tsx     # アプリ全体のログの欄（どのページでも画面の下に出す。開閉できる）
-│   ├── Sidebar.tsx         # 左のアイコンの帯（上にページの切り替えと 2 画面の切り替え、下にプロジェクトを開く・保存）
+│   ├── Sidebar.tsx         # 左のアイコンの帯（上にページの切り替え、下にプロジェクトを開く・保存）
 │   └── HttpApiIndicator.tsx # HTTP API の URL とポートの変更（ログの見出しの行の右端に出す）
-└── App.tsx                 # 画面の外枠（左の帯・ページ・下のログの欄）。ページの並べ方（1 画面 / 2 画面）もここ
+└── App.tsx                 # 画面の外枠（左の帯・ページ・下のログの欄）
 ```
 
 #### 画面の外枠と配色
@@ -377,14 +377,6 @@ frontend/src/
   - 隠れている間は、周期的な読み直しを止める。タイマーを足すときは `usePageActive()`（`components/usePageActive.ts`）が true の間だけ動かす
   - 画面を開いたときにだけ読むもの（変数画面のサーバーとエリア・接続先の保存したコマンドと履歴）は、ページが出るたびにも読み直す（隠れている間に、ほかのページ・スクリプト・HTTP API で変わるため）。「ページを移れば読み直される」ことには頼れない
   - ログの行から移るときの「選んでほしいもの」（`selectRequest`）は、そのページが出ているときだけ渡す
-- **2 画面**（左の帯の「2 画面」のボタン）: ページを 2 つ、左右に並べる（スクリプトを動かしながら、隣でレジスタを見るなど）。並べ方は `utils/panes.ts` の `PaneLayout`（左右のページ・最後に使った欄・左の欄の幅の割合）で持ち、変える関数は純粋な関数（`showPage()` / `toggleSplit()` / `focusPane()` など。テストは `panes.test.ts`）
-  - 2 画面にすると、通信とスクリプトを組にして出す（前に右に出していたページがあれば、それ）。1 画面に戻すと、最後に使った欄のページが残る
-  - **最後に使った欄**（押した・フォーカスが入った欄。上の辺に強調の線が出る）: 左の帯でページを選ぶと、この欄のページが替わる。もう出ているページを選んだときは、その欄を最後に使った欄にするだけ（同じページを両方の欄には出さない）。ログの出どころを押したときも同じ
-  - 左右は、DOM の順を変えずに CSS の `order` で決める（順を変えると、ページを作り直すことになる）。境目（`.pane-splitter`）はドラッグ・左右の矢印キーで幅を変えられる（20%〜80%。ダブルクリックで半分）
-  - 並べ方は、その PC の画面に覚える（`localStorage` の `karakuri.panes`。読めなければ 1 画面）
-  - 保存していない変更の確認は、通信画面が隠れることになるときだけ出す（`applyLayout()` が `hiddenBy()` で確かめる）
-  - **幅が狭いときの見た目は、ウィンドウではなくページの枠の幅で決める**（`@container page (max-width: …)`。2 画面では、ウィンドウが広くても 1 つの欄は狭い）。通信画面の一覧を細くし、レジスタの表を 10 列が収まるよう詰める
-  - 画面のテスト: `frontend/e2e/split-view.spec.ts`
 - **色は `App.css` の先頭の変数で決める**。新しく色を足すときは、16 進の値を直接書かず、変数を使う
   - 面: `--bg-app`（左の帯）→ `--bg-sidebar`（一覧）→ `--bg-panel`（中身）→ `--bg-elevated`（見出し・ダイアログ・ボタン）。入力欄は `--bg-input`、ログ・コンソール・コードは `--bg-code`
   - **強調（`--accent`、青）は「選んでいるもの・フォーカス・押せる値・主なボタン」に使う。緑（`--success`）は「起動中・正常」の状態だけに使う**（選択と状態を、色で見分けられるようにするため）

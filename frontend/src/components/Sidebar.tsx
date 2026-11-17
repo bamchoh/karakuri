@@ -1,23 +1,11 @@
 // Sidebar.tsx
-import {
-  Server,
-  Database,
-  FileCode2,
-  FolderOpen,
-  Save,
-  Columns2,
-} from "lucide-react";
+import { Server, Database, FileCode2, FolderOpen, Save } from "lucide-react";
 
 type Tab = "server" | "variables" | "scripts";
 
 type Props = {
-  // 最後に使った欄のページ（左の帯でほかのページを選ぶと、この欄のページが替わる）
   selected: Tab;
-  // 2 画面のとき、出ているページ（1 画面なら空）
-  shown: Tab[];
-  split: boolean;
   onSelect: (tab: Tab) => void;
-  onToggleSplit: () => void;
   onOpenProject: () => void;
   onSaveProject: () => void;
 };
@@ -40,13 +28,10 @@ const items = [
   },
 ] as const;
 
-// 左のアイコンの帯。上にページの切り替えと 2 画面の切り替え、下にプロジェクトの操作（開く・保存）を置く
+// 左のアイコンの帯。上にページの切り替え、下にプロジェクトの操作（開く・保存）を置く
 export function Sidebar({
   selected,
-  shown,
-  split,
   onSelect,
-  onToggleSplit,
   onOpenProject,
   onSaveProject,
 }: Props) {
@@ -58,7 +43,7 @@ export function Sidebar({
         return (
           <button
             key={item.id}
-            className={`sidebar-item ${selected === item.id ? "active" : shown.includes(item.id) ? "shown" : ""}`}
+            className={`sidebar-item ${selected === item.id ? "active" : ""}`}
             onClick={() => onSelect(item.id)}
             title={item.label}
           >
@@ -66,15 +51,6 @@ export function Sidebar({
           </button>
         );
       })}
-      <button
-        className={`sidebar-item sidebar-split ${split ? "on" : ""}`}
-        onClick={onToggleSplit}
-        title={split ? "1 画面に戻す" : "2 画面にする（左右に並べる）"}
-        aria-label="2 画面"
-        aria-pressed={split}
-      >
-        <Columns2 size={22} />
-      </button>
       <div className="sidebar-spacer" />
       <button
         className="sidebar-item"

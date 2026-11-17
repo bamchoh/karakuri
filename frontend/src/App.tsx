@@ -11,70 +11,27 @@ import { ExportProject, ImportProject } from "../wailsjs/go/main/App";
 import { WindowSetTitle } from "../wailsjs/runtime/runtime";
 import { windowTitle } from "./utils/windowTitle";
 import { PageActiveContext } from "./components/usePageActive";
-import {
-  DEFAULT_LAYOUT,
-  PageId,
-  PaneLayout,
-  PaneSide,
-  clampRatio,
-  focusPane,
-  focusedPage,
-  hiddenBy,
-  isSplit,
-  paneOf,
-  parseLayout,
-  showPage,
-  toggleSplit,
-} from "./utils/panes";
 
 const APP_VERSION = "v0.0.51";
 
-const LAYOUT_KEY = "karakuri.panes";
+type Tab = "server" | "variables" | "scripts";
 
-// 前の並べ方（その PC の画面に覚えておく。読めなければ既定）
-function loadLayout(): PaneLayout {
-  try {
-    return parseLayout(localStorage.getItem(LAYOUT_KEY));
-  } catch {
-    return DEFAULT_LAYOUT;
-  }
-}
-
-// Page は、ページ 1 つの枠。出ていない間は隠し、中の周期的な読み直しを止める（usePageActive）。
-// 2 画面のときは、左右のどちらの欄に出すかを CSS で決める（DOM の順は変えない。変えると作り直しになる）
+// Page は、ページ 1 つの枠。出ていない間は隠し、中の周期的な読み直しを止める（usePageActive）
 function Page({
   name,
-  layout,
-  onFocus,
+  active,
   children,
 }: {
-  name: PageId;
-  layout: PaneLayout;
-  onFocus: (side: PaneSide) => void;
+  name: Tab;
+  active: boolean;
   children: ReactNode;
 }) {
-  const side = paneOf(layout, name);
-  const split = isSplit(layout);
-  const classes = ["app-page"];
-  if (!side) classes.push("app-page-hidden");
-  if (split && side) {
-    classes.push(`app-page-${side}`);
-    if (layout.focused === side) classes.push("app-page-focused");
-  }
   return (
     <div
-      className={classes.join(" ")}
+      className={`app-page${active ? "" : " app-page-hidden"}`}
       data-page={name}
-      data-pane={split && side ? side : undefined}
-      style={
-        split && side === "left"
-          ? { flex: `0 0 ${layout.ratio * 100}%` }
-          : undefined
-      }
-      onPointerDownCapture={side ? () => onFocus(side) : undefined}
-      onFocusCapture={side ? () => onFocus(side) : undefined}
     >
-      <PageActiveContext.Provider value={side !== null}>
+      <PageActiveContext.Provider value={active}>
         {children}
       </PageActiveContext.Provider>
     </div>
@@ -82,77 +39,46 @@ function Page({
 }
 
 function App() {
-  // 画面の並べ方（1 画面か 2 画面か・どの欄にどのページを出すか・左の欄の幅）
-  const [layout, setLayout] = useState<PaneLayout>(loadLayout);
-  // 2 画面をやめる前に、右に出していたページ（もう一度 2 画面にしたときに出す）
-  const lastRight = useRef<PageId | null>(layout.right);
+  const [activeTab, setActiveTab] = useState<Tab>("server");
   // 開いている（保存した）プロジェクトのファイル。タイトルバーに名前を出す
   const [projectPath, setProjectPath] = useState("");
   const [serverPanelDirty, setServerPanelDirty] = useState(false);
-  // 通信画面に保存していない変更があるので、確認を待っている並べ方
-  const [pendingLayout, setPendingLayout] = useState<PaneLayout | null>(null);
+  const [pendingTab, setPendingTab] = useState<Tab | null>(null);
   const serverPanelRef = useRef<ServerPanelHandle>(null);
-  const mainRef = useRef<HTMLElement>(null);
-
-  useEffect(() => {
-    if (layout.right) lastRight.current = layout.right;
-    try {
-      localStorage.setItem(LAYOUT_KEY, JSON.stringify(layout));
-    } catch {
-      // 覚えられなくても、そのまま使える
-    }
-  }, [layout]);
 
   // ログの行から移るときの、選んでほしいもの（移った先の画面が選んだら null に戻す）
   const [navRequest, setNavRequest] = useState<LogTarget | null>(null);
   const clearNavRequest = useCallback(() => setNavRequest(null), []);
 
-  // 並べ方を変える。通信画面が隠れることになり、保存していない変更があれば、先に確認する
-  const applyLayout = (next: PaneLayout) => {
-    if (serverPanelDirty && hiddenBy(layout, next).includes("server")) {
-      setPendingLayout(next);
+  // ログの行の出どころを押したとき: 該当のページに移り、そのサーバー・接続先・スクリプトを選ぶ
+  const handleLogNavigate = (target: LogTarget) => {
+    setNavRequest(target);
+    handleTabClick(target.kind === "script" ? "scripts" : "server");
+  };
+
+  const handleTabClick = (tab: Tab) => {
+    if (tab !== activeTab && activeTab === "server" && serverPanelDirty) {
+      setPendingTab(tab);
     } else {
-      setLayout(next);
+      setActiveTab(tab);
     }
   };
 
-  // ログの行の出どころを押したとき: 該当のページを出し、そのサーバー・接続先・スクリプトを選ぶ
-  const handleLogNavigate = (target: LogTarget) => {
-    setNavRequest(target);
-    applyLayout(
-      showPage(layout, target.kind === "script" ? "scripts" : "server"),
-    );
-  };
-
-  const handleFocusPane = useCallback(
-    (side: PaneSide) => setLayout((l) => focusPane(l, side)),
-    [],
-  );
-
   const handleConfirmSaveAndNavigate = async () => {
-    if (!pendingLayout) return;
-    const next = pendingLayout;
-    setPendingLayout(null);
+    if (!pendingTab) return;
+    const tab = pendingTab;
+    setPendingTab(null);
     await serverPanelRef.current?.save();
-    setLayout(next);
+    setActiveTab(tab);
   };
 
   const handleConfirmDiscardAndNavigate = async () => {
-    if (!pendingLayout) return;
-    const next = pendingLayout;
-    setPendingLayout(null);
+    if (!pendingTab) return;
+    const tab = pendingTab;
+    setPendingTab(null);
     await serverPanelRef.current?.revert();
-    setLayout(next);
+    setActiveTab(tab);
   };
-
-  // 左右の境目をドラッグして、左の欄の幅を変える
-  const ratioAt = (clientX: number): number => {
-    const rect = mainRef.current?.getBoundingClientRect();
-    if (!rect || rect.width === 0) return layout.ratio;
-    return clampRatio((clientX - rect.left) / rect.width);
-  };
-  const setRatio = (ratio: number) =>
-    setLayout((l) => ({ ...l, ratio: clampRatio(ratio) }));
 
   // アプリの名前とバージョンは、ウィンドウのタイトルバーに出す（画面の中には出さない）
   useEffect(() => {
@@ -188,31 +114,22 @@ function App() {
     <div id="App">
       <div className="main-layout">
         <Sidebar
-          selected={focusedPage(layout)}
-          shown={isSplit(layout) ? [layout.left, layout.right!] : []}
-          split={isSplit(layout)}
-          onSelect={(page) => {
+          selected={activeTab}
+          onSelect={(tab) => {
             setNavRequest(null);
-            applyLayout(showPage(layout, page));
-          }}
-          onToggleSplit={() => {
-            setNavRequest(null);
-            applyLayout(toggleSplit(layout, lastRight.current));
+            handleTabClick(tab);
           }}
           onOpenProject={handleOpenProject}
           onSaveProject={handleSaveProject}
         />
-        <main
-          className={`app-main${isSplit(layout) ? " app-main-split" : ""}`}
-          ref={mainRef}
-        >
+        <main className="app-main">
           {/* ページは、ほかのページを見ている間も作り直さずに隠すだけ（選んでいたもの・入力中の内容を保つ） */}
-          <Page name="server" layout={layout} onFocus={handleFocusPane}>
+          <Page name="server" active={activeTab === "server"}>
             <ServerPanel
               ref={serverPanelRef}
               onDirtyChange={setServerPanelDirty}
               selectRequest={
-                paneOf(layout, "server") &&
+                activeTab === "server" &&
                 navRequest &&
                 navRequest.kind !== "script"
                   ? { kind: navRequest.kind, id: navRequest.id }
@@ -221,55 +138,26 @@ function App() {
               onSelectRequestHandled={clearNavRequest}
             />
           </Page>
-          <Page name="variables" layout={layout} onFocus={handleFocusPane}>
+          <Page name="variables" active={activeTab === "variables"}>
             <VariableView />
           </Page>
-          <Page name="scripts" layout={layout} onFocus={handleFocusPane}>
+          <Page name="scripts" active={activeTab === "scripts"}>
             <ScriptPanel
               selectRequest={
-                paneOf(layout, "scripts") && navRequest?.kind === "script"
+                activeTab === "scripts" && navRequest?.kind === "script"
                   ? navRequest.id
                   : null
               }
               onSelectRequestHandled={clearNavRequest}
             />
           </Page>
-          {isSplit(layout) && (
-            <div
-              className="pane-splitter"
-              role="separator"
-              aria-orientation="vertical"
-              aria-label="左右の欄の幅"
-              aria-valuemin={20}
-              aria-valuemax={80}
-              aria-valuenow={Math.round(layout.ratio * 100)}
-              tabIndex={0}
-              title="ドラッグで幅を変える（ダブルクリックで半分に戻す）"
-              onPointerDown={(e) => {
-                e.preventDefault();
-                e.currentTarget.setPointerCapture(e.pointerId);
-              }}
-              onPointerMove={(e) => {
-                if (e.currentTarget.hasPointerCapture(e.pointerId)) {
-                  setRatio(ratioAt(e.clientX));
-                }
-              }}
-              onDoubleClick={() => setRatio(0.5)}
-              onKeyDown={(e) => {
-                if (e.key === "ArrowLeft") setRatio(layout.ratio - 0.02);
-                else if (e.key === "ArrowRight") setRatio(layout.ratio + 0.02);
-                else return;
-                e.preventDefault();
-              }}
-            />
-          )}
         </main>{" "}
-        {pendingLayout && (
+        {pendingTab && (
           <UnsavedChangesDialog
             discardLabel="保存せずに移動"
             saveLabel="保存してから移動"
             onCancel={() => {
-              setPendingLayout(null);
+              setPendingTab(null);
               setNavRequest(null);
             }}
             onDiscard={handleConfirmDiscardAndNavigate}
