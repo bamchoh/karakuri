@@ -77,8 +77,23 @@ func normalizeProject(t *testing.T, raw []byte) string {
 		l, _ := p[key].([]interface{})
 		return l
 	}
+	// 変数の ID は読み込むたびに変わる。モニタリング項目が指す変数は、名前に置き換えて比べる
+	// （読み込んだあとも、同じ変数を指していることを確かめる）
+	names := map[string]string{}
 	for _, v := range list("variables") {
-		delete(v.(map[string]interface{}), "id")
+		m := v.(map[string]interface{})
+		names[fmt.Sprint(m["id"])] = fmt.Sprint(m["name"])
+		delete(m, "id")
+	}
+	for _, item := range list("monitoringItems") {
+		m := item.(map[string]interface{})
+		if id, ok := m["variableId"]; ok {
+			name, found := names[fmt.Sprint(id)]
+			if !found {
+				name = "（ない変数）"
+			}
+			m["variableId"] = "変数: " + name
+		}
 	}
 	for _, c := range list("clients") {
 		cmds, _ := c.(map[string]interface{})["savedCommands"].([]interface{})

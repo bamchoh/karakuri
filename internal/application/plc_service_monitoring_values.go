@@ -24,6 +24,27 @@ func (s *PLCService) removeMonitoringItems(match func(*MonitoringItemDTO) bool) 
 	}
 }
 
+// pruneMonitoringItems は、もうない変数・接続先を指す項目を消す。
+// 項目は設定ファイルに残るが、変数と接続先はプロジェクトのもの（アプリを起動した直後は 1 つもない）。
+// 起動したとき・プロジェクトを読み込んだあとに呼んで、「変数がありません」の行が並ばないようにする。
+// レジスタの項目は消さない（同じプロトコルのサーバーを足せば、また使える。サーバーがない間は、画面が出さない）
+func (s *PLCService) pruneMonitoringItems() {
+	clients := map[string]bool{}
+	for _, c := range s.GetClients() {
+		clients[c.ID] = true
+	}
+	s.removeMonitoringItems(func(item *MonitoringItemDTO) bool {
+		switch item.Kind {
+		case MonitoringKindVariable:
+			_, err := s.variableStore.GetVariable(item.VariableID)
+			return err != nil
+		case MonitoringKindSubscription, MonitoringKindPoll:
+			return !clients[item.ClientID]
+		}
+		return false
+	})
+}
+
 // GetMonitoringValues は、レジスタ以外のモニタリング項目のいまの値を、項目の並びの順で返す
 func (s *PLCService) GetMonitoringValues() []MonitoringValueDTO {
 	out := []MonitoringValueDTO{}

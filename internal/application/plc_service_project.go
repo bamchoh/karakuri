@@ -132,6 +132,8 @@ func (s *PLCService) ImportProject(data *ProjectDataDTO) (err error) {
 	defer func() {
 		s.appLog.Result(logSourceProject, "プロジェクトを読み込みました", "プロジェクトを読み込めませんでした", err)
 	}()
+	// 読み込んだあと（ロックを外してから）、もうない変数・接続先を指すモニタリング項目を消す
+	defer s.pruneMonitoringItems()
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -176,12 +178,17 @@ func (s *PLCService) ImportProject(data *ProjectDataDTO) (err error) {
 		}
 	}
 
-	// 変数を復元（構造体型復元後・サーバー復元前）
+	// 変数を復元（構造体型復元後・サーバー復元前）。
+	// 変数の ID は作り直すので、ファイルの ID → 新しい ID を覚えておく（モニタリング項目が変数を ID で指すため）
+	variableIDs := map[string]string{}
 	if data.Variables != nil {
 		for _, dto := range data.Variables {
 			v, err := s.variableStore.CreateVariable(dto.Name, variable.DataType(dto.DataType), dto.Value)
 			if err != nil {
 				continue
+			}
+			if dto.ID != "" {
+				variableIDs[dto.ID] = v.ID
 			}
 			if len(dto.Mappings) > 0 {
 				mappings := make([]variable.ProtocolMapping, len(dto.Mappings))
@@ -257,7 +264,12 @@ func (s *PLCService) ImportProject(data *ProjectDataDTO) (err error) {
 	if data.MonitoringItems != nil {
 		s.monitoringItems = make(map[string]*MonitoringItemDTO)
 		for _, item := range data.MonitoringItems {
-			s.monitoringItems[item.ID] = item
+			stored := *item
+			// 変数を指す項目は、作り直した変数の ID に付け替える
+			if id, ok := variableIDs[stored.VariableID]; ok && stored.Kind == MonitoringKindVariable {
+				stored.VariableID = id
+			}
+			s.monitoringItems[stored.ID] = &stored
 		}
 	}
 

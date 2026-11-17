@@ -148,7 +148,7 @@ export function WatchPanel() {
         ((await GetMonitoringValues()) || []).map((v) => [v.id, v]),
       );
       const next = await Promise.all(
-        items.map(async (item): Promise<WatchRow> => {
+        items.map(async (item): Promise<WatchRow | null> => {
           if (item.kind) {
             const v = values.get(item.id);
             return {
@@ -172,14 +172,17 @@ export function WatchPanel() {
           const area = (areas[item.protocolType] || []).find(
             (a) => a.id === item.memoryArea,
           );
-          if (!server || !area) {
+          // サーバーがないレジスタの項目は、出さない（サーバーの「モニタリング」のタブと同じ。
+          // 同じプロトコルのサーバーを足せば、また出る）
+          if (!server) return null;
+          if (!area) {
             return {
               item,
-              source: server?.displayName ?? item.protocolType,
+              source: server.displayName,
               label: `${item.memoryArea} ${item.address}`,
               text: "",
               status: "error",
-              error: server ? "エリアがありません" : "サーバーがありません",
+              error: "エリアがありません",
               writable: false,
               children: [],
             };
@@ -199,7 +202,7 @@ export function WatchPanel() {
           };
         }),
       );
-      setRows(next);
+      setRows(next.filter((r): r is WatchRow => r !== null));
     } catch (e) {
       console.error("Failed to load monitoring values:", e);
     }

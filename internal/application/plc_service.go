@@ -106,6 +106,8 @@ func NewPLCService() *PLCService {
 
 	// モニタリング設定を読み込み
 	_ = service.LoadMonitoringConfig()
+	// 前に使っていたときの変数・接続先の項目は、指す先がもうないので消す
+	service.pruneMonitoringItems()
 
 	return service
 }
