@@ -1,3 +1,4 @@
+import { usePageActive } from "./usePageActive";
 import { useState, useEffect, useCallback, useRef } from "react";
 import { GetMemoryAreas, ReadBits, ReadWords } from "../../wailsjs/go/main/App";
 import { application } from "../../wailsjs/go/models";
@@ -199,12 +200,13 @@ export function RegisterListView({ protocolType, active }: Props) {
   ]);
 
   // 表示している間、100ms ごとに読み直す
+  const pageActive = usePageActive();
   useEffect(() => {
-    if (!active) return;
+    if (!active || !pageActive) return;
     loadRegisters();
     const interval = setInterval(loadRegisters, 100);
     return () => clearInterval(interval);
-  }, [loadRegisters, active]);
+  }, [loadRegisters, active, pageActive]);
 
   // コンポーネントマウント時にテーブルにフォーカスを設定
   useEffect(() => {

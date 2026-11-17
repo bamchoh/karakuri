@@ -1,3 +1,4 @@
+import { usePageActive } from "./usePageActive";
 import { useState, useEffect, useCallback } from "react";
 import {
   GetClientPolling,
@@ -105,11 +106,13 @@ export function ClientPollingView({
     }
   }, [client.id]);
 
+  const pageActive = usePageActive();
   useEffect(() => {
+    if (!pageActive) return;
     load();
     const timer = setInterval(load, REFRESH_MS);
     return () => clearInterval(timer);
-  }, [load]);
+  }, [load, pageActive]);
 
   // 周期の欄は、編集していなければ実際の周期を表示する（API など、ほかから変えられたときも追う）
   const actualInterval = polling?.intervalMs;

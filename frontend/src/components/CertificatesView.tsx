@@ -1,3 +1,4 @@
+import { usePageActive } from "./usePageActive";
 import { ReactNode, useCallback, useEffect, useState } from "react";
 import {
   DeleteCertificate,
@@ -40,11 +41,13 @@ export function CertificatesView({
     }
   }, [kind, protocolType]);
 
+  const pageActive = usePageActive();
   useEffect(() => {
+    if (!pageActive) return;
     load();
     const timer = setInterval(load, RELOAD_MS);
     return () => clearInterval(timer);
-  }, [load]);
+  }, [load, pageActive]);
 
   const run = async (action: () => Promise<void>) => {
     setBusy(true);

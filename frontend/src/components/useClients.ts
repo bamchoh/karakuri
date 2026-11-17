@@ -1,3 +1,4 @@
+import { usePageActive } from "./usePageActive";
 import { useState, useEffect, useCallback } from "react";
 import {
   GetClientProtocols,
@@ -42,11 +43,20 @@ export function useClients() {
         setLoaded(true);
       }
     })();
+  }, [loadClients, loadLogs]);
+
+  // 一覧の読み直しは、ページが出ている間だけ（戻ってきたら、すぐ読み直す）
+  const pageActive = usePageActive();
+  useEffect(() => {
+    if (!pageActive) return;
+    loadClients().catch(() => {});
+    // 履歴は、隠れている間にスクリプトが送った分も出す
+    loadLogs().catch(() => {});
     const timer = setInterval(() => {
       loadClients().catch(() => {});
     }, CLIENTS_REFRESH_MS);
     return () => clearInterval(timer);
-  }, [loadClients, loadLogs]);
+  }, [loadClients, loadLogs, pageActive]);
 
   return { protocols, clients, logs, loaded, error, loadClients, loadLogs };
 }

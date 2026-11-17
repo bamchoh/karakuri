@@ -147,7 +147,20 @@
 /* Main Content */
 .app-main {
   flex: 1;
+  min-width: 0;
+  display: flex;
+  overflow: hidden;
+}
+
+/* ページ 1 つの枠。出ていないページは、作り直さずに隠すだけ */
+.app-page {
+  flex: 1;
+  min-width: 0;
   overflow: auto;
+}
+
+.app-page-hidden {
+  display: none;
 }
 
 /* ----- アプリ全体のログの欄（どのページでも下に出す） ----- */

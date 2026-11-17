@@ -1,3 +1,4 @@
+import { usePageActive } from "./usePageActive";
 import { CertificatesView } from "./CertificatesView";
 import {
   useState,
@@ -114,9 +115,11 @@ export const ClientDetailPane = forwardRef<
     }
   }, [client.id]);
 
+  // ページが出るたびに読み直す（隠れている間に、HTTP API などで変わっていることがある）
+  const pageActive = usePageActive();
   useEffect(() => {
-    loadSavedCommands();
-  }, [loadSavedCommands]);
+    if (pageActive) loadSavedCommands();
+  }, [loadSavedCommands, pageActive]);
 
   useEffect(() => {
     onDirtyChange(dirty);
