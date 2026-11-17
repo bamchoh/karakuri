@@ -170,6 +170,36 @@ type MonitoringItemDTO struct {
 	BitWidth      int    `json:"bitWidth"`
 	Endianness    string `json:"endianness"`
 	DisplayFormat string `json:"displayFormat"`
+
+	// レジスタ以外の項目（Kind が空ならレジスタで、上の項目を使う）。
+	// Kind: "variable"（変数。VariableID と、フィールド・要素なら FieldPath）/
+	// "subscription"（接続先のサブスクリプションの監視項目）/ "poll"（接続先のポーリングの読み取り項目）。
+	// 接続先の項目は、ClientID と項目の要約（Summary）で指す（項目の ID は、プロジェクトを読み込むと変わるため）
+	Kind       string `json:"kind,omitempty"`
+	VariableID string `json:"variableId,omitempty"`
+	FieldPath  string `json:"fieldPath,omitempty"`
+	ClientID   string `json:"clientId,omitempty"`
+	Summary    string `json:"summary,omitempty"`
+}
+
+// モニタリング項目の種類（MonitoringItemDTO.Kind。空はレジスタ）
+const (
+	MonitoringKindVariable     = "variable"
+	MonitoringKindSubscription = "subscription"
+	MonitoringKindPoll         = "poll"
+)
+
+// MonitoringValueDTO は、レジスタ以外のモニタリング項目のいまの値（レジスタの値は、画面がメモリを読んで作る）
+type MonitoringValueDTO struct {
+	ID     string `json:"id"`     // モニタリング項目の ID
+	Source string `json:"source"` // 出どころ（「変数」「接続先: 名前」）
+	Label  string `json:"label"`  // 名前（変数名 + パス、監視項目の要約）
+	Text   string `json:"text"`   // 表示する値（まだ値がなければ空）
+	// 変数の値そのもの（LINT / ULINT は文字列）。数値・真偽・文字列なら、画面から書ける
+	Value interface{} `json:"value,omitempty"`
+	// "ok" / "stale"（値は最後に届いたもの。監視・ポーリングが止まっている・失敗している）/ "error"（指しているものがない）
+	Status string `json:"status"`
+	Error  string `json:"error,omitempty"`
 }
 
 // MonitoringConfigDTO はモニタリング設定全体のDTO

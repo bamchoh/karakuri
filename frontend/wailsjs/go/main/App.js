@@ -154,6 +154,10 @@ export function GetMonitoringItems() {
   return window['go']['main']['App']['GetMonitoringItems']();
 }
 
+export function GetMonitoringValues() {
+  return window['go']['main']['App']['GetMonitoringValues']();
+}
+
 export function GetNodeAddresses(arg1, arg2) {
   return window['go']['main']['App']['GetNodeAddresses'](arg1, arg2);
 }

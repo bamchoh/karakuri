@@ -3,6 +3,7 @@ import { ChevronDown, ChevronUp, Eraser } from "lucide-react";
 import { ClearAppLogs, GetAppLogs } from "../../wailsjs/go/main/App";
 import { EventsOn } from "../../wailsjs/runtime/runtime";
 import { application } from "../../wailsjs/go/models";
+import { WatchPanel } from "./WatchPanel";
 
 // 画面に持っておくログの件数（Go 側が持つ件数と同じ）
 const MAX_LOGS = 1000;
@@ -83,7 +84,9 @@ function LogSource({
 // 行き先のあるログ（サーバー・接続先・スクリプトのもの）は、出どころを押すと、その画面に移る
 export function AppLogPanel({ onNavigate, status }: Props) {
   const [logs, setLogs] = useState<application.AppLogDTO[]>([]);
-  const [open, setOpen] = useState(false);
+  // 開いている欄（閉じていれば null）。"log" はログ、"watch" はモニタリング
+  const [tab, setTab] = useState<"log" | "watch" | null>(null);
+  const open = tab === "log";
   // 閉じている間に届いた警告・エラーの件数（開くと 0 に戻す）
   const [unseen, setUnseen] = useState({ warn: 0, error: 0 });
   const openRef = useRef(open);
@@ -143,7 +146,7 @@ export function AppLogPanel({ onNavigate, status }: Props) {
   }, [logs, open]);
 
   const toggle = () => {
-    setOpen(!open);
+    setTab(open ? null : "log");
     setUnseen({ warn: 0, error: 0 });
   };
 
@@ -160,10 +163,10 @@ export function AppLogPanel({ onNavigate, status }: Props) {
   const last = logs[logs.length - 1];
 
   return (
-    <div className={`app-log${open ? " open" : ""}`}>
+    <div className={`app-log${tab ? " open" : ""}`}>
       <div className="app-log-header">
         <button
-          className="app-log-toggle"
+          className={`app-log-toggle${open ? " active" : ""}`}
           onClick={toggle}
           title={open ? "ログを閉じる" : "ログを開く"}
           // 見出しに出す最後のログの文面を、ボタンの名前に含めない（ほかのボタンと名前が重なるため）
@@ -179,13 +182,26 @@ export function AppLogPanel({ onNavigate, status }: Props) {
           {unseen.warn > 0 && (
             <span className="app-log-badge warn">警告 {unseen.warn}</span>
           )}
-          {/* 閉じている間は、最後の 1 件を見出しに出す */}
-          {!open && last && (
-            <span className={`app-log-last ${last.level}`}>
-              {formatTime(last.at)} [{last.source}] {last.message}
-            </span>
-          )}
         </button>
+        {/* モニタリング（登録したレジスタ・変数・接続先の値）。どのページにいても、ここで見られる */}
+        <button
+          className={`app-log-tab${tab === "watch" ? " active" : ""}`}
+          onClick={() => setTab(tab === "watch" ? null : "watch")}
+          title={
+            tab === "watch" ? "モニタリングを閉じる" : "モニタリングを開く"
+          }
+          aria-expanded={tab === "watch"}
+        >
+          モニタリング
+        </button>
+        {/* ログを開いていない間は、最後の 1 件を見出しに出す（押すと、ログを開く） */}
+        {!open && last ? (
+          <span className={`app-log-last ${last.level}`} onClick={toggle}>
+            {formatTime(last.at)} [{last.source}] {last.message}
+          </span>
+        ) : (
+          <span className="app-log-spacer" />
+        )}
         {open && (
           <button
             className="app-log-clear"
@@ -198,6 +214,7 @@ export function AppLogPanel({ onNavigate, status }: Props) {
         )}
         {status}
       </div>
+      {tab === "watch" && <WatchPanel />}
       {open && (
         <div className="app-log-output" ref={outputRef}>
           {logs.length === 0 ? (

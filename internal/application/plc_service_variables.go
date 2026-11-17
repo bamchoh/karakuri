@@ -65,6 +65,10 @@ func (s *PLCService) DeleteVariable(id string) error {
 	if err := s.variableStore.DeleteVariable(id); err != nil {
 		return err
 	}
+	// この変数のモニタリング項目も消す
+	s.removeMonitoringItems(func(item *MonitoringItemDTO) bool {
+		return item.Kind == MonitoringKindVariable && item.VariableID == id
+	})
 	go s.emitVariablesChanged()
 	return nil
 }

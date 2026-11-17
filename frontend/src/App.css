@@ -163,38 +163,6 @@
   display: none;
 }
 
-/* 2 画面: 左右に並べる。DOM の順は変えず、order で左右を決める（順を変えるとページを作り直すことになる） */
-.app-main-split .app-page {
-  border-top: 2px solid transparent;
-}
-
-.app-main-split .app-page-left {
-  order: 1;
-}
-
-.app-main-split .app-page-right {
-  order: 3;
-}
-
-/* 最後に使った欄（左の帯でページを選ぶと、この欄のページが替わる） */
-.app-main-split .app-page-focused {
-  border-top-color: var(--accent);
-}
-
-.pane-splitter {
-  order: 2;
-  flex: 0 0 5px;
-  cursor: col-resize;
-  background: var(--border);
-  touch-action: none;
-}
-
-.pane-splitter:hover,
-.pane-splitter:focus-visible {
-  background: var(--accent);
-  outline: none;
-}
-
 /* ----- アプリ全体のログの欄（どのページでも下に出す） ----- */
 .app-log {
   flex-shrink: 0;
@@ -211,8 +179,7 @@
 }
 
 .app-log-toggle {
-  flex: 1;
-  min-width: 0;
+  flex-shrink: 0;
   display: flex;
   align-items: center;
   gap: 0.5rem;
@@ -249,7 +216,14 @@
   background: #f87171;
 }
 
+.app-log-spacer {
+  flex: 1;
+}
+
 .app-log-last {
+  text-align: left;
+  cursor: pointer;
+  font-size: 0.8rem;
   flex: 1;
   min-width: 0;
   overflow: hidden;
@@ -1782,21 +1756,6 @@ button:disabled {
   box-shadow: inset 2px 0 0 var(--accent);
 }
 
-/* 2 画面で、もう片方の欄に出ているページ */
-.sidebar-item.shown {
-  color: var(--text-main);
-  box-shadow: inset 2px 0 0 var(--border);
-}
-
-/* 2 画面の切り替え（ページの切り替えと区切る） */
-.sidebar-split {
-  border-top: 1px solid var(--border);
-}
-
-.sidebar-split.on {
-  color: var(--accent);
-}
-
 .toolbar-icon-button {
   background: none;
   border: none;
@@ -3098,31 +3057,183 @@ input.address-invalid:focus,
   margin-left: 0.4rem;
 }
 
-/* ----- 2 画面などで、ページの幅が狭いとき ----- */
-/* 幅はウィンドウではなく、ページの枠（.app-page）で見る（2 画面では、ウィンドウが広くても 1 つの欄は狭い） */
-.app-page {
-  container-type: inline-size;
-  container-name: page;
+/* ----- 下の帯の「モニタリング」（レジスタ・変数・接続先の値を、どのページでも見る） ----- */
+.app-log-tab {
+  flex-shrink: 0;
+  padding: 0.25rem 0.6rem;
+  border: none;
+  border-bottom: 2px solid transparent;
+  border-radius: 0;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
 }
 
-@container page (max-width: 900px) {
-  /* 通信画面の一覧を細くして、右の中身に幅を回す */
-  .server-vertical-tabs > .server-tab-list {
-    width: 220px;
-  }
+.app-log-tab:hover {
+  color: var(--text-main);
+}
 
-  /* レジスタの表は、10 列が収まるよう詰める */
-  .register-matrix th,
-  .register-matrix td {
-    padding: 0.25rem 0.2rem;
-  }
+.app-log-tab.active {
+  color: var(--text-main);
+  border-bottom-color: var(--accent);
+}
 
-  .register-matrix .col-header,
-  .register-matrix .matrix-cell {
-    min-width: 41px;
-  }
+/* 開いている欄がどちらかわかるよう、ログの側にも同じ下線を付ける */
+.app-log-toggle {
+  border-bottom: 2px solid transparent;
+}
 
-  .register-matrix .row-header {
-    min-width: 44px;
-  }
+.app-log-toggle.active {
+  border-bottom-color: var(--accent);
+}
+
+.watch-panel {
+  height: 200px;
+  overflow-y: auto;
+  padding: 0.4rem 0.75rem;
+  background: var(--bg-code);
+  font-size: 0.8rem;
+}
+
+.watch-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin-bottom: 0.4rem;
+}
+
+.watch-toolbar-label {
+  color: var(--text-muted);
+}
+
+.watch-empty {
+  padding: 0.5rem 0;
+  color: var(--text-muted);
+}
+
+.watch-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-family: "Consolas", "Courier New", monospace;
+}
+
+.watch-table td {
+  text-align: left;
+  padding: 0.15rem 1rem 0.15rem 0;
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+
+.watch-table td.watch-source {
+  color: var(--text-muted);
+  width: 1%;
+}
+
+.watch-table td.watch-label {
+  width: 1%;
+  max-width: 40vw;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.watch-table td.watch-value {
+  width: 1%;
+  min-width: 6rem;
+  max-width: 45vw;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--text-main);
+  font-weight: 600;
+}
+
+.watch-table td.watch-value.writable {
+  color: var(--accent);
+  cursor: pointer;
+}
+
+.watch-table td.watch-value.writable:hover {
+  text-decoration: underline;
+}
+
+/* 最後に届いた値（監視・ポーリングが止まっている・失敗している）は、薄くする */
+.watch-table tr.watch-stale td.watch-value {
+  color: var(--text-muted);
+  font-weight: 400;
+}
+
+.watch-table td.watch-note {
+  color: var(--text-muted);
+  white-space: normal;
+}
+
+.watch-table tr.watch-error td.watch-note {
+  color: var(--danger);
+}
+
+.watch-table td.watch-actions {
+  width: 1%;
+  padding-right: 0;
+}
+
+.watch-delete {
+  display: flex;
+  align-items: center;
+  padding: 0.1rem;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.watch-delete:hover {
+  color: var(--danger);
+}
+
+.watch-pick-dialog {
+  min-width: 420px;
+}
+
+.watch-pick-dialog .watch-pick-filter {
+  width: 100%;
+  box-sizing: border-box;
+  margin-bottom: 0.5rem;
+}
+
+.watch-pick-list {
+  max-height: 45vh;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+}
+
+.watch-pick-item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.35rem 0.6rem;
+  cursor: pointer;
+}
+
+.watch-pick-item:hover {
+  background: var(--bg-elevated);
+}
+
+.watch-pick-detail {
+  margin-left: auto;
+  color: var(--text-muted);
+  font-size: 0.8rem;
+}
+
+.watch-pick-empty {
+  margin: 0;
+  padding: 0.6rem;
+  color: var(--text-muted);
+}
+
+.watch-write-error {
+  margin: 0.25rem 0 0;
+  color: var(--danger);
+  font-size: 0.85rem;
 }

@@ -25,11 +25,15 @@ export interface MonitoringItemWithValue {
 
 type AreasByProtocol = Record<string, application.MemoryAreaDTO[]>;
 
-// 1 項目の現在値を読み、項目の設定（ビット幅・エンディアン・表示形式）に従って文字列にする
-async function readItemValue(
+// 1 項目の現在値を読み、項目の設定（ビット幅・エンディアン・表示形式）に従って文字列にする。
+// レジスタでない項目（変数・接続先の値。下の帯の「モニタリング」に出る）は、読まない
+export async function readItemValue(
   item: application.MonitoringItemDTO,
   memoryAreasByProtocol: AreasByProtocol,
 ): Promise<MonitoringItemWithValue> {
+  if (item.kind) {
+    return { item, currentValue: "", rawValues: [], isBit: false };
+  }
   const areas = memoryAreasByProtocol[item.protocolType] || [];
   const area = areas.find((a) => a.id === item.memoryArea);
   const isBit = area?.isBit ?? false;
