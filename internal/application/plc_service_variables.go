@@ -229,6 +229,35 @@ func (s *PLCService) RegisterStructType(dto StructTypeDTO) (*StructTypeDTO, erro
 	return &result, nil
 }
 
+// UpdateStructType は、登録済みの構造体型のフィールドを置き換える（型名は変えられない）。
+// 型を使っている変数があっても変えられる。変数の値は、名前の同じフィールドを残して新しい形に直す
+// （variable.VariableStore.UpdateStructType）。ノードを公開しているサーバーには、作り直すよう知らせる
+func (s *PLCService) UpdateStructType(dto StructTypeDTO) (*StructTypeDTO, error) {
+	fields := make([]variable.StructField, len(dto.Fields))
+	for i, f := range dto.Fields {
+		fields[i] = variable.StructField{Name: f.Name, DataType: variable.DataType(f.DataType)}
+	}
+	st, err := s.variableStore.UpdateStructType(dto.Name, fields)
+	if err != nil {
+		return nil, err
+	}
+
+	s.mu.RLock()
+	for _, inst := range s.servers {
+		if inst.server != nil {
+			if aware, ok := inst.server.(protocol.NodePublishingAware); ok {
+				aware.OnNodePublishingUpdated()
+			}
+		}
+	}
+	s.mu.RUnlock()
+
+	go s.emitVariablesChanged()
+
+	result := structTypeToDTO(st)
+	return &result, nil
+}
+
 // GetStructTypes は全構造体型を返す
 func (s *PLCService) GetStructTypes() []StructTypeDTO {
 	structTypes := s.variableStore.GetAllStructTypes()

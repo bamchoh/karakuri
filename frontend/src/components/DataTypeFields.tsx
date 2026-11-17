@@ -8,8 +8,6 @@ interface Props {
   dataTypes: application.DataTypeInfoDTO[];
   // 選べる構造体型。1 つもなければ、型カテゴリに「構造体」を出さない
   structTypes: application.StructTypeDTO[];
-  // 選択肢の文言を短くする（構造体型のフィールド用。「スカラー型」→「スカラー」など）
-  compact?: boolean;
   // スカラーのデータ型を変えたときに呼ぶ（変数追加で、初期値を既定値に戻すため）
   onScalarTypeChange?: (dataType: string) => void;
   // スカラーのとき、データ型（とバイト長）の下に出す追加の行（変数追加の「初期値」）
@@ -17,14 +15,13 @@ interface Props {
 }
 
 // データ型を選ぶ入力欄（型カテゴリ・データ型・バイト長・配列の要素型と次元）。
-// 変数追加・変数の編集・構造体型のフィールドで共通に使う。
+// 変数追加・変数の編集で共通に使う（構造体型のフィールドは、StructTypeDialog の表で選ぶ）。
 // 入力内容からデータ型の文字列を作るには buildDataTypeFromForm() を使う。
 export function DataTypeFields({
   value,
   onChange,
   dataTypes,
   structTypes,
-  compact = false,
   onScalarTypeChange,
   scalarExtra,
 }: Props) {
@@ -70,11 +67,9 @@ export function DataTypeFields({
             }
           }}
         >
-          <option value="scalar">{compact ? "スカラー" : "スカラー型"}</option>
-          <option value="array">{compact ? "配列" : "配列型"}</option>
-          {structTypes.length > 0 && (
-            <option value="struct">{compact ? "構造体" : "構造体型"}</option>
-          )}
+          <option value="scalar">スカラー型</option>
+          <option value="array">配列型</option>
+          {structTypes.length > 0 && <option value="struct">構造体型</option>}
         </select>
       </div>
 
@@ -111,8 +106,7 @@ export function DataTypeFields({
           >
             {structTypes.map((st) => (
               <option key={st.name} value={st.name}>
-                {st.name} ({st.wordCount}
-                {compact ? "W" : "ワード"})
+                {st.name} ({st.wordCount}ワード)
               </option>
             ))}
           </select>

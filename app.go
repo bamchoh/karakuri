@@ -733,6 +733,11 @@ func (a *App) RegisterStructType(dto application.StructTypeDTO) (*application.St
 	return a.plcService.RegisterStructType(dto)
 }
 
+// UpdateStructType は、登録済みの構造体型のフィールドを置き換える（使っている変数は残り、値は新しい形に直る）
+func (a *App) UpdateStructType(dto application.StructTypeDTO) (*application.StructTypeDTO, error) {
+	return a.plcService.UpdateStructType(dto)
+}
+
 // GetStructTypes は全構造体型を返す
 func (a *App) GetStructTypes() []application.StructTypeDTO {
 	return a.plcService.GetStructTypes()

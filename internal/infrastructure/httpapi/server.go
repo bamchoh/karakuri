@@ -126,6 +126,7 @@ func (s *Server) routes() []route {
 		{"GET", "/api/data-types", s.handleGetDataTypes},
 		{"GET", "/api/struct-types", s.handleGetStructTypes},
 		{"POST", "/api/struct-types", s.handleRegisterStructType},
+		{"PUT", "/api/struct-types/{name}", s.handleUpdateStructType},
 		{"DELETE", "/api/struct-types/{name}", s.handleDeleteStructType},
 		{"GET", "/api/mapping-targets", s.handleGetMappingTargets},
 		{"GET", "/api/variable-statuses", s.handleGetVariableStatuses},
