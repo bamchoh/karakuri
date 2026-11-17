@@ -430,7 +430,7 @@ test.describe("レジスタの一覧表示", () => {
     await expect.poll(selectedIndex).toBe(2);
   });
 
-  test("レジスタは、選んだサーバーのものを表示する。レジスタを持たないサーバーにはタブがない", async ({
+  test("レジスタは、選んだサーバーのものを表示する。レジスタを持たないサーバーにはレジスタのタブがない", async ({
     page,
   }) => {
     // プロトコルを選ぶ欄はない（サーバーは、通信画面の一覧で選ぶ）
@@ -443,10 +443,11 @@ test.describe("レジスタの一覧表示", () => {
     const tabs = page.locator(".server-sub-tabs .sub-tab-button");
     await expect(tabs).toHaveText(["設定", "レジスタ", "モニタリング"]);
 
-    // OPC UA はレジスタを持たないので、タブが出ない（設定だけ）
+    // OPC UA はレジスタを持たないので、レジスタとモニタリングのタブが出ない（設定と証明書だけ。設定を出す）
     await serverTab(page, "OPC UA").click();
     await expect(page.locator(".server-config-pane-name")).toHaveText("OPC UA");
-    await expect(tabs).toHaveCount(0);
+    await expect(tabs).toHaveText(["設定", "証明書"]);
+    await expect(tabs.first()).toHaveClass(/active/);
     await expect(cells(page)).toHaveCount(0);
     await expect(page.locator(".vscode-settings-list")).toBeVisible();
 

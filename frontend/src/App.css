@@ -3008,3 +3008,32 @@ input.address-invalid:focus,
   font-size: 0.75rem;
   color: var(--text-muted);
 }
+
+/* 証明書のタブ（CertificatesView） */
+.certificates-view {
+  padding-bottom: 1rem;
+}
+.certificate-dir code {
+  font-family: monospace;
+  user-select: all;
+}
+.variable-table.certificate-table td {
+  vertical-align: middle;
+}
+.variable-table.certificate-table td.certificate-uri,
+.variable-table.certificate-table td.certificate-thumbprint {
+  font-family: monospace;
+  font-size: 0.85em;
+  word-break: break-all;
+}
+.variable-table.certificate-table td.certificate-expired {
+  color: var(--danger);
+}
+.variable-table.certificate-table th.certificate-actions-col,
+.variable-table.certificate-table td.certificate-actions {
+  white-space: nowrap;
+  width: 1%;
+}
+.certificate-actions .btn-small + .btn-small {
+  margin-left: 0.4rem;
+}

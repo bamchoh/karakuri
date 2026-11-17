@@ -56,7 +56,10 @@ var _ protocol.ClientFactory = (*ClientFactory)(nil)
 var _ protocol.RequestHelpProvider = (*ClientFactory)(nil)
 
 // ClientFactory は OPC UA クライアントのファクトリー
-type ClientFactory struct{}
+type ClientFactory struct {
+	// PKIDir は、クライアントの証明書のストアのフォルダ（空なら exe と同じフォルダの pki-client。テストで差し替える）。全部の接続先で共通
+	PKIDir string
+}
 
 // ProtocolType はクライアントのプロトコルの種類を返す
 func (f *ClientFactory) ProtocolType() protocol.ProtocolType { return ProtocolOPCUA }
@@ -81,7 +84,11 @@ func (f *ClientFactory) ConnectionFields() []protocol.ConfigField {
 	}
 	return []protocol.ConfigField{
 		{Name: "endpointUrl", Label: "エンドポイント URL", Description: "接続先のサーバーの URL（opc.tcp://ホスト:ポート）。標準ポートは 4840 です。", Type: "text", Required: true, Default: defaultClientEndpoint},
-		{Name: "securityPolicy", Label: "セキュリティポリシー", Description: "None 以外では、クライアントの証明書を exe と同じフォルダの pki-client に作ります（サーバーの側で信頼する設定が要ることがあります）。サーバーの証明書は確かめずに受け入れます。", Type: "select", Required: true, Default: policyNone, Options: policies},
+		{Name: "securityPolicy", Label: "セキュリティポリシー", Description: "None 以外では、クライアントの証明書を exe と同じフォルダの pki-client に作ります（サーバーの側で信頼する設定が要ることがあります）。", Type: "select", Required: true, Default: policyNone, Options: policies},
+		{Name: "trustServers", Label: "サーバーの証明書", Description: "暗号化してつなぐときに、サーバーの証明書をどう扱うか。「信頼したものだけ」では、知らない証明書の相手にはつながず、証明書のタブの一覧に出します（そこで信頼すると、つながるようになります）。セキュリティポリシーが None のときは使いません。", Type: "select", Required: true, Default: trustAll, Options: []protocol.FieldOption{
+			{Value: trustAll, Label: "すべて受け入れる"},
+			{Value: trustTrusted, Label: "信頼したものだけ"},
+		}},
 		{Name: "securityMode", Label: "セキュリティモード", Description: "セキュリティポリシーが None のときは使いません。", Type: "select", Required: true, Default: modeSignEn, Options: []protocol.FieldOption{
 			{Value: modeSignEn, Label: "SignAndEncrypt（署名と暗号化）"},
 			{Value: modeSign, Label: "Sign（署名だけ）"},
@@ -96,6 +103,7 @@ type clientSettings struct {
 	EndpointURL    string
 	SecurityPolicy string // securityPolicies の name
 	SecurityMode   string
+	TrustServers   string // trustAll / trustTrusted
 	UserName       string
 	Password       string
 	TimeoutMs      int
@@ -122,7 +130,7 @@ func (s clientSettings) messageSecurityMode() ua.MessageSecurityMode {
 
 func parseClientSettings(settings map[string]interface{}) (clientSettings, error) {
 	s := clientSettings{
-		EndpointURL: defaultClientEndpoint, SecurityPolicy: policyNone, SecurityMode: modeSignEn,
+		EndpointURL: defaultClientEndpoint, SecurityPolicy: policyNone, SecurityMode: modeSignEn, TrustServers: trustAll,
 		TimeoutMs: defaultClientTimeoutMs,
 	}
 	str := func(key string, dst *string) {
@@ -133,6 +141,7 @@ func parseClientSettings(settings map[string]interface{}) (clientSettings, error
 	str("endpointUrl", &s.EndpointURL)
 	str("securityPolicy", &s.SecurityPolicy)
 	str("securityMode", &s.SecurityMode)
+	str("trustServers", &s.TrustServers)
 	str("userName", &s.UserName)
 	str("password", &s.Password)
 	switch v := settings["timeoutMs"].(type) {
@@ -159,6 +168,8 @@ func parseClientSettings(settings map[string]interface{}) (clientSettings, error
 		return s, fmt.Errorf("不明なセキュリティポリシーです: %s", s.SecurityPolicy)
 	case s.SecurityMode != modeSign && s.SecurityMode != modeSignEn:
 		return s, fmt.Errorf("不明なセキュリティモードです: %s", s.SecurityMode)
+	case s.TrustServers != trustAll && s.TrustServers != trustTrusted:
+		return s, fmt.Errorf("サーバーの証明書の扱いが不明です: %s", s.TrustServers)
 	case s.TimeoutMs < minClientTimeoutMs || s.TimeoutMs > maxClientTimeoutMs:
 		return s, fmt.Errorf("タイムアウトは %d〜%d ms で指定してください", minClientTimeoutMs, maxClientTimeoutMs)
 	}
@@ -175,6 +186,7 @@ func (f *ClientFactory) NormalizeSettings(settings map[string]interface{}) (map[
 		"endpointUrl":    s.EndpointURL,
 		"securityPolicy": s.SecurityPolicy,
 		"securityMode":   s.SecurityMode,
+		"trustServers":   s.TrustServers,
 		"userName":       s.UserName,
 		"password":       s.Password,
 		"timeoutMs":      s.TimeoutMs,
@@ -187,7 +199,7 @@ func (f *ClientFactory) NewClient(settings map[string]interface{}) (protocol.Cli
 	if err != nil {
 		return nil, err
 	}
-	return &Client{settings: s, timeout: time.Duration(s.TimeoutMs) * time.Millisecond}, nil
+	return &Client{settings: s, timeout: time.Duration(s.TimeoutMs) * time.Millisecond, pki: f.pkiRoot()}, nil
 }
 
 // clientPKIDir はクライアントの証明書ストアの場所（アプリの exe と同じフォルダの pki-client）。

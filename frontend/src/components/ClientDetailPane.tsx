@@ -1,3 +1,4 @@
+import { CertificatesView } from "./CertificatesView";
 import {
   useState,
   forwardRef,
@@ -25,7 +26,8 @@ import { ClientPollingView } from "./ClientPollingView";
 import { ClientSubscriptionView } from "./ClientSubscriptionView";
 
 // クライアントの右側のタブ（サーバーの「設定 / レジスタ / モニタリング」と同じ形）
-export type ClientSubTab = "settings" | "command" | "polling" | "subscription";
+export type ClientSubTab =
+  "settings" | "command" | "polling" | "subscription" | "certificates";
 
 // 親（通信画面）から、保存していない接続先の設定を保存・破棄するための操作
 export interface ClientDetailPaneHandle {
@@ -233,9 +235,10 @@ export const ClientDetailPane = forwardRef<
     (selectedSeq === null ? logs[0] : undefined) ??
     null;
 
-  // サブスクリプションのタブを選んだまま、対応していないプロトコルの接続先に切り替えたら、コマンドのタブを出す
+  // サブスクリプション・証明書のタブを選んだまま、対応していないプロトコルの接続先に切り替えたら、コマンドのタブを出す
   const shownTab: ClientSubTab =
-    subTab === "subscription" && !protocol.supportsSubscription
+    (subTab === "subscription" && !protocol.supportsSubscription) ||
+    (subTab === "certificates" && !protocol.supportsCertificates)
       ? "command"
       : subTab;
 
@@ -306,6 +309,14 @@ export const ClientDetailPane = forwardRef<
             onClick={() => onSubTabChange("subscription")}
           >
             サブスクリプション{client.subscribing ? "（監視中）" : ""}
+          </button>
+        )}
+        {protocol.supportsCertificates && (
+          <button
+            className={`sub-tab-button ${shownTab === "certificates" ? "active" : ""}`}
+            onClick={() => onSubTabChange("certificates")}
+          >
+            証明書
           </button>
         )}
       </div>
@@ -384,6 +395,12 @@ export const ClientDetailPane = forwardRef<
             protocol={protocol}
             beforeStart={async () => !dirty || (await saveSettings())}
             onClientsChanged={onClientsChanged}
+          />
+        ) : shownTab === "certificates" ? (
+          <CertificatesView
+            kind="client"
+            protocolType={protocol.protocolType}
+            note={`${protocol.displayName} の全部の接続先で共通です。`}
           />
         ) : (
           <ClientSubscriptionView

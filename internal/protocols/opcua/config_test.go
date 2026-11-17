@@ -2,7 +2,9 @@ package opcua
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"reflect"
 	"testing"
 
 	"github.com/bamchoh/uastack/client"
@@ -33,8 +35,21 @@ func TestFactory_ConfigMapRoundTrip(t *testing.T) {
 	want := &Config{
 		Host: "0.0.0.0", Port: 4850, EndpointHost: "plc.local",
 		ApplicationName: "Line A", ManufacturerName: "ACME", ProductURI: "urn:acme:sim", NamespaceURI: "urn:acme:line-a",
+		Endpoints:       []SecurityEndpoint{{Policy: "None", Mode: "SignAndEncrypt"}, {Policy: "Basic256Sha256", Mode: "Both"}},
+		TrustAllClients: false,
+		AllowAnonymous:  false,
+		Users:           []User{{Name: "op", Password: "pw"}},
 	}
 	m := f.ConfigToMap(want)
+	// プロジェクトのファイルを通すと、行の並びは []interface{} になる
+	b, err := json.Marshal(m)
+	if err != nil {
+		t.Fatal(err)
+	}
+	m = map[string]interface{}{}
+	if err := json.Unmarshal(b, &m); err != nil {
+		t.Fatal(err)
+	}
 	// 旧 C# 版 opcua-plugin と同じキー名で保存されること
 	for _, key := range []string{"application_name", "manufacture_name", "product_uri", "namespace"} {
 		if _, ok := m[key]; !ok {
@@ -45,7 +60,7 @@ func TestFactory_ConfigMapRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatalf("MapToConfig: %v", err)
 	}
-	if *got.(*Config) != *want {
+	if !reflect.DeepEqual(got.(*Config), want) {
 		t.Errorf("round trip = %+v, want %+v", got, want)
 	}
 }

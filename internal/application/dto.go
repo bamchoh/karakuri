@@ -140,6 +140,7 @@ type ServerInstanceDTO struct {
 	Variant                string `json:"variant"`
 	Status                 string `json:"status"` // "Running" | "Stopped" | "Error"
 	SupportsNodePublishing bool   `json:"supportsNodePublishing"`
+	SupportsCertificates   bool   `json:"supportsCertificates"` // 証明書のストアを持つ（protocol.CertificateManager）
 }
 
 // ServerConfigDTO は特定サーバーの設定

@@ -58,6 +58,10 @@ export function CreateVariable(arg1, arg2, arg3) {
   return window['go']['main']['App']['CreateVariable'](arg1, arg2, arg3);
 }
 
+export function DeleteCertificate(arg1, arg2, arg3) {
+  return window['go']['main']['App']['DeleteCertificate'](arg1, arg2, arg3);
+}
+
 export function DeleteMonitoringItem(arg1) {
   return window['go']['main']['App']['DeleteMonitoringItem'](arg1);
 }
@@ -88,6 +92,10 @@ export function GetAppLogs() {
 
 export function GetAvailableProtocols() {
   return window['go']['main']['App']['GetAvailableProtocols']();
+}
+
+export function GetCertificates(arg1, arg2) {
+  return window['go']['main']['App']['GetCertificates'](arg1, arg2);
 }
 
 export function GetClientCommandLogs() {
@@ -256,6 +264,10 @@ export function SendClientRequest(arg1, arg2) {
 
 export function SendClientSavedCommand(arg1, arg2) {
   return window['go']['main']['App']['SendClientSavedCommand'](arg1, arg2);
+}
+
+export function SetCertificateTrusted(arg1, arg2, arg3, arg4) {
+  return window['go']['main']['App']['SetCertificateTrusted'](arg1, arg2, arg3, arg4);
 }
 
 export function SetClientFailThreshold(arg1, arg2) {

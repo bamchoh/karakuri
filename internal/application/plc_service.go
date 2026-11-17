@@ -145,6 +145,7 @@ func (s *PLCService) GetServerInstances() []ServerInstanceDTO {
 			Variant:                inst.variant,
 			Status:                 status,
 			SupportsNodePublishing: caps.SupportsNodePublishing,
+			SupportsCertificates:   isCertificateManager(inst.factory),
 		})
 	}
 

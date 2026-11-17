@@ -1,0 +1,1685 @@
+{
+  "servers": [
+    {
+      "protocolType": "opcua",
+      "variant": "",
+      "settings": {
+        "allowAnonymous": "no",
+        "application_name": "Karakuri PLC Simulator",
+        "endpointHost": "",
+        "host": "0.0.0.0",
+        "manufacture_name": "karakuri",
+        "namespace": "urn:karakuri:plc",
+        "port": 4841,
+        "product_uri": "urn:karakuri",
+        "securityEndpoints": [
+          {
+            "mode": "Both",
+            "policy": "ECC_nistP384"
+          }
+        ],
+        "trustClients": "trusted",
+        "users": [
+          {
+            "password": "secret",
+            "userName": "userName1"
+          }
+        ]
+      }
+    },
+    {
+      "protocolType": "fins",
+      "variant": "ethernet",
+      "settings": {
+        "host": "0.0.0.0",
+        "node": 2,
+        "port": 9601,
+        "transport": "tcp"
+      }
+    },
+    {
+      "protocolType": "fins-hostlink",
+      "variant": "hostlink",
+      "settings": {
+        "baudRate": 9600,
+        "dataBits": 7,
+        "parity": "O",
+        "serialPort": "COM1",
+        "stopBits": 2,
+        "unit": 1
+      }
+    },
+    {
+      "protocolType": "slmp",
+      "variant": "ethernet",
+      "settings": {
+        "host": "0.0.0.0",
+        "port": 5008,
+        "transport": "udp"
+      }
+    },
+    {
+      "protocolType": "mc-serial",
+      "variant": "4c",
+      "settings": {
+        "baudRate": 9600,
+        "dataBits": 8,
+        "format": 5,
+        "parity": "O",
+        "serialPort": "COM1",
+        "station": 1,
+        "stopBits": 1,
+        "sumCheck": "off"
+      }
+    },
+    {
+      "protocolType": "modbus-tcp",
+      "variant": "tcp",
+      "settings": {
+        "tcpAddress": "0.0.0.0",
+        "tcpPort": 503
+      },
+      "unitIdSettings": {
+        "min": 1,
+        "max": 247,
+        "disabledIds": [
+          3,
+          7
+        ]
+      }
+    },
+    {
+      "protocolType": "modbus-rtu",
+      "variant": "rtu",
+      "settings": {
+        "baudRate": 115200,
+        "dataBits": 8,
+        "parity": "O",
+        "serialPort": "COM1",
+        "stopBits": 1
+      },
+      "unitIdSettings": {
+        "min": 1,
+        "max": 247,
+        "disabledIds": [
+          3,
+          7
+        ]
+      }
+    },
+    {
+      "protocolType": "modbus-ascii",
+      "variant": "ascii",
+      "settings": {
+        "baudRate": 9600,
+        "dataBits": 7,
+        "parity": "O",
+        "serialPort": "COM1",
+        "stopBits": 1
+      },
+      "unitIdSettings": {
+        "min": 1,
+        "max": 247,
+        "disabledIds": [
+          3,
+          7
+        ]
+      }
+    }
+  ],
+  "scripts": [
+    {
+      "id": "026f9380-ff0d-4498-bb5a-59c473937600",
+      "name": "カウンター",
+      "code": "vars.Int = vars.Int + 1;",
+      "intervalMs": 100,
+      "isRunning": false,
+      "order": 0
+    },
+    {
+      "id": "8079e333-609a-4f87-b786-d0f0b09c9c58",
+      "name": "BigInt",
+      "code": "vars.Lint = vars.Lint + 1n;\nconsole.log(vars.Lint);",
+      "intervalMs": 1000,
+      "isRunning": false,
+      "order": 0
+    }
+  ],
+  "monitoringItems": [
+    {
+      "id": "6c418fd7-3bbc-4712-8168-d77f02c397b1",
+      "order": 2,
+      "protocolType": "modbus-tcp",
+      "memoryArea": "coils",
+      "address": 5,
+      "bitWidth": 1,
+      "endianness": "big",
+      "displayFormat": "decimal"
+    },
+    {
+      "id": "58171ea1-ad29-4d6e-bbfe-f8881e7031d0",
+      "order": 1,
+      "protocolType": "modbus-tcp",
+      "memoryArea": "holdingRegisters",
+      "address": 10,
+      "bitWidth": 32,
+      "endianness": "little",
+      "displayFormat": "hex"
+    }
+  ],
+  "variables": [
+    {
+      "id": "df911d9e-0702-4356-887f-7717cc87a794",
+      "name": "Lint",
+      "dataType": "LINT",
+      "value": "-9007199254740993",
+      "nodePublishings": [
+        {
+          "protocolType": "opcua",
+          "enabled": false,
+          "accessMode": "readwrite"
+        }
+      ]
+    },
+    {
+      "id": "e261699b-75cc-4192-bb18-72340bdecfd9",
+      "name": "Ulint",
+      "dataType": "ULINT",
+      "value": "18446744073709551615",
+      "nodePublishings": [
+        {
+          "protocolType": "opcua",
+          "enabled": false,
+          "accessMode": "readwrite"
+        }
+      ]
+    },
+    {
+      "id": "cda70786-5e66-43a0-821f-249a7527652d",
+      "name": "Real",
+      "dataType": "REAL",
+      "value": 1.5,
+      "nodePublishings": [
+        {
+          "protocolType": "opcua",
+          "enabled": false,
+          "accessMode": "readwrite"
+        }
+      ]
+    },
+    {
+      "id": "17e5474f-e6af-43cd-a5bf-984971ac6504",
+      "name": "Grid",
+      "dataType": "ARRAY[0..1, 0..2] OF INT",
+      "value": [
+        [
+          1,
+          2,
+          3
+        ],
+        [
+          4,
+          5,
+          6
+        ]
+      ],
+      "nodePublishings": [
+        {
+          "protocolType": "opcua",
+          "enabled": true,
+          "accessMode": "read"
+        }
+      ]
+    },
+    {
+      "id": "cea1cf79-bcf3-460b-b56d-3d52adac78ae",
+      "name": "Line1",
+      "dataType": "Line",
+      "value": {
+        "flags": [
+          true,
+          false,
+          true
+        ],
+        "name": "L1",
+        "points": [
+          {
+            "x": 1,
+            "y": 0.5
+          },
+          {
+            "x": -2,
+            "y": 2.5
+          }
+        ],
+        "total": 9007199254740993
+      },
+      "mappings": [
+        {
+          "protocolType": "modbus-tcp",
+          "memoryArea": "holdingRegisters",
+          "address": 100,
+          "endianness": "big"
+        },
+        {
+          "protocolType": "fins",
+          "memoryArea": "CIO",
+          "address": 100,
+          "endianness": "big"
+        },
+        {
+          "protocolType": "slmp",
+          "memoryArea": "D",
+          "address": 100,
+          "endianness": "big"
+        },
+        {
+          "protocolType": "client:e54e5700-ea8d-4917-b448-810c2d0be2e7",
+          "memoryArea": "holdingRegisters",
+          "address": 100,
+          "endianness": "big"
+        },
+        {
+          "protocolType": "client:2298de2d-2801-46cf-b960-149a39ea41b9",
+          "memoryArea": "CIO",
+          "address": 100,
+          "endianness": "big"
+        }
+      ],
+      "nodePublishings": [
+        {
+          "protocolType": "opcua",
+          "enabled": true,
+          "accessMode": "read"
+        }
+      ]
+    },
+    {
+      "id": "469113ea-0adb-40df-8490-bd864164b6f5",
+      "name": "Str",
+      "dataType": "STRING",
+      "value": "hello",
+      "nodePublishings": [
+        {
+          "protocolType": "opcua",
+          "enabled": false,
+          "accessMode": "readwrite"
+        }
+      ]
+    },
+    {
+      "id": "f480c698-89a6-4b64-a293-14f444278152",
+      "name": "Udint",
+      "dataType": "UDINT",
+      "value": 4000000000,
+      "nodePublishings": [
+        {
+          "protocolType": "opcua",
+          "enabled": false,
+          "accessMode": "readwrite"
+        }
+      ]
+    },
+    {
+      "id": "e7aaf4b8-3f52-42bc-8bab-ee499bb2e31b",
+      "name": "Tod",
+      "dataType": "TIME_OF_DAY",
+      "value": "TOD#12:30:15",
+      "nodePublishings": [
+        {
+          "protocolType": "opcua",
+          "enabled": false,
+          "accessMode": "readwrite"
+        }
+      ]
+    },
+    {
+      "id": "d00c029c-82f3-4605-bc5d-aaf6ac0c9b4b",
+      "name": "Dint",
+      "dataType": "DINT",
+      "value": 123456,
+      "mappings": [
+        {
+          "protocolType": "modbus-tcp",
+          "memoryArea": "holdingRegisters",
+          "address": 10,
+          "endianness": "little"
+        },
+        {
+          "protocolType": "fins",
+          "memoryArea": "CIO",
+          "address": 11,
+          "endianness": "little"
+        },
+        {
+          "protocolType": "slmp",
+          "memoryArea": "D",
+          "address": 12,
+          "endianness": "little"
+        },
+        {
+          "protocolType": "client:e54e5700-ea8d-4917-b448-810c2d0be2e7",
+          "memoryArea": "holdingRegisters",
+          "address": 13,
+          "endianness": "little"
+        },
+        {
+          "protocolType": "client:2298de2d-2801-46cf-b960-149a39ea41b9",
+          "memoryArea": "CIO",
+          "address": 14,
+          "endianness": "little"
+        }
+      ],
+      "nodePublishings": [
+        {
+          "protocolType": "opcua",
+          "enabled": false,
+          "accessMode": "readwrite"
+        }
+      ]
+    },
+    {
+      "id": "182555b3-1041-41c7-a1f2-7de764eb4986",
+      "name": "StrN",
+      "dataType": "STRING[8]",
+      "value": "日本",
+      "nodePublishings": [
+        {
+          "protocolType": "opcua",
+          "enabled": false,
+          "accessMode": "readwrite"
+        }
+      ]
+    },
+    {
+      "id": "e5ca05ff-8be0-44b0-95ce-f85eec2997d5",
+      "name": "OldArray",
+      "dataType": "ARRAY[INT;3]",
+      "value": [
+        7,
+        8,
+        9
+      ],
+      "nodePublishings": [
+        {
+          "protocolType": "opcua",
+          "enabled": false,
+          "accessMode": "readwrite"
+        }
+      ]
+    },
+    {
+      "id": "32000276-277e-49ac-9deb-7a30796c73c8",
+      "name": "Bool",
+      "dataType": "BOOL",
+      "value": true,
+      "mappings": [
+        {
+          "protocolType": "modbus-tcp",
+          "memoryArea": "coils",
+          "address": 5,
+          "endianness": "big"
+        },
+        {
+          "protocolType": "fins",
+          "memoryArea": "CIO_BIT",
+          "address": 5,
+          "endianness": "big"
+        },
+        {
+          "protocolType": "slmp",
+          "memoryArea": "M",
+          "address": 5,
+          "endianness": "big"
+        },
+        {
+          "protocolType": "client:e54e5700-ea8d-4917-b448-810c2d0be2e7",
+          "memoryArea": "coils",
+          "address": 5,
+          "endianness": "big"
+        },
+        {
+          "protocolType": "client:2298de2d-2801-46cf-b960-149a39ea41b9",
+          "memoryArea": "CIO_BIT",
+          "address": 5,
+          "endianness": "big"
+        }
+      ],
+      "nodePublishings": [
+        {
+          "protocolType": "opcua",
+          "enabled": false,
+          "accessMode": "readwrite"
+        }
+      ]
+    },
+    {
+      "id": "84b7737c-f4dd-4616-84a6-fb073c5a2c07",
+      "name": "Time",
+      "dataType": "TIME",
+      "value": "T#1h2m3s",
+      "nodePublishings": [
+        {
+          "protocolType": "opcua",
+          "enabled": false,
+          "accessMode": "readwrite"
+        }
+      ]
+    },
+    {
+      "id": "ee371ed2-17ff-4d1f-8f3f-a43771f393e1",
+      "name": "Points",
+      "dataType": "ARRAY[1..2] OF Point",
+      "value": [
+        {
+          "x": 10,
+          "y": 1
+        },
+        {
+          "x": 20,
+          "y": 2
+        }
+      ],
+      "nodePublishings": [
+        {
+          "protocolType": "opcua",
+          "enabled": false,
+          "accessMode": "readwrite"
+        }
+      ]
+    },
+    {
+      "id": "2a607fda-afe2-48ca-9219-3b5fd2eb36e1",
+      "name": "Int",
+      "dataType": "INT",
+      "value": -1234,
+      "nodePublishings": [
+        {
+          "protocolType": "opcua",
+          "enabled": true,
+          "accessMode": "read"
+        }
+      ]
+    },
+    {
+      "id": "85d17518-81a5-4f6e-b2b6-f13029f59bbf",
+      "name": "Lreal",
+      "dataType": "LREAL",
+      "value": 3.25,
+      "nodePublishings": [
+        {
+          "protocolType": "opcua",
+          "enabled": false,
+          "accessMode": "readwrite"
+        }
+      ]
+    },
+    {
+      "id": "0a4515c3-cc2d-4e21-af37-6e08dc2d571c",
+      "name": "Date",
+      "dataType": "DATE",
+      "value": "D#2024-01-02",
+      "nodePublishings": [
+        {
+          "protocolType": "opcua",
+          "enabled": false,
+          "accessMode": "readwrite"
+        }
+      ]
+    },
+    {
+      "id": "26555b89-6aad-4455-bb3b-a3e868288a33",
+      "name": "Dt",
+      "dataType": "DATE_AND_TIME",
+      "value": "DT#2024-01-02-03:04:05",
+      "nodePublishings": [
+        {
+          "protocolType": "opcua",
+          "enabled": false,
+          "accessMode": "readwrite"
+        }
+      ]
+    },
+    {
+      "id": "02088137-4184-436d-bdae-96ba52d05c6b",
+      "name": "Sint",
+      "dataType": "SINT",
+      "value": -5,
+      "nodePublishings": [
+        {
+          "protocolType": "opcua",
+          "enabled": false,
+          "accessMode": "readwrite"
+        }
+      ]
+    },
+    {
+      "id": "be959228-2aa9-42d0-9f65-9034757d96f8",
+      "name": "Uint",
+      "dataType": "UINT",
+      "value": 65000,
+      "nodePublishings": [
+        {
+          "protocolType": "opcua",
+          "enabled": false,
+          "accessMode": "readwrite"
+        }
+      ]
+    },
+    {
+      "id": "7debcb3c-5777-4f5f-98ac-07df29cac696",
+      "name": "Usint",
+      "dataType": "USINT",
+      "value": 200,
+      "nodePublishings": [
+        {
+          "protocolType": "opcua",
+          "enabled": false,
+          "accessMode": "readwrite"
+        }
+      ]
+    },
+    {
+      "id": "37b12734-aed7-4a09-8ecb-f6849d281882",
+      "name": "Values",
+      "dataType": "ARRAY[1..3] OF DINT",
+      "value": [
+        1,
+        2,
+        3
+      ],
+      "nodePublishings": [
+        {
+          "protocolType": "opcua",
+          "enabled": false,
+          "accessMode": "readwrite"
+        }
+      ]
+    }
+  ],
+  "structTypes": [
+    {
+      "name": "Point",
+      "fields": [
+        {
+          "name": "x",
+          "dataType": "INT",
+          "offset": 0
+        },
+        {
+          "name": "y",
+          "dataType": "REAL",
+          "offset": 1
+        }
+      ],
+      "wordCount": 3
+    },
+    {
+      "name": "Line",
+      "fields": [
+        {
+          "name": "name",
+          "dataType": "STRING[10]",
+          "offset": 0
+        },
+        {
+          "name": "points",
+          "dataType": "ARRAY[0..1] OF Point",
+          "offset": 5
+        },
+        {
+          "name": "flags",
+          "dataType": "ARRAY[1..3] OF BOOL",
+          "offset": 11
+        },
+        {
+          "name": "total",
+          "dataType": "LINT",
+          "offset": 14
+        }
+      ],
+      "wordCount": 18
+    }
+  ],
+  "clients": [
+    {
+      "id": "e54e5700-ea8d-4917-b448-810c2d0be2e7",
+      "name": "接続先 Modbus TCP",
+      "protocolType": "modbus-tcp",
+      "settings": {
+        "host": "127.0.0.1",
+        "port": 503,
+        "timeoutMs": 1001,
+        "unitId": 2
+      },
+      "polling": {
+        "intervalMs": 250,
+        "failThreshold": 5,
+        "items": [
+          {
+            "commandId": "1",
+            "params": {
+              "address": 0,
+              "count": 1
+            },
+            "format": "hex"
+          },
+          {
+            "commandId": "2",
+            "params": {
+              "address": 0,
+              "count": 1
+            },
+            "format": "hex"
+          },
+          {
+            "commandId": "3",
+            "params": {
+              "address": 0,
+              "count": 1
+            },
+            "format": "hex"
+          },
+          {
+            "commandId": "4",
+            "params": {
+              "address": 0,
+              "count": 1
+            },
+            "format": "hex"
+          }
+        ]
+      },
+      "savedCommands": [
+        {
+          "id": "9afd758d-cee3-4200-85f5-1c113735d3c2",
+          "name": "FC01 コイルの読み取り",
+          "mode": "build",
+          "commandId": "1",
+          "params": {
+            "address": 0,
+            "count": 1
+          },
+          "request": "01 00 00 00 01",
+          "summary": "FC01 コイルの読み取り アドレス 0 から 1 個"
+        },
+        {
+          "id": "7942fe84-df88-42d0-bd80-991cac0b7605",
+          "name": "FC02 入力ステータスの読み取り",
+          "mode": "build",
+          "commandId": "2",
+          "params": {
+            "address": 0,
+            "count": 1
+          },
+          "request": "02 00 00 00 01",
+          "summary": "FC02 入力ステータスの読み取り アドレス 0 から 1 個"
+        },
+        {
+          "id": "6df78a94-ec97-481b-9ada-4aa6729ec24b",
+          "name": "FC03 保持レジスタの読み取り",
+          "mode": "build",
+          "commandId": "3",
+          "params": {
+            "address": 0,
+            "count": 1
+          },
+          "request": "03 00 00 00 01",
+          "summary": "FC03 保持レジスタの読み取り アドレス 0 から 1 個"
+        },
+        {
+          "id": "83d322fd-8301-48c4-936e-dc88d8b4af0c",
+          "name": "FC04 入力レジスタの読み取り",
+          "mode": "build",
+          "commandId": "4",
+          "params": {
+            "address": 0,
+            "count": 1
+          },
+          "request": "04 00 00 00 01",
+          "summary": "FC04 入力レジスタの読み取り アドレス 0 から 1 個"
+        },
+        {
+          "id": "1de88388-4445-45cd-8219-6c4e04992a86",
+          "name": "FC05 コイル 1 点の書き込み",
+          "mode": "build",
+          "commandId": "5",
+          "params": {
+            "address": 0,
+            "value": "on"
+          },
+          "request": "05 00 00 FF 00",
+          "summary": "FC05 コイル 1 点の書き込み アドレス 0 = ON"
+        },
+        {
+          "id": "72b1595a-44c6-46da-9496-796b8b51cbec",
+          "name": "FC06 保持レジスタ 1 点の書き込み",
+          "mode": "build",
+          "commandId": "6",
+          "params": {
+            "address": 0,
+            "value": "0"
+          },
+          "request": "06 00 00 00 00",
+          "summary": "FC06 保持レジスタ 1 点の書き込み アドレス 0 = 0 (0x0000)"
+        },
+        {
+          "id": "df197604-338f-4939-aff3-e01905bcbfaa",
+          "name": "FC15 コイルの複数書き込み",
+          "mode": "build",
+          "commandId": "15",
+          "params": {
+            "address": 0,
+            "values": "1"
+          },
+          "request": "0F 00 00 00 01 01 01",
+          "summary": "FC15 コイルの複数書き込み アドレス 0 から 1 個"
+        },
+        {
+          "id": "eb67be24-8370-450e-a99c-3fbab4b663c1",
+          "name": "FC16 保持レジスタの複数書き込み",
+          "mode": "build",
+          "commandId": "16",
+          "params": {
+            "address": 0,
+            "values": "0"
+          },
+          "request": "10 00 00 00 01 02 00 00",
+          "summary": "FC16 保持レジスタの複数書き込み アドレス 0 から 1 個"
+        },
+        {
+          "id": "50185062-1119-4e3f-ac69-f4fc55f78b36",
+          "name": "16 進",
+          "mode": "hex",
+          "request": "01 00 00 00 01",
+          "summary": "FC01 コイルの読み取り アドレス 0 から 1 個"
+        }
+      ]
+    },
+    {
+      "id": "c8698e81-8a27-4e98-b63b-60b1e5df5da7",
+      "name": "接続先 Modbus RTU",
+      "protocolType": "modbus-rtu",
+      "settings": {
+        "baudRate": 115200,
+        "dataBits": 8,
+        "parity": "O",
+        "serialPort": "COM1",
+        "stopBits": 1,
+        "timeoutMs": 1001,
+        "unitId": 2
+      },
+      "polling": {
+        "intervalMs": 250,
+        "failThreshold": 5,
+        "items": [
+          {
+            "commandId": "1",
+            "params": {
+              "address": 0,
+              "count": 1
+            },
+            "format": "hex"
+          },
+          {
+            "commandId": "2",
+            "params": {
+              "address": 0,
+              "count": 1
+            },
+            "format": "hex"
+          },
+          {
+            "commandId": "3",
+            "params": {
+              "address": 0,
+              "count": 1
+            },
+            "format": "hex"
+          },
+          {
+            "commandId": "4",
+            "params": {
+              "address": 0,
+              "count": 1
+            },
+            "format": "hex"
+          }
+        ]
+      },
+      "savedCommands": [
+        {
+          "id": "6d92b4b8-3899-4aa8-a477-3154f7711b2b",
+          "name": "FC01 コイルの読み取り",
+          "mode": "build",
+          "commandId": "1",
+          "params": {
+            "address": 0,
+            "count": 1
+          },
+          "request": "01 00 00 00 01",
+          "summary": "FC01 コイルの読み取り アドレス 0 から 1 個"
+        },
+        {
+          "id": "3ac04654-7a99-458f-9f06-8b35c76c4c8f",
+          "name": "FC02 入力ステータスの読み取り",
+          "mode": "build",
+          "commandId": "2",
+          "params": {
+            "address": 0,
+            "count": 1
+          },
+          "request": "02 00 00 00 01",
+          "summary": "FC02 入力ステータスの読み取り アドレス 0 から 1 個"
+        },
+        {
+          "id": "e446e3fc-adc4-4704-859d-61bf7c6132ec",
+          "name": "FC03 保持レジスタの読み取り",
+          "mode": "build",
+          "commandId": "3",
+          "params": {
+            "address": 0,
+            "count": 1
+          },
+          "request": "03 00 00 00 01",
+          "summary": "FC03 保持レジスタの読み取り アドレス 0 から 1 個"
+        },
+        {
+          "id": "b3f5e1db-43d6-48e6-bb97-65791fcb3854",
+          "name": "FC04 入力レジスタの読み取り",
+          "mode": "build",
+          "commandId": "4",
+          "params": {
+            "address": 0,
+            "count": 1
+          },
+          "request": "04 00 00 00 01",
+          "summary": "FC04 入力レジスタの読み取り アドレス 0 から 1 個"
+        },
+        {
+          "id": "31d4c328-1511-4dd7-bf4e-ee6710275775",
+          "name": "FC05 コイル 1 点の書き込み",
+          "mode": "build",
+          "commandId": "5",
+          "params": {
+            "address": 0,
+            "value": "on"
+          },
+          "request": "05 00 00 FF 00",
+          "summary": "FC05 コイル 1 点の書き込み アドレス 0 = ON"
+        },
+        {
+          "id": "5bda0ba2-4d65-4715-b324-f9a506523e06",
+          "name": "FC06 保持レジスタ 1 点の書き込み",
+          "mode": "build",
+          "commandId": "6",
+          "params": {
+            "address": 0,
+            "value": "0"
+          },
+          "request": "06 00 00 00 00",
+          "summary": "FC06 保持レジスタ 1 点の書き込み アドレス 0 = 0 (0x0000)"
+        },
+        {
+          "id": "46bd2579-87aa-4182-bf33-9c2dc8f9fa61",
+          "name": "FC15 コイルの複数書き込み",
+          "mode": "build",
+          "commandId": "15",
+          "params": {
+            "address": 0,
+            "values": "1"
+          },
+          "request": "0F 00 00 00 01 01 01",
+          "summary": "FC15 コイルの複数書き込み アドレス 0 から 1 個"
+        },
+        {
+          "id": "5f8ef36b-96c4-47f5-a2ad-d100c4f8d607",
+          "name": "FC16 保持レジスタの複数書き込み",
+          "mode": "build",
+          "commandId": "16",
+          "params": {
+            "address": 0,
+            "values": "0"
+          },
+          "request": "10 00 00 00 01 02 00 00",
+          "summary": "FC16 保持レジスタの複数書き込み アドレス 0 から 1 個"
+        },
+        {
+          "id": "2dedd6ee-46ed-4203-bbe4-38835becf841",
+          "name": "16 進",
+          "mode": "hex",
+          "request": "01 00 00 00 01",
+          "summary": "FC01 コイルの読み取り アドレス 0 から 1 個"
+        }
+      ]
+    },
+    {
+      "id": "012deb27-d7e3-44cf-8c4d-ea3ca6648016",
+      "name": "接続先 Modbus ASCII",
+      "protocolType": "modbus-ascii",
+      "settings": {
+        "baudRate": 9600,
+        "dataBits": 7,
+        "parity": "O",
+        "serialPort": "COM1",
+        "stopBits": 1,
+        "timeoutMs": 1001,
+        "unitId": 2
+      },
+      "polling": {
+        "intervalMs": 250,
+        "failThreshold": 5,
+        "items": [
+          {
+            "commandId": "1",
+            "params": {
+              "address": 0,
+              "count": 1
+            },
+            "format": "hex"
+          },
+          {
+            "commandId": "2",
+            "params": {
+              "address": 0,
+              "count": 1
+            },
+            "format": "hex"
+          },
+          {
+            "commandId": "3",
+            "params": {
+              "address": 0,
+              "count": 1
+            },
+            "format": "hex"
+          },
+          {
+            "commandId": "4",
+            "params": {
+              "address": 0,
+              "count": 1
+            },
+            "format": "hex"
+          }
+        ]
+      },
+      "savedCommands": [
+        {
+          "id": "f86065b8-dad2-41da-bf8f-1c5f2682e4a8",
+          "name": "FC01 コイルの読み取り",
+          "mode": "build",
+          "commandId": "1",
+          "params": {
+            "address": 0,
+            "count": 1
+          },
+          "request": "01 00 00 00 01",
+          "summary": "FC01 コイルの読み取り アドレス 0 から 1 個"
+        },
+        {
+          "id": "193430c0-e702-448a-82a7-5473f7f42155",
+          "name": "FC02 入力ステータスの読み取り",
+          "mode": "build",
+          "commandId": "2",
+          "params": {
+            "address": 0,
+            "count": 1
+          },
+          "request": "02 00 00 00 01",
+          "summary": "FC02 入力ステータスの読み取り アドレス 0 から 1 個"
+        },
+        {
+          "id": "1a3af3a9-d751-4692-803b-83a15629497e",
+          "name": "FC03 保持レジスタの読み取り",
+          "mode": "build",
+          "commandId": "3",
+          "params": {
+            "address": 0,
+            "count": 1
+          },
+          "request": "03 00 00 00 01",
+          "summary": "FC03 保持レジスタの読み取り アドレス 0 から 1 個"
+        },
+        {
+          "id": "c9519647-5aa5-4383-96c7-db4c64559852",
+          "name": "FC04 入力レジスタの読み取り",
+          "mode": "build",
+          "commandId": "4",
+          "params": {
+            "address": 0,
+            "count": 1
+          },
+          "request": "04 00 00 00 01",
+          "summary": "FC04 入力レジスタの読み取り アドレス 0 から 1 個"
+        },
+        {
+          "id": "065b06d4-8260-4a68-bd2a-0496e40200a4",
+          "name": "FC05 コイル 1 点の書き込み",
+          "mode": "build",
+          "commandId": "5",
+          "params": {
+            "address": 0,
+            "value": "on"
+          },
+          "request": "05 00 00 FF 00",
+          "summary": "FC05 コイル 1 点の書き込み アドレス 0 = ON"
+        },
+        {
+          "id": "42240a70-6490-41e8-b50a-1c0f95be9986",
+          "name": "FC06 保持レジスタ 1 点の書き込み",
+          "mode": "build",
+          "commandId": "6",
+          "params": {
+            "address": 0,
+            "value": "0"
+          },
+          "request": "06 00 00 00 00",
+          "summary": "FC06 保持レジスタ 1 点の書き込み アドレス 0 = 0 (0x0000)"
+        },
+        {
+          "id": "37355b2b-0738-4465-9d2d-4d4af5b5ed79",
+          "name": "FC15 コイルの複数書き込み",
+          "mode": "build",
+          "commandId": "15",
+          "params": {
+            "address": 0,
+            "values": "1"
+          },
+          "request": "0F 00 00 00 01 01 01",
+          "summary": "FC15 コイルの複数書き込み アドレス 0 から 1 個"
+        },
+        {
+          "id": "264497c2-c8ef-4114-9702-cea5a19208f9",
+          "name": "FC16 保持レジスタの複数書き込み",
+          "mode": "build",
+          "commandId": "16",
+          "params": {
+            "address": 0,
+            "values": "0"
+          },
+          "request": "10 00 00 00 01 02 00 00",
+          "summary": "FC16 保持レジスタの複数書き込み アドレス 0 から 1 個"
+        },
+        {
+          "id": "91fb947e-e253-493b-b799-2fe70d7590ff",
+          "name": "16 進",
+          "mode": "hex",
+          "request": "01 00 00 00 01",
+          "summary": "FC01 コイルの読み取り アドレス 0 から 1 個"
+        }
+      ]
+    },
+    {
+      "id": "73fc4b6f-f256-43c3-9a56-c3b67d09edba",
+      "name": "接続先 OPC UA",
+      "protocolType": "opcua",
+      "settings": {
+        "endpointUrl": "opc.tcp://127.0.0.1:4840",
+        "password": "secret",
+        "securityMode": "Sign",
+        "securityPolicy": "ECC_nistP384",
+        "timeoutMs": 3001,
+        "trustServers": "trusted",
+        "userName": ""
+      },
+      "polling": {
+        "intervalMs": 250,
+        "failThreshold": 5,
+        "items": [
+          {
+            "commandId": "read",
+            "params": {
+              "attribute": "Value",
+              "nodeId": "i=2258"
+            },
+            "format": "hex"
+          }
+        ]
+      },
+      "subscription": {
+        "intervalMs": 500,
+        "items": [
+          {
+            "params": {
+              "nodeId": "ns=2;s=Int"
+            }
+          },
+          {
+            "params": {
+              "nodeId": "ns=2;s=Values"
+            }
+          }
+        ]
+      },
+      "savedCommands": [
+        {
+          "id": "13aca6a2-08a0-4f38-a0a1-b2dcc21564d4",
+          "name": "Read（ノードの読み取り）",
+          "mode": "build",
+          "commandId": "read",
+          "params": {
+            "attribute": "Value",
+            "nodeId": "i=2258"
+          },
+          "request": "01 00 77 02 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 FF FF FF FF 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 03 00 00 00 01 00 00 00 01 00 D2 08 0D 00 00 00 FF FF FF FF 00 00 FF FF FF FF",
+          "summary": "Read i=2258 の Value"
+        },
+        {
+          "id": "c5773224-7d9e-4868-a57a-fb564c1d0c40",
+          "name": "Write（ノードの値の書き込み）",
+          "mode": "build",
+          "commandId": "write",
+          "params": {
+            "dataType": "Int16",
+            "nodeId": "ns=2;s=Int",
+            "rank": "scalar",
+            "value": "0"
+          },
+          "request": "01 00 A1 02 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 FF FF FF FF 00 00 00 00 00 00 00 01 00 00 00 03 02 00 03 00 00 00 49 6E 74 0D 00 00 00 FF FF FF FF 01 04 00 00",
+          "summary": "Write ns=2;s=Int = 0（Int16）"
+        },
+        {
+          "id": "468a4f4c-7894-48e1-a6f0-383473930746",
+          "name": "Browse（子ノードの一覧）",
+          "mode": "build",
+          "commandId": "browse",
+          "params": {
+            "nodeId": "i=85"
+          },
+          "request": "01 00 0F 02 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 FF FF FF FF 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 01 00 00 00 00 55 00 00 00 00 00 21 01 00 00 00 00 3F 00 00 00",
+          "summary": "Browse i=85"
+        },
+        {
+          "id": "74367313-a4c3-4019-8ca0-522396c2b36e",
+          "name": "16 進",
+          "mode": "hex",
+          "request": "01 00 77 02 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 FF FF FF FF 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 03 00 00 00 01 00 00 00 01 00 D2 08 0D 00 00 00 FF FF FF FF 00 00 FF FF FF FF",
+          "summary": "Read i=2258 の Value"
+        }
+      ]
+    },
+    {
+      "id": "2298de2d-2801-46cf-b960-149a39ea41b9",
+      "name": "接続先 FINS",
+      "protocolType": "fins",
+      "settings": {
+        "destNode": 1,
+        "host": "127.0.0.1",
+        "port": 9601,
+        "srcNode": 1,
+        "timeoutMs": 1001,
+        "transport": "tcp"
+      },
+      "polling": {
+        "intervalMs": 250,
+        "failThreshold": 5,
+        "items": [
+          {
+            "commandId": "read",
+            "params": {
+              "address": 0,
+              "area": "DM",
+              "bit": 0,
+              "count": 1,
+              "unit": "word"
+            },
+            "format": "hex"
+          }
+        ]
+      },
+      "savedCommands": [
+        {
+          "id": "559c0fd5-b692-4cca-ac00-08156f29b6d5",
+          "name": "0101 メモリエリアの読み出し",
+          "mode": "build",
+          "commandId": "read",
+          "params": {
+            "address": 0,
+            "area": "DM",
+            "bit": 0,
+            "count": 1,
+            "unit": "word"
+          },
+          "request": "01 01 82 00 00 00 00 01",
+          "summary": "0101 メモリエリアの読み出し D0 から 1 個"
+        },
+        {
+          "id": "9f59fd42-67cf-4fff-bc8e-6caba8146897",
+          "name": "0102 メモリエリアの書き込み",
+          "mode": "build",
+          "commandId": "write",
+          "params": {
+            "address": 0,
+            "area": "DM",
+            "bit": 0,
+            "unit": "word",
+            "values": "0"
+          },
+          "request": "01 02 82 00 00 00 00 01 00 00",
+          "summary": "0102 メモリエリアの書き込み D0 から 1 個"
+        },
+        {
+          "id": "5f8a6f34-91e8-423e-8c30-fab7fc429a58",
+          "name": "0103 メモリエリアの一括書き込み",
+          "mode": "build",
+          "commandId": "fill",
+          "params": {
+            "address": 0,
+            "area": "DM",
+            "count": 1,
+            "value": "0"
+          },
+          "request": "01 03 82 00 00 00 00 01 00 00",
+          "summary": "0103 メモリエリアの一括書き込み D0 から 1 個"
+        },
+        {
+          "id": "4b7ddb6d-71c2-43d7-a807-a828abbca823",
+          "name": "0501 CPU ユニット情報の読み出し",
+          "mode": "build",
+          "commandId": "cpuUnitData",
+          "request": "05 01",
+          "summary": "0501 CPU ユニット情報の読み出し"
+        },
+        {
+          "id": "8b333eb2-0d51-4c57-b9c9-2c66e9aeeb2b",
+          "name": "0601 CPU ユニットステータスの読み出し",
+          "mode": "build",
+          "commandId": "cpuUnitStatus",
+          "request": "06 01",
+          "summary": "0601 CPU ユニットステータスの読み出し"
+        },
+        {
+          "id": "54e07536-a90b-4748-a0ee-06cfd2a169cf",
+          "name": "0701 時計の読み出し",
+          "mode": "build",
+          "commandId": "clock",
+          "request": "07 01",
+          "summary": "0701 時計の読み出し"
+        },
+        {
+          "id": "b1717185-e57a-4d0c-a6a1-8e3dbff9ae9f",
+          "name": "16 進",
+          "mode": "hex",
+          "request": "01 01 82 00 00 00 00 01",
+          "summary": "0101 メモリエリアの読み出し D0 から 1 個"
+        }
+      ]
+    },
+    {
+      "id": "7b61d388-c833-4ce9-b9fb-b21a1cb2c4ae",
+      "name": "接続先 FINS（Host Link）",
+      "protocolType": "fins-hostlink",
+      "settings": {
+        "baudRate": 9600,
+        "dataBits": 7,
+        "parity": "O",
+        "serialPort": "COM1",
+        "stopBits": 2,
+        "timeoutMs": 1001,
+        "unit": 1
+      },
+      "polling": {
+        "intervalMs": 250,
+        "failThreshold": 5,
+        "items": [
+          {
+            "commandId": "read",
+            "params": {
+              "address": 0,
+              "area": "DM",
+              "bit": 0,
+              "count": 1,
+              "unit": "word"
+            },
+            "format": "hex"
+          }
+        ]
+      },
+      "savedCommands": [
+        {
+          "id": "5f4ecd8f-f94c-4f90-a6b0-1288a09db491",
+          "name": "0101 メモリエリアの読み出し",
+          "mode": "build",
+          "commandId": "read",
+          "params": {
+            "address": 0,
+            "area": "DM",
+            "bit": 0,
+            "count": 1,
+            "unit": "word"
+          },
+          "request": "01 01 82 00 00 00 00 01",
+          "summary": "0101 メモリエリアの読み出し D0 から 1 個"
+        },
+        {
+          "id": "d636dbe0-2427-4e33-9a84-da36f9006364",
+          "name": "0102 メモリエリアの書き込み",
+          "mode": "build",
+          "commandId": "write",
+          "params": {
+            "address": 0,
+            "area": "DM",
+            "bit": 0,
+            "unit": "word",
+            "values": "0"
+          },
+          "request": "01 02 82 00 00 00 00 01 00 00",
+          "summary": "0102 メモリエリアの書き込み D0 から 1 個"
+        },
+        {
+          "id": "dbfe9ac5-0111-43f9-b89f-56350f978997",
+          "name": "0103 メモリエリアの一括書き込み",
+          "mode": "build",
+          "commandId": "fill",
+          "params": {
+            "address": 0,
+            "area": "DM",
+            "count": 1,
+            "value": "0"
+          },
+          "request": "01 03 82 00 00 00 00 01 00 00",
+          "summary": "0103 メモリエリアの一括書き込み D0 から 1 個"
+        },
+        {
+          "id": "723d995c-6c5e-4cf6-9731-8aea494d5aa4",
+          "name": "0501 CPU ユニット情報の読み出し",
+          "mode": "build",
+          "commandId": "cpuUnitData",
+          "request": "05 01",
+          "summary": "0501 CPU ユニット情報の読み出し"
+        },
+        {
+          "id": "19a57ba0-af2a-46fa-94ed-9b6790f6162b",
+          "name": "0601 CPU ユニットステータスの読み出し",
+          "mode": "build",
+          "commandId": "cpuUnitStatus",
+          "request": "06 01",
+          "summary": "0601 CPU ユニットステータスの読み出し"
+        },
+        {
+          "id": "ca9487f2-e6bb-4855-a233-5c625840e0cf",
+          "name": "0701 時計の読み出し",
+          "mode": "build",
+          "commandId": "clock",
+          "request": "07 01",
+          "summary": "0701 時計の読み出し"
+        },
+        {
+          "id": "912652aa-1ce5-4777-bcb5-f96a1b0f238b",
+          "name": "16 進",
+          "mode": "hex",
+          "request": "01 01 82 00 00 00 00 01",
+          "summary": "0101 メモリエリアの読み出し D0 から 1 個"
+        }
+      ]
+    },
+    {
+      "id": "fdb016fe-8310-4ce9-99ba-f0cd045ca903",
+      "name": "接続先 SLMP",
+      "protocolType": "slmp",
+      "settings": {
+        "frame": "4e",
+        "host": "127.0.0.1",
+        "moduleIO": 1024,
+        "multidrop": 1,
+        "network": 1,
+        "port": 5008,
+        "station": 255,
+        "timeoutMs": 1001,
+        "timer": 17,
+        "transport": "udp"
+      },
+      "polling": {
+        "intervalMs": 250,
+        "failThreshold": 5,
+        "items": [
+          {
+            "commandId": "read",
+            "params": {
+              "address": "0",
+              "count": 1,
+              "device": "D"
+            },
+            "format": "hex"
+          },
+          {
+            "commandId": "randomRead",
+            "params": {
+              "items": [
+                {
+                  "address": "0",
+                  "device": "D",
+                  "unit": "word"
+                }
+              ]
+            },
+            "format": "hex"
+          }
+        ]
+      },
+      "savedCommands": [
+        {
+          "id": "cabc60c9-438e-4bec-ba9a-861b5affe974",
+          "name": "0401 一括読み出し",
+          "mode": "build",
+          "commandId": "read",
+          "params": {
+            "address": "0",
+            "count": 1,
+            "device": "D"
+          },
+          "request": "01 04 00 00 00 00 00 A8 01 00",
+          "summary": "0401 一括読み出し D0 から 1 点（ワード単位）"
+        },
+        {
+          "id": "f8e5131f-a0a5-42b9-a77a-810621246292",
+          "name": "1401 一括書き込み",
+          "mode": "build",
+          "commandId": "write",
+          "params": {
+            "address": "0",
+            "device": "D",
+            "values": "0"
+          },
+          "request": "01 14 00 00 00 00 00 A8 01 00 00 00",
+          "summary": "1401 一括書き込み D0 から 1 点（ワード単位）"
+        },
+        {
+          "id": "56ee4a48-350e-45f1-9a9c-e25a509d879b",
+          "name": "0403 ランダム読み出し",
+          "mode": "build",
+          "commandId": "randomRead",
+          "params": {
+            "items": [
+              {
+                "address": "0",
+                "device": "D",
+                "unit": "word"
+              }
+            ]
+          },
+          "request": "03 04 00 00 01 00 00 00 00 A8",
+          "summary": "0403 ランダム読み出し ワード 1 点（D0）"
+        },
+        {
+          "id": "82c8e842-cd6b-40e8-895e-45bafce8fcf2",
+          "name": "1402 ランダム書き込み",
+          "mode": "build",
+          "commandId": "randomWrite",
+          "params": {
+            "items": [
+              {
+                "address": "0",
+                "device": "D",
+                "unit": "word",
+                "value": "0"
+              }
+            ]
+          },
+          "request": "02 14 00 00 01 00 00 00 00 A8 00 00",
+          "summary": "1402 ランダム書き込み ワード 1 点"
+        },
+        {
+          "id": "cf217f19-e01a-4eb8-b582-c45ada61548e",
+          "name": "0101 形名の読み出し",
+          "mode": "build",
+          "commandId": "typeName",
+          "request": "01 01 00 00",
+          "summary": "0101 形名の読み出し"
+        },
+        {
+          "id": "cc9e0c0a-8e52-41dc-a327-809bbdf2400b",
+          "name": "0619 折り返しテスト",
+          "mode": "build",
+          "commandId": "selfTest",
+          "params": {
+            "data": "ABCDE"
+          },
+          "request": "19 06 00 00 05 00 41 42 43 44 45",
+          "summary": "0619 折り返しテスト"
+        },
+        {
+          "id": "f50c7821-130b-4591-bd31-2ee96e879cd5",
+          "name": "16 進",
+          "mode": "hex",
+          "request": "01 04 00 00 00 00 00 A8 01 00",
+          "summary": "0401 一括読み出し D0 から 1 点（ワード単位）"
+        }
+      ]
+    },
+    {
+      "id": "04436391-d98d-4b71-b616-2066055c7b09",
+      "name": "接続先 MC プロトコル（シリアル）",
+      "protocolType": "mc-serial",
+      "settings": {
+        "baudRate": 9600,
+        "dataBits": 8,
+        "format": 5,
+        "parity": "O",
+        "serialPort": "COM1",
+        "station": 1,
+        "stopBits": 1,
+        "sumCheck": "off",
+        "timeoutMs": 1001
+      },
+      "polling": {
+        "intervalMs": 250,
+        "failThreshold": 5,
+        "items": [
+          {
+            "commandId": "read",
+            "params": {
+              "address": "0",
+              "count": 1,
+              "device": "D"
+            },
+            "format": "hex"
+          },
+          {
+            "commandId": "randomRead",
+            "params": {
+              "items": [
+                {
+                  "address": "0",
+                  "device": "D",
+                  "unit": "word"
+                }
+              ]
+            },
+            "format": "hex"
+          }
+        ]
+      },
+      "savedCommands": [
+        {
+          "id": "42f639fc-1a39-4494-b864-9a7b09845170",
+          "name": "0401 一括読み出し",
+          "mode": "build",
+          "commandId": "read",
+          "params": {
+            "address": "0",
+            "count": 1,
+            "device": "D"
+          },
+          "request": "01 04 00 00 00 00 00 A8 01 00",
+          "summary": "0401 一括読み出し D0 から 1 点（ワード単位）"
+        },
+        {
+          "id": "196f1195-298f-433c-8752-07a6136cb222",
+          "name": "1401 一括書き込み",
+          "mode": "build",
+          "commandId": "write",
+          "params": {
+            "address": "0",
+            "device": "D",
+            "values": "0"
+          },
+          "request": "01 14 00 00 00 00 00 A8 01 00 00 00",
+          "summary": "1401 一括書き込み D0 から 1 点（ワード単位）"
+        },
+        {
+          "id": "8d077d17-eda3-49fe-b914-a2aae8f4cb16",
+          "name": "0403 ランダム読み出し",
+          "mode": "build",
+          "commandId": "randomRead",
+          "params": {
+            "items": [
+              {
+                "address": "0",
+                "device": "D",
+                "unit": "word"
+              }
+            ]
+          },
+          "request": "03 04 00 00 01 00 00 00 00 A8",
+          "summary": "0403 ランダム読み出し ワード 1 点（D0）"
+        },
+        {
+          "id": "aada43e8-7c19-4b04-b85a-6aaccb233b5f",
+          "name": "1402 ランダム書き込み",
+          "mode": "build",
+          "commandId": "randomWrite",
+          "params": {
+            "items": [
+              {
+                "address": "0",
+                "device": "D",
+                "unit": "word",
+                "value": "0"
+              }
+            ]
+          },
+          "request": "02 14 00 00 01 00 00 00 00 A8 00 00",
+          "summary": "1402 ランダム書き込み ワード 1 点"
+        },
+        {
+          "id": "a54b2e91-d593-4480-a653-5bbd78b48d3a",
+          "name": "0101 形名の読み出し",
+          "mode": "build",
+          "commandId": "typeName",
+          "request": "01 01 00 00",
+          "summary": "0101 形名の読み出し"
+        },
+        {
+          "id": "e8d74c43-cf49-482c-adec-3170536a2060",
+          "name": "0619 折り返しテスト",
+          "mode": "build",
+          "commandId": "selfTest",
+          "params": {
+            "data": "ABCDE"
+          },
+          "request": "19 06 00 00 05 00 41 42 43 44 45",
+          "summary": "0619 折り返しテスト"
+        },
+        {
+          "id": "c1bfc40f-87f9-44bf-b8d2-9e86f28fe2bd",
+          "name": "16 進",
+          "mode": "hex",
+          "request": "01 04 00 00 00 00 00 A8 01 00",
+          "summary": "0401 一括読み出し D0 から 1 点（ワード単位）"
+        }
+      ]
+    }
+  ]
+}

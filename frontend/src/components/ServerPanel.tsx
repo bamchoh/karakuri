@@ -26,7 +26,9 @@ import {
   ServerConfigPane,
   ServerConfigPaneHandle,
   ServerSubTab,
+  serverSubTabs,
 } from "./ServerConfigPane";
+import { CertificatesView } from "./CertificatesView";
 import { RegisterListView } from "./RegisterListView";
 import { MonitoringView } from "./MonitoringView";
 import { ClientDetailPane, ClientSubTab } from "./ClientDetailPane";
@@ -351,10 +353,14 @@ export const ServerPanel = forwardRef<ServerPanelHandle, ServerPanelProps>(
         ) ?? null)
       : null;
 
-    // レジスタを持たないサーバー（ノード公開型のプロトコル）には、設定のタブしかない
-    const selectedServerHasRegisters =
-      !!selectedInstance && !selectedInstance.supportsNodePublishing;
-    const selectedServerTab: ServerSubTab = selectedServerHasRegisters
+    // 選んだサーバーで出すタブ。前に選んだタブがなければ（OPC UA のレジスタなど）、設定にする
+    const selectedServerTabs: ServerSubTab[] = selectedInstance
+      ? serverSubTabs(selectedInstance)
+      : ["settings"];
+    const selectedServerHasRegisters = selectedServerTabs.includes("registers");
+    const selectedServerTab: ServerSubTab = selectedServerTabs.includes(
+      serverSubTab,
+    )
       ? serverSubTab
       : "settings";
 
@@ -522,17 +528,25 @@ export const ServerPanel = forwardRef<ServerPanelHandle, ServerPanelProps>(
                 onRefreshPorts={handleRefreshPorts}
                 onRemove={handleRemoveServer}
                 onDirtyChange={handlePaneDirtyChange}
-                hasRegisters={selectedServerHasRegisters}
+                tabs={selectedServerTabs}
                 tab={selectedServerTab}
                 onTabChange={setServerSubTab}
               >
                 {/* 一覧表示は、タブを切り替えても選んだエリアなどを保つため、マウントしたままにする */}
-                <RegisterListView
-                  protocolType={selectedInstance.protocolType}
-                  active={selectedServerTab === "registers"}
-                />
+                {selectedServerHasRegisters && (
+                  <RegisterListView
+                    protocolType={selectedInstance.protocolType}
+                    active={selectedServerTab === "registers"}
+                  />
+                )}
                 {selectedServerTab === "monitoring" && (
                   <MonitoringView server={selectedInstance} />
+                )}
+                {selectedServerTab === "certificates" && (
+                  <CertificatesView
+                    kind="server"
+                    protocolType={selectedInstance.protocolType}
+                  />
                 )}
               </ServerConfigPane>
             </div>

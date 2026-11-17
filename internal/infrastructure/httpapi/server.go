@@ -162,6 +162,11 @@ func (s *Server) routes() []route {
 		{"GET", "/api/client-logs", s.handleGetClientLogs},
 		{"DELETE", "/api/client-logs", s.handleClearClientLogs},
 
+		// === 証明書（kind は server / client） ===
+		{"GET", "/api/certificates/{kind}/{protocolType}", s.handleGetCertificates},
+		{"PUT", "/api/certificates/{kind}/{protocolType}/{thumbprint}", s.handleSetCertificateTrusted},
+		{"DELETE", "/api/certificates/{kind}/{protocolType}/{thumbprint}", s.handleDeleteCertificate},
+
 		// === プロジェクトエクスポート/インポート ===
 		{"GET", "/api/project/export", s.handleExportProject},
 		{"POST", "/api/project/import", s.handleImportProject},

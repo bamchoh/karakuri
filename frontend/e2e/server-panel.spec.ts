@@ -221,6 +221,8 @@ test.describe("サーバーの設定", () => {
     await expect(page.locator(".vscode-setting-category")).toHaveText([
       "ネットワーク",
       "アプリケーション情報",
+      "セキュリティ",
+      "ユーザー認証",
     ]);
     const name = setting(page, "アプリケーション名 (ApplicationName)");
     await expect(name).toHaveValue("Karakuri PLC Simulator");

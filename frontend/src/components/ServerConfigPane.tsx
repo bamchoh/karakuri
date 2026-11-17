@@ -21,17 +21,31 @@ import { serverStatusClass } from "./serverStatus";
 // サーバー画面の右側: 選択したサーバーの見出し（名前・状態・削除）と、タブ。
 //   - 設定: プロトコルのスキーマから作るフォーム・UnitID の応答設定
 //   - レジスタ / モニタリング: 中身は親が children で渡す（レジスタを持つサーバーだけ）
+//   - 証明書: 中身は親が children で渡す（証明書のストアを持つサーバーだけ。OPC UA）
 // 親からは ref の save() / revert() で、設定の保存していない変更を保存・破棄できる。
 // 設定は、ほかのタブを見ている間も隠すだけなので、入力中の内容は消えない。
 
 // サーバーの右側のタブ
-export type ServerSubTab = "settings" | "registers" | "monitoring";
+export type ServerSubTab =
+  "settings" | "registers" | "monitoring" | "certificates";
 
-const SERVER_SUB_TABS: { id: ServerSubTab; label: string }[] = [
-  { id: "settings", label: "設定" },
-  { id: "registers", label: "レジスタ" },
-  { id: "monitoring", label: "モニタリング" },
-];
+const SERVER_SUB_TAB_LABELS: Record<ServerSubTab, string> = {
+  settings: "設定",
+  registers: "レジスタ",
+  monitoring: "モニタリング",
+  certificates: "証明書",
+};
+
+// serverSubTabs は、サーバーで出すタブ（設定はいつも先頭）
+export function serverSubTabs(
+  instance: application.ServerInstanceDTO,
+): ServerSubTab[] {
+  const tabs: ServerSubTab[] = ["settings"];
+  // レジスタを持たないサーバー（ノード公開型のプロトコル）には、レジスタとモニタリングがない
+  if (!instance.supportsNodePublishing) tabs.push("registers", "monitoring");
+  if (instance.supportsCertificates) tabs.push("certificates");
+  return tabs;
+}
 
 export interface ServerConfigPaneHandle {
   save: () => Promise<void>;
@@ -44,11 +58,11 @@ interface ServerConfigPaneProps {
   onRefreshPorts: () => void;
   onRemove: (protocolType: string) => void;
   onDirtyChange: (dirty: boolean) => void;
-  // レジスタを持つサーバーか（持たなければ、タブを出さず設定だけにする）
-  hasRegisters: boolean;
+  // 出すタブ（serverSubTabs()。設定だけなら、タブの並びを出さない）
+  tabs: ServerSubTab[];
   tab: ServerSubTab;
   onTabChange: (tab: ServerSubTab) => void;
-  // 「レジスタ」「モニタリング」のタブの中身
+  // 設定以外のタブ（レジスタ・モニタリング・証明書）の中身
   children?: ReactNode;
 }
 
@@ -62,7 +76,7 @@ export const ServerConfigPane = forwardRef<
     onRefreshPorts,
     onRemove,
     onDirtyChange,
-    hasRegisters,
+    tabs,
     tab,
     onTabChange,
     children,
@@ -216,16 +230,16 @@ export const ServerConfigPane = forwardRef<
         </div>
       </div>
 
-      {/* レジスタを持つサーバーだけ、タブで切り替える */}
-      {hasRegisters && (
+      {/* 設定のほかにタブがあるサーバーだけ、タブで切り替える */}
+      {tabs.length > 1 && (
         <div className="sub-tab-nav server-sub-tabs">
-          {SERVER_SUB_TABS.map((t) => (
+          {tabs.map((id) => (
             <button
-              key={t.id}
-              className={`sub-tab-button ${tab === t.id ? "active" : ""}`}
-              onClick={() => onTabChange(t.id)}
+              key={id}
+              className={`sub-tab-button ${tab === id ? "active" : ""}`}
+              onClick={() => onTabChange(id)}
             >
-              {t.label}
+              {SERVER_SUB_TAB_LABELS[id]}
             </button>
           ))}
         </div>
@@ -235,8 +249,8 @@ export const ServerConfigPane = forwardRef<
         <div className="error-message config-error">{paneError}</div>
       )}
 
-      {/* 設定以外のタブの中身（レジスタ・モニタリング）。設定を見ている間は隠す */}
-      {hasRegisters && (
+      {/* 設定以外のタブの中身（レジスタ・モニタリング・証明書）。設定を見ている間は隠す */}
+      {tabs.length > 1 && (
         <div
           className={`server-sub-tab-body${showsSettings ? " server-sub-tab-hidden" : ""}`}
         >

@@ -11,7 +11,8 @@
     { "name": "メモリ" },
     { "name": "変数" },
     { "name": "クライアント" },
-    { "name": "プロジェクト" }
+    { "name": "プロジェクト" },
+    { "name": "証明書" }
   ],
   "paths": {
     "/api/openapi.json": {
@@ -344,6 +345,26 @@
       "get": { "tags": ["クライアント"], "summary": "送ったコマンドの履歴（新しい順、最大 200 件。ポーリングは含まない）", "responses": { "200": { "description": "履歴", "content": { "application/json": { "schema": { "type": "array", "items": { "$ref": "#/components/schemas/CommandResult" } } } } } } },
       "delete": { "tags": ["クライアント"], "summary": "履歴を消す", "responses": { "204": { "description": "消した" } } }
     },
+    "/api/certificates/{kind}/{protocolType}": {
+      "parameters": [
+        { "name": "kind", "in": "path", "required": true, "description": "server（サーバーの証明書のストア）か client（クライアントの。そのプロトコルの全部の接続先で共通）", "schema": { "type": "string", "enum": ["server", "client"] } },
+        { "$ref": "#/components/parameters/protocolType" }
+      ],
+      "get": { "tags": ["証明書"], "summary": "証明書のストアの一覧（自分の証明書・信頼した相手・拒否した相手）。証明書を使うプロトコル（OPC UA）だけ", "responses": { "200": { "description": "一覧", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/CertificateList" } } } }, "400": { "$ref": "#/components/responses/Error" } } }
+    },
+    "/api/certificates/{kind}/{protocolType}/{thumbprint}": {
+      "parameters": [
+        { "name": "kind", "in": "path", "required": true, "description": "server（サーバーの証明書のストア）か client（クライアントの。そのプロトコルの全部の接続先で共通）", "schema": { "type": "string", "enum": ["server", "client"] } },
+        { "$ref": "#/components/parameters/protocolType" },
+        { "name": "thumbprint", "in": "path", "required": true, "description": "相手の証明書の拇印（SHA-1 の 16 進の大文字）", "schema": { "type": "string" } }
+      ],
+      "put": {
+        "tags": ["証明書"], "summary": "相手の証明書を信頼する（trusted: true）か、拒否の一覧に戻す（false）。起動し直さなくても、次の接続から効く",
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "type": "object", "required": ["trusted"], "properties": { "trusted": { "type": "boolean" } } } } } },
+        "responses": { "204": { "description": "変えた" }, "400": { "$ref": "#/components/responses/Error" } }
+      },
+      "delete": { "tags": ["証明書"], "summary": "相手の証明書を消す（自分の証明書は消せない）", "responses": { "204": { "description": "消した" }, "400": { "$ref": "#/components/responses/Error" } } }
+    },
     "/api/project/export": {
       "get": { "tags": ["プロジェクト"], "summary": "プロジェクトを JSON で取り出す", "responses": { "200": { "description": "プロジェクト" } } }
     },
@@ -371,7 +392,13 @@
       "MemoryAtWords": { "type": "object", "properties": { "area": { "type": "string", "example": "D" }, "address": { "type": "integer", "example": 10 }, "values": { "type": "array", "items": { "type": "integer" } } } },
       "MemoryAtBits": { "type": "object", "properties": { "area": { "type": "string", "example": "D" }, "address": { "type": "integer", "example": 163 }, "values": { "type": "array", "items": { "type": "boolean" } } } },
       "Error": { "type": "object", "properties": { "error": { "type": "string" } } },
-      "ServerInstance": { "type": "object", "properties": { "protocolType": { "type": "string" }, "displayName": { "type": "string" }, "variant": { "type": "string" }, "status": { "type": "string" } } },
+      "CertificateList": { "type": "object", "properties": { "dir": { "type": "string", "description": "ストアのフォルダ" }, "certificates": { "type": "array", "items": { "$ref": "#/components/schemas/Certificate" } } } },
+      "Certificate": { "type": "object", "properties": {
+        "thumbprint": { "type": "string" }, "status": { "type": "string", "enum": ["own", "trusted", "rejected"] }, "subject": { "type": "string" },
+        "applicationUri": { "type": "string" }, "keyType": { "type": "string", "example": "RSA 2048" },
+        "notBefore": { "type": "string", "format": "date-time" }, "notAfter": { "type": "string", "format": "date-time" },
+        "expired": { "type": "boolean" }, "file": { "type": "string" } } },
+      "ServerInstance": { "type": "object", "properties": { "protocolType": { "type": "string" }, "displayName": { "type": "string" }, "variant": { "type": "string" }, "status": { "type": "string" }, "supportsNodePublishing": { "type": "boolean" }, "supportsCertificates": { "type": "boolean", "description": "証明書のストアを持つ（/api/certificates/server/{protocolType}）" } } },
       "ServerConfig": { "type": "object", "properties": { "protocolType": { "type": "string" }, "variant": { "type": "string" }, "settings": { "type": "object", "additionalProperties": {} } } },
       "MemoryArea": { "type": "object", "properties": { "id": { "type": "string" }, "displayName": { "type": "string" }, "isBit": { "type": "boolean" }, "size": { "type": "integer" }, "readOnly": { "type": "boolean" }, "oneOrigin": { "type": "boolean", "description": "画面のアドレスは 1 始まり（API は 0 始まり）" }, "bitsOf": { "type": "string" }, "hexAddress": { "type": "boolean" } } },
       "Variable": { "type": "object", "properties": { "id": { "type": "string" }, "name": { "type": "string" }, "dataType": { "type": "string" }, "value": { "description": "値（LINT / ULINT は文字列）" }, "mappings": { "type": "array", "items": { "$ref": "#/components/schemas/ProtocolMapping" } }, "nodePublishings": { "type": "array", "items": { "type": "object", "properties": { "protocolType": { "type": "string" }, "enabled": { "type": "boolean" }, "accessMode": { "type": "string" } } } } } },

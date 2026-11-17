@@ -11,6 +11,8 @@ type ClientProtocolDTO struct {
 	// サブスクリプション（値の変化の通知）に対応しているか。対応していれば、監視項目を追加するときの入力項目
 	SupportsSubscription bool       `json:"supportsSubscription"`
 	MonitoredItemFields  []FieldDTO `json:"monitoredItemFields"`
+	// 証明書のストアを持つか（protocol.CertificateManager。全部の接続先で共通）
+	SupportsCertificates bool `json:"supportsCertificates"`
 	// 16 進で入れるリクエストの説明と入力例（プロトコルが返さなければ空）
 	RequestDescription string `json:"requestDescription"`
 	RequestExample     string `json:"requestExample"`

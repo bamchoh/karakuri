@@ -147,6 +147,7 @@ func (s *PLCService) GetClientProtocols() []ClientProtocolDTO {
 			ConnectionFields: toFieldDTOs(f.ConnectionFields()),
 			Commands:         cmdDTOs,
 		}
+		result[i].SupportsCertificates = isCertificateManager(f)
 		if sf, ok := f.(protocol.SubscriptionClientFactory); ok {
 			result[i].SupportsSubscription = true
 			result[i].MonitoredItemFields = toFieldDTOs(sf.MonitoredItemFields())

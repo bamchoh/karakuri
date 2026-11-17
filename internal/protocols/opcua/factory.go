@@ -20,6 +20,9 @@ var _ protocol.VariableStoreInjector = (*Factory)(nil)
 type Factory struct {
 	mu       sync.RWMutex
 	accessor protocol.VariableStoreAccessor // CreateAndStart 時に注入される
+
+	// PKIDir は、サーバーの証明書のストアのフォルダ（空なら exe と同じフォルダの pki。テストで差し替える）
+	PKIDir string
 }
 
 // InjectVariableStore は VariableStoreInjector の実装
@@ -56,7 +59,7 @@ const (
 )
 
 func (f *Factory) GetConfigFields(_ string) []protocol.ConfigField {
-	return []protocol.ConfigField{
+	return append([]protocol.ConfigField{
 		{
 			Name:        keyHost,
 			Label:       "アドレス",
@@ -122,7 +125,7 @@ func (f *Factory) GetConfigFields(_ string) []protocol.ConfigField {
 			Default:     DefaultNamespaceURI,
 			Category:    categoryApplication,
 		},
-	}
+	}, securityConfigFields()...)
 }
 
 func (f *Factory) GetProtocolCapabilities() protocol.ProtocolCapabilities {
@@ -137,7 +140,9 @@ func (f *Factory) CreateServer(config protocol.ProtocolConfig, _ protocol.DataSt
 	f.mu.RLock()
 	accessor := f.accessor
 	f.mu.RUnlock()
-	return NewServer(cfg, accessor), nil
+	srv := NewServer(cfg, accessor)
+	srv.pki = f.pkiRoot()
+	return srv, nil
 }
 
 func (f *Factory) CreateDataStore() protocol.DataStore { return &emptyDataStore{} }
@@ -147,7 +152,7 @@ func (f *Factory) ConfigToMap(config protocol.ProtocolConfig) map[string]interfa
 	if !ok {
 		return map[string]interface{}{}
 	}
-	return map[string]interface{}{
+	m := map[string]interface{}{
 		keyHost:             cfg.Host,
 		keyPort:             cfg.Port,
 		keyEndpointHost:     cfg.EndpointHost,
@@ -156,6 +161,8 @@ func (f *Factory) ConfigToMap(config protocol.ProtocolConfig) map[string]interfa
 		keyProductURI:       cfg.ProductURI,
 		keyNamespace:        cfg.NamespaceURI,
 	}
+	securityToMap(cfg, m)
+	return m
 }
 
 // MapToConfig は設定マップを Config に変換する。
@@ -179,6 +186,7 @@ func (f *Factory) MapToConfig(_ string, settings map[string]interface{}) (protoc
 	setString(keyManufacturerName, &cfg.ManufacturerName)
 	setString(keyProductURI, &cfg.ProductURI)
 	setString(keyNamespace, &cfg.NamespaceURI)
+	securityFromMap(settings, cfg)
 	return cfg, cfg.Validate()
 }
 
