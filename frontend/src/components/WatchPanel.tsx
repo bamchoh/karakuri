@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useState } from "react";
-import { X } from "lucide-react";
+import { Fragment, useCallback, useEffect, useState } from "react";
+import { ChevronDown, ChevronRight, X } from "lucide-react";
 import {
   AddMonitoringItem,
   DeleteMonitoringItem,
@@ -23,7 +23,13 @@ import { useEscapeKey } from "./useEscapeKey";
 import { MonitoringItemWithValue, readItemValue } from "./useMonitoringItems";
 import { formatAddress } from "../utils/address";
 import { getWordCount } from "../utils/register";
-import { WatchCandidate, isWritableValue } from "../utils/watch";
+import {
+  WatchCandidate,
+  isWritableValue,
+  variableNameOf,
+  variablePathLabel,
+  visibleRows,
+} from "../utils/watch";
 import type { BitWidth, DisplayFormat, Endianness } from "../types/register";
 
 // 値を読み直す間隔
@@ -44,6 +50,32 @@ interface WatchRow {
   writable: boolean;
   register?: MonitoringItemWithValue;
   value?: application.MonitoringValueDTO;
+  // 中身の行（構造体のフィールド・配列の要素・接続先の値の 1 つずつ）。なければ空
+  children: application.MonitoringValueRowDTO[];
+}
+
+// 畳んだ行（項目は項目の ID、中身の構造体・配列の行は「項目の ID:パス」）。欄を閉じても覚えておく
+let rememberedCollapsed = new Set<string>();
+
+// 中身を畳む・開くボタン
+function CollapseButton({
+  collapsed,
+  onClick,
+}: {
+  collapsed: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      className="watch-collapse"
+      onClick={onClick}
+      title={collapsed ? "中身を開く" : "中身を畳む"}
+      aria-label={collapsed ? "中身を開く" : "中身を畳む"}
+      aria-expanded={!collapsed}
+    >
+      {collapsed ? <ChevronRight size={12} /> : <ChevronDown size={12} />}
+    </button>
+  );
 }
 
 // 接続先の値の候補のキー（種類・接続先・要約）
@@ -62,6 +94,20 @@ export function WatchPanel() {
   >(null);
   const [candidates, setCandidates] = useState<WatchCandidate[]>([]);
   const [writing, setWriting] = useState<WatchRow | null>(null);
+  // 中身の行（構造体のフィールド・配列の要素）に書くときの、その行
+  const [writingChild, setWritingChild] = useState<{
+    row: WatchRow;
+    child: application.MonitoringValueRowDTO;
+  } | null>(null);
+  const [collapsed, setCollapsed] = useState(rememberedCollapsed);
+  const toggleCollapsed = (key: string) =>
+    setCollapsed((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      rememberedCollapsed = next;
+      return next;
+    });
   useEscapeKey(adding === "register", () => setAdding(null));
 
   // サーバーとエリア（レジスタの項目の名前と値に使う）。サーバーが増減したら読み直す
@@ -117,6 +163,7 @@ export function WatchPanel() {
                 v?.status === "ok" &&
                 isWritableValue(v.value),
               value: v,
+              children: v?.rows || [],
             };
           }
           const server = servers.find(
@@ -134,6 +181,7 @@ export function WatchPanel() {
               status: "error",
               error: server ? "エリアがありません" : "サーバーがありません",
               writable: false,
+              children: [],
             };
           }
           const register = await readItemValue(item, areas);
@@ -147,6 +195,7 @@ export function WatchPanel() {
             error: failed ? "読めません" : undefined,
             writable: !failed,
             register,
+            children: [],
           };
         }),
       );
@@ -304,6 +353,29 @@ export function WatchPanel() {
     await load();
   };
 
+  // 中身の行（構造体のフィールド・配列の要素）に書く。パスは、変数の先頭から
+  const writeVariableField = async (
+    row: WatchRow,
+    child: application.MonitoringValueRowDTO,
+    value: unknown,
+  ) => {
+    await UpdateVariableFieldValue(row.item.variableId!, child.path!, value);
+    setWritingChild(null);
+    await load();
+  };
+
+  // 中身の行に書けるか（変数の、数値・真偽・文字列の行）
+  const childWritable = (
+    row: WatchRow,
+    child: application.MonitoringValueRowDTO,
+  ) =>
+    row.item.kind === "variable" &&
+    row.status === "ok" &&
+    !child.composite &&
+    !child.more &&
+    !!child.path &&
+    isWritableValue(child.value);
+
   const writingArea = writing?.register
     ? (areas[writing.item.protocolType] || []).find(
         (a) => a.id === writing.item.memoryArea,
@@ -345,34 +417,91 @@ export function WatchPanel() {
       ) : (
         <table className="watch-table">
           <tbody>
-            {rows.map((row) => (
-              <tr
-                key={row.item.id}
-                className={`watch-row watch-${row.status}`}
-                data-testid="watch-row"
-              >
-                <td className="watch-source">{row.source}</td>
-                <td className="watch-label">{row.label}</td>
-                <td
-                  className={`watch-value${row.writable ? " writable" : ""}`}
-                  onClick={row.writable ? () => setWriting(row) : undefined}
-                  title={row.writable ? "押すと、値を書ける" : undefined}
-                >
-                  {row.text || "---"}
-                </td>
-                <td className="watch-note">{row.error}</td>
-                <td className="watch-actions">
-                  <button
-                    className="watch-delete"
-                    onClick={() => handleDelete(row.item.id)}
-                    title="モニタリングから外す"
-                    aria-label="モニタリングから外す"
+            {rows.map((row) => {
+              const hasChildren = row.children.length > 0;
+              const itemCollapsed = collapsed.has(row.item.id);
+              const childKey = (c: application.MonitoringValueRowDTO) =>
+                `${row.item.id}:${c.path ?? ""}`;
+              const shownChildren = itemCollapsed
+                ? []
+                : visibleRows(row.children, (c) => collapsed.has(childKey(c)));
+              return (
+                <Fragment key={row.item.id}>
+                  <tr
+                    className={`watch-row watch-${row.status}`}
+                    data-testid="watch-row"
                   >
-                    <X size={14} />
-                  </button>
-                </td>
-              </tr>
-            ))}
+                    <td className="watch-source">{row.source}</td>
+                    <td className="watch-label">
+                      {hasChildren && (
+                        <CollapseButton
+                          collapsed={itemCollapsed}
+                          onClick={() => toggleCollapsed(row.item.id)}
+                        />
+                      )}
+                      {row.label}
+                    </td>
+                    <td
+                      className={`watch-value${row.writable ? " writable" : ""}`}
+                      onClick={row.writable ? () => setWriting(row) : undefined}
+                      title={row.writable ? "押すと、値を書ける" : undefined}
+                    >
+                      {hasChildren ? "" : row.text || "---"}
+                    </td>
+                    <td className="watch-note">{row.error}</td>
+                    <td className="watch-actions">
+                      <button
+                        className="watch-delete"
+                        onClick={() => handleDelete(row.item.id)}
+                        title="モニタリングから外す"
+                        aria-label="モニタリングから外す"
+                      >
+                        <X size={14} />
+                      </button>
+                    </td>
+                  </tr>
+                  {/* 中身（構造体のフィールド・配列の要素・接続先の値の 1 つずつ）は、字下げして 1 行ずつ */}
+                  {shownChildren.map((child, i) => {
+                    const writable = childWritable(row, child);
+                    return (
+                      <tr
+                        key={`${childKey(child)}:${i}`}
+                        className={`watch-row watch-child watch-${row.status}`}
+                        data-testid="watch-child"
+                      >
+                        <td className="watch-source" />
+                        <td
+                          className={`watch-label${child.more ? " watch-more" : ""}`}
+                          // 字下げは、行の深さで決まる
+                          style={{ paddingLeft: `${child.depth * 1.1}rem` }}
+                        >
+                          {child.composite && (
+                            <CollapseButton
+                              collapsed={collapsed.has(childKey(child))}
+                              onClick={() => toggleCollapsed(childKey(child))}
+                            />
+                          )}
+                          {child.label}
+                        </td>
+                        <td
+                          className={`watch-value${writable ? " writable" : ""}`}
+                          onClick={
+                            writable
+                              ? () => setWritingChild({ row, child })
+                              : undefined
+                          }
+                          title={writable ? "押すと、値を書ける" : undefined}
+                        >
+                          {child.composite || child.more ? "" : child.text}
+                        </td>
+                        <td className="watch-note" />
+                        <td className="watch-actions" />
+                      </tr>
+                    );
+                  })}
+                </Fragment>
+              );
+            })}
           </tbody>
         </table>
       )}
@@ -425,6 +554,23 @@ export function WatchPanel() {
             setWriting(null);
             await load();
           }}
+        />
+      )}
+      {writingChild && (
+        <VariableWriteDialog
+          label={variablePathLabel(
+            variableNameOf(
+              writingChild.row.label,
+              writingChild.row.item.fieldPath ?? "",
+            ),
+            writingChild.child.path ?? "",
+          )}
+          current={writingChild.child.value}
+          currentText={writingChild.child.text}
+          onWrite={(value) =>
+            writeVariableField(writingChild.row, writingChild.child, value)
+          }
+          onClose={() => setWritingChild(null)}
         />
       )}
       {writing && !writing.register && (

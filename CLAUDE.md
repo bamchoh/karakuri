@@ -76,7 +76,7 @@ go build ./...
 
 `frontend/src/**/*.test.ts` に、state に依存しない純粋な関数の単体テストがある（`npm test`。開発サーバーなしで走り、CI でも実行する）。
 
-- 対象: `utils/address.ts`（アドレスの表示と入力の変換・範囲の検査・マッピング先のエリアの決め方）、`utils/register.ts`（ワードの結合・分解・書式）、`components/registerList.ts`（行の組み立て・選択の移動）、`utils/windowTitle.ts`（タイトルバーの文字）、`utils/rows.ts`（行を足せる表の行の追加・削除・更新）、`utils/certificates.ts`（証明書の一覧の分け方・書式）、`utils/watch.ts`（下の帯のモニタリングの入力の読み方・候補の絞り込み）
+- 対象: `utils/address.ts`（アドレスの表示と入力の変換・範囲の検査・マッピング先のエリアの決め方）、`utils/register.ts`（ワードの結合・分解・書式）、`components/registerList.ts`（行の組み立て・選択の移動）、`utils/windowTitle.ts`（タイトルバーの文字）、`utils/rows.ts`（行を足せる表の行の追加・削除・更新）、`utils/certificates.ts`（証明書の一覧の分け方・書式）、`utils/watch.ts`（下の帯のモニタリングの入力の読み方・候補の絞り込み・畳んだ行の隠し方）
 - 画面の動き（クリック・入力・表示）は、こちらではなく Playwright で確かめる。**計算や変換を足すときは、コンポーネントの中に書かず純粋な関数にして、ここにテストを足す**
 - 設定は `frontend/vite.config.ts` の `test`（`src/**/*.test.ts` だけを対象にする。`e2e/*.spec.ts` は Playwright のテスト）。Vitest のバージョンは固定
 - テストのファイルも `npm run build` の型検査の対象
@@ -164,6 +164,7 @@ internal/
 │   ├── plc_service_project.go    # プロジェクト Export/Import
 │   ├── plc_service_monitoring.go # モニタリング項目と設定ファイル
 │   ├── plc_service_monitoring_values.go # レジスタ以外のモニタリング項目（変数・接続先の値）のいまの値
+│   ├── plc_service_monitoring_rows.go   # 構造体・配列・いくつもの値を、1 つずつの行にする
 │   ├── plc_service_variables.go  # 変数・マッピング・ノード公開設定・構造体型
 │   ├── plc_service_applog.go     # アプリ全体のログ（取得・消去・画面への通知）
 │   ├── app_events.go             # Wails イベントの送信（WailsAppStateEmitter）と変数変更の間引き
@@ -385,7 +386,10 @@ frontend/src/
   - 項目は、サーバーの「モニタリング」のタブと同じ並び（`MonitoringItemDTO`）。`kind` が空ならレジスタ、`variable` / `subscription` / `poll` はそれ以外。サーバーのタブには、そのサーバーのレジスタだけが出る
   - レジスタの値は画面がメモリを読んで作り、ほかの値は `GetMonitoringValues()`（`plc_service_monitoring_values.go`）が作る。200ms ごとに読み直す（欄を開いている間だけ）
   - 接続先の項目は、接続先の ID と項目の要約（`summary`）で指す（項目の ID は、プロジェクトを読み込むと変わるため）。監視・ポーリングが止まっている・失敗している間は、最後の値を薄く出して理由を添える（`status: "stale"`）
-  - 値を押すと書ける: レジスタは `RegisterWriteDialog`、変数は数値・真偽・文字列だけ（`VariableWriteDialog`。入力の読み方は `utils/watch.ts` の `parseVariableInput()`）。構造体・配列と接続先の値は書けない
+  - **中身がいくつもある値は、まるごと 1 行にせず、1 つずつの行にする**（`MonitoringValueDTO.rows`。作るのは `plc_service_monitoring_rows.go`）: 構造体はフィールドを定義の順に、配列は要素を宣言どおりの添字で（`ARRAY[1..3]` なら `[1]` から。多次元は次元ごとに 1 段）、値をいくつも返す接続先の項目（配列のノード・何個かの読み取り）は値ごとに。画面は、項目の行の下に字下げして並べる
+    - 構造体・配列の行（`composite`）と項目は、畳める（畳んだ行は、欄を閉じても覚えている。アプリを閉じると忘れる）。隠す行を決めるのは `utils/watch.ts` の `visibleRows()`
+    - 1 つの項目から作る行は 200 行まで（超えた分は「…あと N 行」）
+  - 値を押すと書ける: レジスタは `RegisterWriteDialog`、変数は数値・真偽・文字列（`VariableWriteDialog`。入力の読み方は `utils/watch.ts` の `parseVariableInput()`）。構造体のフィールド・配列の要素は、その行を押して書く（行の `path` が、変数の先頭からのパス）。接続先の値は書けない
   - 変数・接続先を消すと、それを指す項目も消す（`removeMonitoringItems()`）。監視項目・読み取り項目だけを消したときは残り、「監視項目がありません」と出る
   - 画面のテスト: `frontend/e2e/watch-panel.spec.ts`、ホスト側は `plc_service_monitoring_values_test.go`
 - **色は `App.css` の先頭の変数で決める**。新しく色を足すときは、16 進の値を直接書かず、変数を使う

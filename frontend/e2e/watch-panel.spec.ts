@@ -33,6 +33,14 @@ const row = (page: Page, label: string) =>
   rows(page).filter({
     has: page.locator(".watch-label", { hasText: new RegExp(`^${label}$`) }),
   });
+// 中身の行（構造体のフィールド・配列の要素・接続先の値の 1 つずつ）
+const children = (page: Page) => page.getByTestId("watch-child");
+const child = (page: Page, label: string) =>
+  children(page).filter({
+    has: page.locator(".watch-label", {
+      hasText: new RegExp(`^${label.replace(/[[\]]/g, "\\$&")}$`),
+    }),
+  });
 const value = (page: Page, label: string) =>
   row(page, label).locator(".watch-value");
 
@@ -76,13 +84,24 @@ test("レジスタと変数を足すと、どのページでも値が見え、�
   await expect(rows(page)).toHaveCount(4);
   await expect(value(page, "Counter")).toHaveText("5");
   await expect(value(page, "Flag")).toHaveText("FALSE");
-  await expect(value(page, "Values")).toHaveText("[0,0,0]");
+  // 配列は、要素を 1 つずつの行にして、字下げして出す（添字は宣言どおり 1 から）
+  await expect(value(page, "Values")).toHaveText("");
+  await expect(children(page).locator(".watch-label")).toHaveText([
+    "[1]",
+    "[2]",
+    "[3]",
+  ]);
+  await expect(children(page).locator(".watch-value")).toHaveText([
+    "0",
+    "0",
+    "0",
+  ]);
 
   // ページを移っても出たまま。ほかから変わった値を追う
   await page.getByTitle("Scripts").click();
   await api(page, "RunScriptOnce", "vars.Counter = 123; vars.Values[2] = 9;");
   await expect(value(page, "Counter")).toHaveText("123");
-  await expect(value(page, "Values")).toHaveText("[0,9,0]");
+  await expect(child(page, "[2]").locator(".watch-value")).toHaveText("9");
   await shot(page, "watch-panel");
 
   // 変数の値を押すと書ける。型に合わない値は、理由を出して閉じない
@@ -103,8 +122,25 @@ test("レジスタと変数を足すと、どのページでも値が見え、�
     .click();
   await expect(value(page, "Flag")).toHaveText("TRUE");
 
-  // 配列・構造体は、ここからは書けない（押しても開かない）
-  await expect(value(page, "Values")).not.toHaveClass(/writable/);
+  // 配列の要素の行を押すと、その要素に書ける
+  await child(page, "[3]").locator(".watch-value").click();
+  const elemWrite = dialogByTitle(page, "変数の書き込み");
+  await expect(elemWrite.locator(".dialog-value").first()).toHaveText(
+    "Values[3]",
+  );
+  await elemWrite.locator("input").fill("33");
+  await elemWrite.getByRole("button", { name: "書き込み" }).click();
+  await expect(child(page, "[3]").locator(".watch-value")).toHaveText("33");
+
+  // 中身は畳める。欄を閉じて開いても、畳んだまま
+  await row(page, "Values").getByLabel("中身を畳む").click();
+  await expect(children(page)).toHaveCount(0);
+  await watchTab(page).click();
+  await watchTab(page).click();
+  await expect(rows(page)).toHaveCount(4);
+  await expect(children(page)).toHaveCount(0);
+  await row(page, "Values").getByLabel("中身を開く").click();
+  await expect(children(page)).toHaveCount(3);
 
   // レジスタの値も、押すと書ける
   await rows(page).first().locator(".watch-value").click();
@@ -186,7 +222,7 @@ test("接続先のサブスクリプションとポーリングの値を足せ�
     "AddClientPollItem",
     mb.id,
     "3",
-    { address: 0, count: 1 },
+    { address: 0, count: 2 },
     "",
   );
   await api(page, "SetClientPollInterval", mb.id, 100);
@@ -219,11 +255,18 @@ test("接続先のサブスクリプションとポーリングの値を足せ�
   await api(page, "StartClientPolling", mb.id);
   await expect(uaRow).toHaveClass(/watch-ok/);
   await expect(uaRow.locator(".watch-value")).toContainText("21");
-  await expect(mbRow.locator(".watch-value")).toContainText("7");
+  // 値をいくつも返す項目（2 個の読み取り）は、1 つずつの行にする
+  await expect(children(page)).toHaveCount(2);
+  await expect(children(page).first().locator(".watch-value")).toContainText(
+    "7",
+  );
   await api(page, "UpdateVariableValue", v.id, 22);
   await api(page, "WriteWord", "modbus-tcp", "holdingRegisters", 0, 8);
   await expect(uaRow.locator(".watch-value")).toContainText("22");
-  await expect(mbRow.locator(".watch-value")).toContainText("8");
+  await expect(children(page).first().locator(".watch-value")).toContainText(
+    "8",
+  );
+  await expect(mbRow.locator(".watch-value")).toHaveText("");
   // 接続先の値は、ここからは書けない
   await expect(uaRow.locator(".watch-value")).not.toHaveClass(/writable/);
   await shot(page, "watch-panel-clients");
@@ -237,4 +280,80 @@ test("接続先のサブスクリプションとポーリングの値を足せ�
   await api(page, "StopClientPolling", mb.id);
   await api(page, "RemoveClient", mb.id);
   await expect(rows(page)).toHaveCount(1);
+});
+
+test("構造体は、フィールドを定義の順に 1 行ずつ出し、入れ子は畳める", async ({
+  page,
+}) => {
+  await api(page, "RegisterStructType", {
+    name: "Motor",
+    fields: [
+      { name: "speed", dataType: "INT", offset: 0 },
+      { name: "on", dataType: "BOOL", offset: 0 },
+      { name: "limits", dataType: "ARRAY[1..2] OF INT", offset: 0 },
+    ],
+    wordCount: 0,
+  });
+  const m = await createVariable(page, "Motor1", "Motor");
+  await api(page, "AddMonitoringItem", {
+    id: "",
+    order: 0,
+    protocolType: "",
+    memoryArea: "",
+    address: 0,
+    bitWidth: 0,
+    endianness: "",
+    displayFormat: "",
+    kind: "variable",
+    variableId: m.id,
+  });
+  await openApp(page);
+  await watchTab(page).click();
+
+  await expect(children(page).locator(".watch-label")).toHaveText([
+    "speed",
+    "on",
+    "limits",
+    "[1]",
+    "[2]",
+  ]);
+  await expect(children(page).locator(".watch-value")).toHaveText([
+    "0",
+    "FALSE",
+    "",
+    "0",
+    "0",
+  ]);
+  // 入れ子は、1 段深く字下げする
+  const pad = async (label: string) =>
+    parseFloat(
+      await child(page, label)
+        .locator(".watch-label")
+        .evaluate((el) => getComputedStyle(el).paddingLeft),
+    );
+  expect(await pad("[1]")).toBeGreaterThan(await pad("limits"));
+
+  // フィールドに書ける（名前は、変数名からのパス）
+  await child(page, "speed").locator(".watch-value").click();
+  const write = dialogByTitle(page, "変数の書き込み");
+  await expect(write.locator(".dialog-value").first()).toHaveText(
+    "Motor1.speed",
+  );
+  await write.locator("input").fill("1500");
+  await write.getByRole("button", { name: "書き込み" }).click();
+  await expect(child(page, "speed").locator(".watch-value")).toHaveText("1500");
+  await child(page, "on").locator(".watch-value").click();
+  await dialogByTitle(page, "変数の書き込み")
+    .getByRole("button", { name: "TRUE" })
+    .click();
+  await expect(child(page, "on").locator(".watch-value")).toHaveText("TRUE");
+  await shot(page, "watch-panel-struct");
+
+  // 入れ子の配列だけを畳める
+  await child(page, "limits").getByLabel("中身を畳む").click();
+  await expect(children(page).locator(".watch-label")).toHaveText([
+    "speed",
+    "on",
+    "limits",
+  ]);
 });

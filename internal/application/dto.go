@@ -182,6 +182,21 @@ type MonitoringItemDTO struct {
 	Summary    string `json:"summary,omitempty"`
 }
 
+// MonitoringValueRowDTO は、モニタリングの値の中身の 1 行（構造体のフィールド・配列の要素・接続先の値の 1 つ）
+type MonitoringValueRowDTO struct {
+	// 変数の先頭からのパス（"motor.speed"、"[1]"。添字は宣言どおり）。書き込みに使う。接続先の値では空
+	Path  string `json:"path,omitempty"`
+	Label string `json:"label"` // この行の名前（フィールド名、"[1]"、接続先の値のラベル）
+	Depth int    `json:"depth"` // 字下げの深さ（項目の直下が 1）
+	Text  string `json:"text"`  // 表示する値（Composite なら空）
+	// 変数の値そのもの（数値・真偽・文字列なら、画面から書ける）
+	Value interface{} `json:"value,omitempty"`
+	// この行は構造体か配列で、中身が下の行に続く
+	Composite bool `json:"composite,omitempty"`
+	// 上限を超えて出さなかった行があることを知らせる行（Label に「あと N 行」）
+	More bool `json:"more,omitempty"`
+}
+
 // モニタリング項目の種類（MonitoringItemDTO.Kind。空はレジスタ）
 const (
 	MonitoringKindVariable     = "variable"
@@ -194,7 +209,10 @@ type MonitoringValueDTO struct {
 	ID     string `json:"id"`     // モニタリング項目の ID
 	Source string `json:"source"` // 出どころ（「変数」「接続先: 名前」）
 	Label  string `json:"label"`  // 名前（変数名 + パス、監視項目の要約）
-	Text   string `json:"text"`   // 表示する値（まだ値がなければ空）
+	Text   string `json:"text"`   // 表示する値（まだ値がなければ空。中身を Rows で返すときも空）
+	// 中身がいくつもある値（構造体・配列の変数、値をいくつも返す接続先の項目）の、中身の 1 つずつ。
+	// 画面は、項目の行の下に、字下げして並べる
+	Rows []MonitoringValueRowDTO `json:"rows,omitempty"`
 	// 変数の値そのもの（LINT / ULINT は文字列）。数値・真偽・文字列なら、画面から書ける
 	Value interface{} `json:"value,omitempty"`
 	// "ok" / "stale"（値は最後に届いたもの。監視・ポーリングが止まっている・失敗している）/ "error"（指しているものがない）

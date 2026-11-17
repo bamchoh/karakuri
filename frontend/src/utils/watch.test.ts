@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { filterCandidates, isWritableValue, parseVariableInput } from "./watch";
+import {
+  filterCandidates,
+  isWritableValue,
+  parseVariableInput,
+  variableNameOf,
+  variablePathLabel,
+  visibleRows,
+} from "./watch";
 
 describe("isWritableValue", () => {
   it("数値・真偽・文字列は書ける。構造体・配列は書けない", () => {
@@ -54,5 +61,51 @@ describe("filterCandidates", () => {
     expect(filterCandidates(list, "int").map((c) => c.key)).toEqual(["1"]);
     expect(filterCandidates(list, "TEMP").map((c) => c.key)).toEqual(["3"]);
     expect(filterCandidates(list, "zzz")).toEqual([]);
+  });
+});
+
+describe("visibleRows", () => {
+  // Line: [5]{speed, limits{[1],[2]}}, [6]{speed}
+  const rows = [
+    { path: "[5]", depth: 1, composite: true },
+    { path: "[5].speed", depth: 2 },
+    { path: "[5].limits", depth: 2, composite: true },
+    { path: "[5].limits[1]", depth: 3 },
+    { path: "[5].limits[2]", depth: 3 },
+    { path: "[6]", depth: 1, composite: true },
+    { path: "[6].speed", depth: 2 },
+  ];
+  const shown = (collapsed: string[]) =>
+    visibleRows(rows, (r) => collapsed.includes(r.path)).map((r) => r.path);
+
+  it("畳んでいなければ、全部出す", () => {
+    expect(shown([])).toEqual(rows.map((r) => r.path));
+  });
+  it("畳んだ行の中身（孫も）を除く。畳んだ行そのものと、次の行は出す", () => {
+    expect(shown(["[5]"])).toEqual(["[5]", "[6]", "[6].speed"]);
+    expect(shown(["[5].limits"])).toEqual([
+      "[5]",
+      "[5].speed",
+      "[5].limits",
+      "[6]",
+      "[6].speed",
+    ]);
+    expect(shown(["[5]", "[6]"])).toEqual(["[5]", "[6]"]);
+  });
+  it("中で畳んだ行があっても、外を畳めば全部隠れる", () => {
+    expect(shown(["[5]", "[5].limits"])).toEqual(["[5]", "[6]", "[6].speed"]);
+  });
+});
+
+describe("variablePathLabel / variableNameOf", () => {
+  it("変数名とパスをつなぐ", () => {
+    expect(variablePathLabel("Motor1", "")).toBe("Motor1");
+    expect(variablePathLabel("Motor1", "speed")).toBe("Motor1.speed");
+    expect(variablePathLabel("Values", "[1].x")).toBe("Values[1].x");
+  });
+  it("項目の名前から変数名を取り出す", () => {
+    expect(variableNameOf("Line[6]", "[6]")).toBe("Line");
+    expect(variableNameOf("Motor1.speed", "speed")).toBe("Motor1");
+    expect(variableNameOf("Motor1", "")).toBe("Motor1");
   });
 });

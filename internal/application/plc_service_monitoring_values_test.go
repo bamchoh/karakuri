@@ -61,8 +61,16 @@ func TestMonitoringValues_Variables(t *testing.T) {
 	if err := svc.UpdateVariableFieldValue(arr.ID, "[2]", 7); err != nil {
 		t.Fatal(err)
 	}
-	if v := monitoringValue(t, svc, idArr); v.Text != "[0,7,0]" {
+	// 配列は、要素を 1 つずつの行にする（添字は宣言どおり 1 から。パスは書き込みに使える）
+	v := monitoringValue(t, svc, idArr)
+	if v.Text != "" || len(v.Rows) != 3 || v.Rows[1].Label != "[2]" || v.Rows[1].Path != "[2]" || v.Rows[1].Text != "7" || v.Rows[1].Depth != 1 || v.Rows[1].Composite {
 		t.Fatalf("Values: %+v", v)
+	}
+	if err := svc.UpdateVariableFieldValue(arr.ID, v.Rows[2].Path, 8); err != nil {
+		t.Fatal(err)
+	}
+	if v := monitoringValue(t, svc, idArr); v.Rows[2].Text != "8" {
+		t.Fatalf("行のパスで書いたあと: %+v", v.Rows)
 	}
 	if v := monitoringValue(t, svc, idElem); v.Label != "Values[2]" || v.Text != "7" {
 		t.Fatalf("Values[2]: %+v", v)
@@ -157,16 +165,102 @@ func TestMonitoringValues_ClientSubscriptionAndPolling(t *testing.T) {
 	}
 }
 
-func TestMonitoringValues_ManyValuesInOneItem(t *testing.T) {
-	values := make([]ClientResultValueDTO, 20)
-	for i := range values {
-		values[i] = ClientResultValueDTO{Label: "v", Value: "1"}
+func TestMonitoringValues_StructAndNestedArrayRows(t *testing.T) {
+	svc, _ := newClientTestService(t)
+	// フィールドは、名前の順ではなく、定義の順に並ぶ
+	if _, err := svc.RegisterStructType(StructTypeDTO{Name: "Motor", Fields: []StructFieldDTO{
+		{Name: "speed", DataType: "INT"},
+		{Name: "on", DataType: "BOOL"},
+		{Name: "limits", DataType: "ARRAY[1..2] OF INT"},
+	}}); err != nil {
+		t.Fatal(err)
 	}
-	if got := resultValuesText(values[:2]); got != "v: 1, v: 1" {
-		t.Fatalf("2 個 = %q", got)
+	line, err := svc.CreateVariable("Line", "ARRAY[5..6] OF Motor", nil)
+	if err != nil {
+		t.Fatal(err)
 	}
-	got := resultValuesText(values)
-	if want := "…（全 20 個）"; len(got) < len(want) || got[len(got)-len(want):] != want {
-		t.Fatalf("20 個は途中で切る: %q", got)
+	grid, _ := svc.CreateVariable("Grid", "ARRAY[0..1, 1..2] OF INT", nil)
+	whole, _ := svc.AddMonitoringItem(&MonitoringItemDTO{Kind: MonitoringKindVariable, VariableID: line.ID})
+	part, _ := svc.AddMonitoringItem(&MonitoringItemDTO{Kind: MonitoringKindVariable, VariableID: line.ID, FieldPath: "[6]"})
+	gridItem, _ := svc.AddMonitoringItem(&MonitoringItemDTO{Kind: MonitoringKindVariable, VariableID: grid.ID})
+
+	if err := svc.UpdateVariableFieldValue(line.ID, "[6].limits[2]", 9); err != nil {
+		t.Fatal(err)
+	}
+	type want struct {
+		path, label string
+		depth       int
+		text        string
+		composite   bool
+	}
+	check := func(name string, rows []MonitoringValueRowDTO, wants []want) {
+		t.Helper()
+		if len(rows) != len(wants) {
+			t.Fatalf("%s: 行 = %d 個, want %d: %+v", name, len(rows), len(wants), rows)
+		}
+		for i, w := range wants {
+			r := rows[i]
+			if r.Path != w.path || r.Label != w.label || r.Depth != w.depth || r.Text != w.text || r.Composite != w.composite {
+				t.Fatalf("%s: 行 %d = %+v, want %+v", name, i, r, w)
+			}
+		}
+	}
+	motor := func(prefix string, depth int, last string) []want {
+		return []want{
+			{prefix + ".speed", "speed", depth, "0", false},
+			{prefix + ".on", "on", depth, "FALSE", false},
+			{prefix + ".limits", "limits", depth, "", true},
+			{prefix + ".limits[1]", "[1]", depth + 1, "0", false},
+			{prefix + ".limits[2]", "[2]", depth + 1, last, false},
+		}
+	}
+	wants := append([]want{{"[5]", "[5]", 1, "", true}}, motor("[5]", 2, "0")...)
+	wants = append(wants, want{"[6]", "[6]", 1, "", true})
+	wants = append(wants, motor("[6]", 2, "9")...)
+	check("まるごと", monitoringValue(t, svc, whole.ID).Rows, wants)
+
+	// 要素を指した項目は、その中身だけ。パスは変数の先頭から
+	v := monitoringValue(t, svc, part.ID)
+	if v.Label != "Line[6]" {
+		t.Fatalf("要素の項目の名前 = %q", v.Label)
+	}
+	check("要素", v.Rows, motor("[6]", 1, "9"))
+
+	// 多次元配列は、次元ごとに 1 段ずつ（添字は、それぞれの次元の宣言どおり）
+	check("多次元", monitoringValue(t, svc, gridItem.ID).Rows, []want{
+		{"[0]", "[0]", 1, "", true},
+		{"[0][1]", "[1]", 2, "0", false},
+		{"[0][2]", "[2]", 2, "0", false},
+		{"[1]", "[1]", 1, "", true},
+		{"[1][1]", "[1]", 2, "0", false},
+		{"[1][2]", "[2]", 2, "0", false},
+	})
+}
+
+func TestMonitoringValues_RowLimit(t *testing.T) {
+	svc, _ := newClientTestService(t)
+	big, err := svc.CreateVariable("Big", "ARRAY[0..499] OF INT", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	item, _ := svc.AddMonitoringItem(&MonitoringItemDTO{Kind: MonitoringKindVariable, VariableID: big.ID})
+	rows := monitoringValue(t, svc, item.ID).Rows
+	if len(rows) != monitoringMaxRows+1 {
+		t.Fatalf("行 = %d 個, want %d", len(rows), monitoringMaxRows+1)
+	}
+	if last := rows[len(rows)-1]; !last.More || last.Label != "…あと 300 行" {
+		t.Fatalf("最後の行: %+v", last)
+	}
+
+	// 接続先の値も、いくつもあれば 1 つずつの行にする（1 つなら、項目の行に出す）
+	var v MonitoringValueDTO
+	fillResultValues(&v, []ClientResultValueDTO{{Label: "[0]", Value: "1"}, {Label: "[1]", Value: "2"}})
+	if v.Text != "" || len(v.Rows) != 2 || v.Rows[1].Label != "[1]" || v.Rows[1].Text != "2" || v.Rows[1].Depth != 1 {
+		t.Fatalf("値が 2 つ: %+v", v)
+	}
+	v = MonitoringValueDTO{}
+	fillResultValues(&v, []ClientResultValueDTO{{Label: "Value", Value: "5"}})
+	if v.Text != "5" || len(v.Rows) != 0 {
+		t.Fatalf("値が 1 つ: %+v", v)
 	}
 }
