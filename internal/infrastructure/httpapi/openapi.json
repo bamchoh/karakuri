@@ -53,6 +53,40 @@
       "parameters": [{ "$ref": "#/components/parameters/protocolType" }],
       "get": { "tags": ["メモリ"], "summary": "メモリエリアの一覧", "responses": { "200": { "description": "エリアの一覧", "content": { "application/json": { "schema": { "type": "array", "items": { "$ref": "#/components/schemas/MemoryArea" } } } } } } }
     },
+    "/api/memory/{protocolType}/words": {
+      "parameters": [{ "$ref": "#/components/parameters/protocolType" }],
+      "get": {
+        "tags": ["メモリ"], "summary": "アドレスを文字で指定してワードを読む（D10、X10 など）",
+        "description": "ビットのデバイス（X10）を指定すると、そこから 16 点を 1 ワードにする（最初の点がビット 0）。ワードの中のビット（D10.3）は指定できない",
+        "parameters": [
+          { "name": "address", "in": "query", "required": true, "schema": { "type": "string" }, "example": "D10", "description": "PLC の書き方のアドレス。SLMP / MC プロトコル: D10、D10.3（ビットの位置は 16 進 0〜F）、X1F（X・Y・B・W などは 16 進）、M100。FINS: D100、CIO 100.05（CIO は省いて 100.05 でもよい）、W10.15、H、A、T5、C5、TF5 / CF5（アップフラグ）、E0_100（EM バンク 0）。Modbus: 40001（保持レジスタ 1 番。6 桁の 400001 も可）、30001、00001、10001、40001.3（レジスタのビット 0〜15）" },
+          { "$ref": "#/components/parameters/count" }
+        ],
+        "responses": { "200": { "description": "値（0〜65535）と、アドレスから決まったエリアと 0 始まりのアドレス", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/MemoryAtWords" } } } }, "400": { "$ref": "#/components/responses/Error" } }
+      },
+      "put": {
+        "tags": ["メモリ"], "summary": "アドレスを文字で指定して、続けてワードを書く（範囲外なら 1 つも書かない）",
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "type": "object", "required": ["address"], "properties": { "address": { "type": "string", "description": "PLC の書き方のアドレス。SLMP / MC プロトコル: D10、D10.3（ビットの位置は 16 進 0〜F）、X1F（X・Y・B・W などは 16 進）、M100。FINS: D100、CIO 100.05（CIO は省いて 100.05 でもよい）、W10.15、H、A、T5、C5、TF5 / CF5（アップフラグ）、E0_100（EM バンク 0）。Modbus: 40001（保持レジスタ 1 番。6 桁の 400001 も可）、30001、00001、10001、40001.3（レジスタのビット 0〜15）" }, "value": { "type": "integer", "minimum": -32768, "maximum": 65535 }, "values": { "type": "array", "items": { "type": "integer", "minimum": -32768, "maximum": 65535 } } }, "description": "value（1 つ）か values（並び）のどちらか" }, "example": { "address": "D10", "values": [1, 2, 3] } } } },
+        "responses": { "204": { "description": "書いた" }, "400": { "$ref": "#/components/responses/Error" } }
+      }
+    },
+    "/api/memory/{protocolType}/bits": {
+      "parameters": [{ "$ref": "#/components/parameters/protocolType" }],
+      "get": {
+        "tags": ["メモリ"], "summary": "アドレスを文字で指定してビットを読む（D10.3、X1F など）",
+        "description": "ワード（D10）を指定すると、そのワードのビット 0 から読む",
+        "parameters": [
+          { "name": "address", "in": "query", "required": true, "schema": { "type": "string" }, "example": "D10.3", "description": "PLC の書き方のアドレス。SLMP / MC プロトコル: D10、D10.3（ビットの位置は 16 進 0〜F）、X1F（X・Y・B・W などは 16 進）、M100。FINS: D100、CIO 100.05（CIO は省いて 100.05 でもよい）、W10.15、H、A、T5、C5、TF5 / CF5（アップフラグ）、E0_100（EM バンク 0）。Modbus: 40001（保持レジスタ 1 番。6 桁の 400001 も可）、30001、00001、10001、40001.3（レジスタのビット 0〜15）" },
+          { "$ref": "#/components/parameters/count" }
+        ],
+        "responses": { "200": { "description": "値と、アドレスから決まったエリアと 0 始まりのアドレス（ワードのエリアなら ワード × 16 + ビット）", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/MemoryAtBits" } } } }, "400": { "$ref": "#/components/responses/Error" } }
+      },
+      "put": {
+        "tags": ["メモリ"], "summary": "アドレスを文字で指定して、続けてビットを書く（範囲外なら 1 つも書かない）",
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "type": "object", "required": ["address"], "properties": { "address": { "type": "string", "description": "PLC の書き方のアドレス。SLMP / MC プロトコル: D10、D10.3（ビットの位置は 16 進 0〜F）、X1F（X・Y・B・W などは 16 進）、M100。FINS: D100、CIO 100.05（CIO は省いて 100.05 でもよい）、W10.15、H、A、T5、C5、TF5 / CF5（アップフラグ）、E0_100（EM バンク 0）。Modbus: 40001（保持レジスタ 1 番。6 桁の 400001 も可）、30001、00001、10001、40001.3（レジスタのビット 0〜15）" }, "value": { "type": "boolean" }, "values": { "type": "array", "items": { "type": "boolean" } } }, "description": "value（1 つ）か values（並び）のどちらか" }, "example": { "address": "D10.3", "value": true } } } },
+        "responses": { "204": { "description": "書いた" }, "400": { "$ref": "#/components/responses/Error" } }
+      }
+    },
     "/api/memory/{protocolType}/{area}/words": {
       "parameters": [{ "$ref": "#/components/parameters/protocolType" }, { "$ref": "#/components/parameters/area" }],
       "get": {
@@ -321,9 +355,9 @@
     "parameters": {
       "protocolType": { "name": "protocolType", "in": "path", "required": true, "description": "プロトコルタイプ（modbus-tcp, opcua, fins, slmp など）", "schema": { "type": "string" } },
       "area": { "name": "area", "in": "path", "required": true, "description": "メモリエリアの ID（areas で調べる）", "schema": { "type": "string" } },
-      "address": { "name": "address", "in": "query", "description": "0 始まりのアドレス（既定 0）", "schema": { "type": "integer", "minimum": 0, "default": 0 } },
+      "address": { "name": "address", "in": "query", "description": "0 始まりのアドレス（既定 0）（ワードのエリアをビットで読み書きするときは、ビットの番号 = ワード × 16 + ビット。ビットのエリアをワードで読み書きするときは、そのビットから 16 点で 1 ワード）", "schema": { "type": "integer", "minimum": 0, "default": 0 } },
       "count": { "name": "count", "in": "query", "description": "個数（既定 1）", "schema": { "type": "integer", "minimum": 1, "maximum": 65535, "default": 1 } },
-      "pathAddress": { "name": "address", "in": "path", "required": true, "description": "0 始まりのアドレス", "schema": { "type": "integer", "minimum": 0 } },
+      "pathAddress": { "name": "address", "in": "path", "required": true, "description": "0 始まりのアドレス（ワードのエリアをビットで読み書きするときは、ビットの番号 = ワード × 16 + ビット。ビットのエリアをワードで読み書きするときは、そのビットから 16 点で 1 ワード）", "schema": { "type": "integer", "minimum": 0 } },
       "variableRef": { "name": "ref", "in": "path", "required": true, "description": "変数の ID か名前", "schema": { "type": "string" } },
       "fieldPath": { "name": "path", "in": "query", "description": "フィールド・要素（speed, [1], [1].name。添字は宣言どおり）。省けば変数全体", "schema": { "type": "string" } },
       "clientRef": { "name": "ref", "in": "path", "required": true, "description": "接続先の ID か名前", "schema": { "type": "string" } },
@@ -334,6 +368,8 @@
       "Error": { "description": "エラー", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } }
     },
     "schemas": {
+      "MemoryAtWords": { "type": "object", "properties": { "area": { "type": "string", "example": "D" }, "address": { "type": "integer", "example": 10 }, "values": { "type": "array", "items": { "type": "integer" } } } },
+      "MemoryAtBits": { "type": "object", "properties": { "area": { "type": "string", "example": "D" }, "address": { "type": "integer", "example": 163 }, "values": { "type": "array", "items": { "type": "boolean" } } } },
       "Error": { "type": "object", "properties": { "error": { "type": "string" } } },
       "ServerInstance": { "type": "object", "properties": { "protocolType": { "type": "string" }, "displayName": { "type": "string" }, "variant": { "type": "string" }, "status": { "type": "string" } } },
       "ServerConfig": { "type": "object", "properties": { "protocolType": { "type": "string" }, "variant": { "type": "string" }, "settings": { "type": "object", "additionalProperties": {} } } },

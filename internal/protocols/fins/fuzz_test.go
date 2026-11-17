@@ -5,6 +5,8 @@ import (
 	"encoding/hex"
 	"strings"
 	"testing"
+
+	"karakuri/internal/domain/protocol"
 )
 
 // ファズテスト。外から届くバイト列で panic しない（panic するとアプリ全体が落ちる）ことと、応答の形が正しいことを確かめる。
@@ -117,5 +119,33 @@ func FuzzClientDecodeResponse(f *testing.F) {
 	}
 	f.Fuzz(func(t *testing.T, req, frame []byte) {
 		_, _, _ = decodeResponse(req, frame)
+	})
+}
+
+// HTTP API で利用者が書くアドレスの文字を読む。panic せず、読めたら、エリアがあり、アドレスがエリアの中にある
+func FuzzParseAddress(f *testing.F) {
+	for _, s := range []string{"D10", "D10.3", "X1F", "CIO 100.05", "TF5", "E0_100", "40001", "40001.15", "00001", "", ".", "D.1", "E18_65535.15"} {
+		f.Add(s)
+	}
+	areas := map[string]protocol.MemoryArea{}
+	for _, a := range NewDataStore().GetAreas() {
+		areas[a.ID] = a
+	}
+	f.Fuzz(func(t *testing.T, text string) {
+		da, err := parseAddress(text)
+		if err != nil {
+			return
+		}
+		a, ok := areas[da.Area]
+		if !ok {
+			t.Fatalf("parseAddress(%q) = %+v: エリアがない", text, da)
+		}
+		size := uint64(a.Size)
+		if da.Bit && !a.IsBit {
+			size *= 16
+		}
+		if uint64(da.Address) >= size {
+			t.Fatalf("parseAddress(%q) = %+v: エリアの大きさ %d を超える", text, da, a.Size)
+		}
 	})
 }

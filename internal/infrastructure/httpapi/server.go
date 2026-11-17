@@ -99,6 +99,10 @@ func (s *Server) routes() []route {
 
 		// === メモリ操作 ===
 		{"GET", "/api/memory/{protocolType}/areas", s.handleGetMemoryAreas},
+		{"GET", "/api/memory/{protocolType}/words", s.handleReadWordsAt},
+		{"PUT", "/api/memory/{protocolType}/words", s.handleWriteWordsAt},
+		{"GET", "/api/memory/{protocolType}/bits", s.handleReadBitsAt},
+		{"PUT", "/api/memory/{protocolType}/bits", s.handleWriteBitsAt},
 		{"GET", "/api/memory/{protocolType}/{area}/words", s.handleReadWords},
 		{"PUT", "/api/memory/{protocolType}/{area}/words", s.handleWriteWords},
 		{"PUT", "/api/memory/{protocolType}/{area}/words/{address}", s.handleWriteWord},

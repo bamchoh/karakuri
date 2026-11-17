@@ -5,6 +5,8 @@ package protocoltest
 import (
 	"context"
 	"fmt"
+	"strconv"
+	"strings"
 	"sync"
 
 	"karakuri/internal/domain/protocol"
@@ -62,21 +64,43 @@ func NewDataStore() *DataStore {
 
 func (d *DataStore) GetAreas() []protocol.MemoryArea { return Areas }
 
-// check はエリアの種類とアドレス範囲を確かめる
-func check(area string, isBit bool, address uint32, count int) error {
+// check はエリアがあるかと、address から points 点（エリアの単位: ビットのエリアは点、ワードのエリアはワード）が
+// 範囲に収まるかを確かめ、エリアを返す
+func check(area string, address uint64, points uint64) (protocol.MemoryArea, error) {
 	for _, a := range Areas {
 		if a.ID != area {
 			continue
 		}
-		if a.IsBit != isBit {
-			return fmt.Errorf("area %q: wrong access type", area)
+		size := uint64(a.Size)
+		if address+points > size {
+			return a, fmt.Errorf("area %q: address %d (count %d) out of range", area, address, points)
 		}
-		if uint64(address)+uint64(count) > uint64(a.Size) {
-			return fmt.Errorf("area %q: address %d (count %d) out of range", area, address, count)
-		}
-		return nil
+		return a, nil
 	}
-	return fmt.Errorf("unknown area %q", area)
+	return protocol.MemoryArea{}, fmt.Errorf("unknown area %q", area)
+}
+
+// bitsRange は、ビットで読み書きするときの範囲を確かめる（ワードのエリアなら、address はワード × 16 + ビット）
+func bitsRange(area string, address uint32, count int) (protocol.MemoryArea, error) {
+	for _, a := range Areas {
+		if a.ID == area && !a.IsBit {
+			if uint64(address)+uint64(count) > uint64(a.Size)*16 {
+				return a, fmt.Errorf("area %q: bit %d (count %d) out of range", area, address, count)
+			}
+			return a, nil
+		}
+	}
+	return check(area, uint64(address), uint64(count))
+}
+
+// wordsRange は、ワードで読み書きするときの範囲を確かめる（ビットのエリアなら、address のビットから 16 点ずつ）
+func wordsRange(area string, address uint32, count int) (protocol.MemoryArea, error) {
+	for _, a := range Areas {
+		if a.ID == area && a.IsBit {
+			return check(area, uint64(address), uint64(count)*16)
+		}
+	}
+	return check(area, uint64(address), uint64(count))
 }
 
 func (d *DataStore) ReadBit(area string, address uint32) (bool, error) {
@@ -91,30 +115,55 @@ func (d *DataStore) WriteBit(area string, address uint32, value bool) error {
 	return d.WriteBits(area, address, []bool{value})
 }
 
+// getBit / setBit は、エリアの n 番目のビット（ワードのエリアなら ワード × 16 + ビット）を読み書きする（ロック済み）
+func (d *DataStore) getBit(a protocol.MemoryArea, n uint32) bool {
+	if a.IsBit {
+		return d.bits[a.ID][n]
+	}
+	return d.words[a.ID][n/16]&(1<<(n%16)) != 0
+}
+
+func (d *DataStore) setBit(a protocol.MemoryArea, n uint32, v bool) {
+	if a.IsBit {
+		if d.bits[a.ID] == nil {
+			d.bits[a.ID] = make(map[uint32]bool)
+		}
+		d.bits[a.ID][n] = v
+		return
+	}
+	if d.words[a.ID] == nil {
+		d.words[a.ID] = make(map[uint32]uint16)
+	}
+	w := d.words[a.ID][n/16] &^ (1 << (n % 16))
+	if v {
+		w |= 1 << (n % 16)
+	}
+	d.words[a.ID][n/16] = w
+}
+
 func (d *DataStore) ReadBits(area string, address uint32, count uint16) ([]bool, error) {
-	if err := check(area, true, address, int(count)); err != nil {
+	a, err := bitsRange(area, address, int(count))
+	if err != nil {
 		return nil, err
 	}
 	d.mu.Lock()
 	defer d.mu.Unlock()
 	result := make([]bool, count)
 	for i := range result {
-		result[i] = d.bits[area][address+uint32(i)]
+		result[i] = d.getBit(a, address+uint32(i))
 	}
 	return result, nil
 }
 
 func (d *DataStore) WriteBits(area string, address uint32, values []bool) error {
-	if err := check(area, true, address, len(values)); err != nil {
+	a, err := bitsRange(area, address, len(values))
+	if err != nil {
 		return err
 	}
 	d.mu.Lock()
 	defer d.mu.Unlock()
-	if d.bits[area] == nil {
-		d.bits[area] = make(map[uint32]bool)
-	}
 	for i, v := range values {
-		d.bits[area][address+uint32(i)] = v
+		d.setBit(a, address+uint32(i), v)
 	}
 	return nil
 }
@@ -132,29 +181,45 @@ func (d *DataStore) WriteWord(area string, address uint32, value uint16) error {
 }
 
 func (d *DataStore) ReadWords(area string, address uint32, count uint16) ([]uint16, error) {
-	if err := check(area, false, address, int(count)); err != nil {
+	a, err := wordsRange(area, address, int(count))
+	if err != nil {
 		return nil, err
 	}
 	d.mu.Lock()
 	defer d.mu.Unlock()
 	result := make([]uint16, count)
 	for i := range result {
-		result[i] = d.words[area][address+uint32(i)]
+		if !a.IsBit {
+			result[i] = d.words[area][address+uint32(i)]
+			continue
+		}
+		for b := range 16 {
+			if d.getBit(a, address+uint32(i*16+b)) {
+				result[i] |= 1 << b
+			}
+		}
 	}
 	return result, nil
 }
 
 func (d *DataStore) WriteWords(area string, address uint32, values []uint16) error {
-	if err := check(area, false, address, len(values)); err != nil {
+	a, err := wordsRange(area, address, len(values))
+	if err != nil {
 		return err
 	}
 	d.mu.Lock()
 	defer d.mu.Unlock()
-	if d.words[area] == nil {
-		d.words[area] = make(map[uint32]uint16)
-	}
 	for i, v := range values {
-		d.words[area][address+uint32(i)] = v
+		if !a.IsBit {
+			if d.words[area] == nil {
+				d.words[area] = make(map[uint32]uint16)
+			}
+			d.words[area][address+uint32(i)] = v
+			continue
+		}
+		for b := range 16 {
+			d.setBit(a, address+uint32(i*16+b), v&(1<<b) != 0)
+		}
 	}
 	return nil
 }
@@ -304,4 +369,35 @@ func (f *Factory) MapToConfig(variantID string, settings map[string]interface{})
 		return nil, fmt.Errorf("port は 1〜65535 で指定してください")
 	}
 	return cfg, nil
+}
+
+// ParseAddress は、フェイクのアドレスの書き方「エリアの ID:番号[.ビット]」（"holdingRegisters:10.3"、"coils:5"）を読む。
+// 番号は 0 始まり。ビットはワードのエリアにだけ付けられる（0〜15）
+func (f *Factory) ParseAddress(text string) (protocol.DeviceAddress, error) {
+	area, rest, ok := strings.Cut(text, ":")
+	if !ok {
+		return protocol.DeviceAddress{}, fmt.Errorf("アドレスの形が違います: %q", text)
+	}
+	var def *protocol.MemoryArea
+	for i := range Areas {
+		if Areas[i].ID == area {
+			def = &Areas[i]
+		}
+	}
+	if def == nil {
+		return protocol.DeviceAddress{}, fmt.Errorf("エリアがありません: %q", area)
+	}
+	numText, bitText, hasBit := strings.Cut(rest, ".")
+	n, err := strconv.ParseUint(numText, 10, 32)
+	if err != nil {
+		return protocol.DeviceAddress{}, fmt.Errorf("番号が読めません: %q", text)
+	}
+	if !hasBit {
+		return protocol.DeviceAddress{Area: area, Address: uint32(n), Bit: def.IsBit}, nil
+	}
+	b, err := strconv.ParseUint(bitText, 10, 8)
+	if err != nil || b > 15 || def.IsBit {
+		return protocol.DeviceAddress{}, fmt.Errorf("ビットの位置が違います: %q", text)
+	}
+	return protocol.DeviceAddress{Area: area, Address: uint32(n)*16 + uint32(b), Bit: true}, nil
 }
