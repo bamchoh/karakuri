@@ -29,7 +29,8 @@ type VariableBackedDataStore struct {
 	varStore     *variable.VariableStore
 	protocolType string
 
-	// 同じメモリを指すエリア。作ったあとは変えない
+	// エリアの性質。作ったあとは変えない
+	isBitArea  map[string]bool     // ビットのエリアか（ワードで読み書きされたときの範囲の数え方が違う）
 	wordAreaOf map[string]string   // ビットのエリア → 同じメモリのワードのエリア
 	bitAreasOf map[string][]string // ワードのエリア → 同じメモリのビットのエリア
 
@@ -48,10 +49,12 @@ func NewVariableBackedDataStore(inner protocol.DataStore, varStore *variable.Var
 		inner:        inner,
 		varStore:     varStore,
 		protocolType: protocolType,
+		isBitArea:    make(map[string]bool),
 		wordAreaOf:   make(map[string]string),
 		bitAreasOf:   make(map[string][]string),
 	}
 	for _, area := range inner.GetAreas() {
+		adapter.isBitArea[area.ID] = area.IsBit
 		if area.BitsOf != "" {
 			adapter.wordAreaOf[area.ID] = area.BitsOf
 			adapter.bitAreasOf[area.BitsOf] = append(adapter.bitAreasOf[area.BitsOf], area.ID)
@@ -139,8 +142,9 @@ func (a *VariableBackedDataStore) mappingBitRange(v *variable.Variable, m *varia
 }
 
 // wordsBitRange は、area の address から count ワードの範囲を、ビットの番号で返す
+// （ビットのエリアは address のビットから 16 点ずつ、ワードのエリアは ワード × 16。DataStore の決まりと同じ）
 func (a *VariableBackedDataStore) wordsBitRange(area string, address uint32, count int) (start, end uint64) {
-	if _, isBitArea := a.wordAreaOf[area]; isBitArea {
+	if a.isBitArea[area] {
 		return uint64(address), uint64(address) + uint64(count)*16
 	}
 	return uint64(address) * 16, (uint64(address) + uint64(count)) * 16
@@ -221,14 +225,21 @@ func (a *VariableBackedDataStore) readVariableFromInner(v *variable.Variable, m 
 	return decodeVariableWords(a.varStore, v, words, m.Endianness)
 }
 
-// syncWordsToVariables は、書き込まれたワードの範囲にマッピングされた変数を、レジスタの値で更新する。
-// 変数ごとに 1 回だけ、変数全体を読み直して更新する（変数の一部のワードだけが書かれた場合も正しい値になる）
-func (a *VariableBackedDataStore) syncWordsToVariables(area string, address uint32, count int) {
+// syncRangeToVariables は、area のビットの範囲 [start, end)（ビットの番号。ワードのエリアなら ワード × 16 + ビット）が
+// 書かれたときに、その範囲に重なるマッピングの変数を、レジスタの値で更新する。
+// 変数ごとに 1 回だけ、変数全体を読み直して更新する（変数の一部だけが書かれた場合も正しい値になる）。
+//
+// 書き込みの単位とマッピングの単位が違っても（ワードのエリアにビットで書いた・ビットのエリアにワードで書いた）、
+// どちらもビットの番号で比べるので、取り違えない
+func (a *VariableBackedDataStore) syncRangeToVariables(area string, start, end uint64) {
 	updated := make(map[string]bool)
 	entries := a.mappingsIn(area)
 	for i := range entries {
 		mv := &entries[i]
-		if updated[mv.VariableID] || !overlaps(mv, address, count) {
+		if updated[mv.VariableID] {
+			continue
+		}
+		if s, e := a.entryBitRange(mv); s >= end || start >= e {
 			continue
 		}
 		updated[mv.VariableID] = true
@@ -240,30 +251,6 @@ func (a *VariableBackedDataStore) syncWordsToVariables(area string, address uint
 		if value, ok := a.readVariableFromInner(v, &m); ok {
 			a.varStore.UpdateValueFrom(v.ID, value, a)
 		}
-	}
-}
-
-// overlaps は、マッピングの範囲（アドレスからワード数の分）と、address から count 個の範囲が重なるかを返す
-func overlaps(mv *variable.MappedVariable, address uint32, count int) bool {
-	start, end := uint64(mv.Mapping.Address), uint64(mv.Mapping.Address)+uint64(mv.WordCount)
-	return start < uint64(address)+uint64(count) && uint64(address) < end
-}
-
-// syncBitsToVariables は、書き込まれたビットの範囲にマッピングされた変数を、ビットの値で更新する
-func (a *VariableBackedDataStore) syncBitsToVariables(area string, address uint32, count int) {
-	entries := a.mappingsIn(area)
-	for i := range entries {
-		mv := &entries[i]
-		if !overlaps(mv, address, count) {
-			continue
-		}
-		// 重なりのうち最後のビットの値にする（BOOL なら、マッピングしたビットそのもの）
-		last := min(uint64(mv.Mapping.Address)+uint64(mv.WordCount), uint64(address)+uint64(count)) - 1
-		bit, err := a.inner.ReadBit(area, uint32(last))
-		if err != nil {
-			continue
-		}
-		a.varStore.UpdateValueFrom(mv.VariableID, bit, a)
 	}
 }
 
@@ -297,7 +284,7 @@ func (a *VariableBackedDataStore) WriteBit(area string, address uint32, value bo
 	if err := a.inner.WriteBit(area, address, value); err != nil {
 		return err
 	}
-	a.syncBitsToVariables(area, address, 1)
+	a.syncRangeToVariables(area, uint64(address), uint64(address)+1)
 	a.syncSharedAreas(area, uint64(address), uint64(address)+1, "")
 	return nil
 }
@@ -306,7 +293,7 @@ func (a *VariableBackedDataStore) WriteBits(area string, address uint32, values 
 	if err := a.inner.WriteBits(area, address, values); err != nil {
 		return err
 	}
-	a.syncBitsToVariables(area, address, len(values))
+	a.syncRangeToVariables(area, uint64(address), uint64(address)+uint64(len(values)))
 	a.syncSharedAreas(area, uint64(address), uint64(address)+uint64(len(values)), "")
 	return nil
 }
@@ -315,8 +302,8 @@ func (a *VariableBackedDataStore) WriteWord(area string, address uint32, value u
 	if err := a.inner.WriteWord(area, address, value); err != nil {
 		return err
 	}
-	a.syncWordsToVariables(area, address, 1)
 	start, end := a.wordsBitRange(area, address, 1)
+	a.syncRangeToVariables(area, start, end)
 	a.syncSharedAreas(area, start, end, "")
 	return nil
 }
@@ -325,8 +312,8 @@ func (a *VariableBackedDataStore) WriteWords(area string, address uint32, values
 	if err := a.inner.WriteWords(area, address, values); err != nil {
 		return err
 	}
-	a.syncWordsToVariables(area, address, len(values))
 	start, end := a.wordsBitRange(area, address, len(values))
+	a.syncRangeToVariables(area, start, end)
 	a.syncSharedAreas(area, start, end, "")
 	return nil
 }

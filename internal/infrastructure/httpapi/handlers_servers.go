@@ -211,6 +211,112 @@ func (s *Server) handleWriteBits(w http.ResponseWriter, r *http.Request) {
 	noContent(w, s.svc.WriteBits(r.PathValue("protocolType"), r.PathValue("area"), *body.Address, body.Values))
 }
 
+// --- アドレスを文字で指定するメモリの読み書き（"D10.3"・"X1F"・"CIO 100.05"・"40001"。書き方はプロトコルが決める） ---
+
+// memoryAtResponse は、読んだ値と、アドレスの文字から決まったエリアと 0 始まりのアドレス
+type memoryAtResponse struct {
+	Area    string      `json:"area"`
+	Address int         `json:"address"`
+	Values  interface{} `json:"values"`
+}
+
+// readAt は、クエリの address（文字）と count を読み、エリアとアドレスに直す
+func (s *Server) readAt(r *http.Request, bits bool) (area string, address, count int, err error) {
+	text := r.URL.Query().Get("address")
+	if text == "" {
+		return "", 0, 0, fmt.Errorf("address（\"D10\" のようなアドレス）を指定してください")
+	}
+	if count, err = queryInt(r, "count", 1); err != nil {
+		return "", 0, 0, err
+	}
+	if count < 1 || count > maxReadCount {
+		return "", 0, 0, fmt.Errorf("count は 1〜%d にしてください: %d", maxReadCount, count)
+	}
+	area, address, err = s.svc.ResolveMemoryAddress(r.PathValue("protocolType"), text, bits)
+	return area, address, count, err
+}
+
+func (s *Server) handleReadWordsAt(w http.ResponseWriter, r *http.Request) {
+	area, address, count, err := s.readAt(r, false)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	values, err := s.svc.ReadWords(r.PathValue("protocolType"), area, address, count)
+	jsonOr400(w, memoryAtResponse{Area: area, Address: address, Values: values}, err)
+}
+
+func (s *Server) handleReadBitsAt(w http.ResponseWriter, r *http.Request) {
+	area, address, count, err := s.readAt(r, true)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	values, err := s.svc.ReadBits(r.PathValue("protocolType"), area, address, count)
+	jsonOr400(w, memoryAtResponse{Area: area, Address: address, Values: values}, err)
+}
+
+// handleWriteWordsAt は address（文字）から続けて書く。value（1 つ）か values（並び）。範囲外なら 1 つも書かない
+func (s *Server) handleWriteWordsAt(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		Address string `json:"address"`
+		Value   *int   `json:"value"`
+		Values  []int  `json:"values"`
+	}
+	if !decodeBody(w, r, &body) {
+		return
+	}
+	if body.Value != nil {
+		body.Values = append([]int{*body.Value}, body.Values...)
+	}
+	if body.Address == "" || len(body.Values) == 0 {
+		writeError(w, http.StatusBadRequest, "address と、value か values（1 個以上）を指定してください")
+		return
+	}
+	words := make([]uint16, len(body.Values))
+	for i, v := range body.Values {
+		word, err := toWord(v)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, fmt.Sprintf("values[%d]: %v", i, err))
+			return
+		}
+		words[i] = word
+	}
+	pt := r.PathValue("protocolType")
+	area, address, err := s.svc.ResolveMemoryAddress(pt, body.Address, false)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	noContent(w, s.svc.WriteWords(pt, area, address, words))
+}
+
+// handleWriteBitsAt は address（文字）から続けて書く。value（1 つ）か values（並び）。範囲外なら 1 つも書かない
+func (s *Server) handleWriteBitsAt(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		Address string `json:"address"`
+		Value   *bool  `json:"value"`
+		Values  []bool `json:"values"`
+	}
+	if !decodeBody(w, r, &body) {
+		return
+	}
+	if body.Value != nil {
+		body.Values = append([]bool{*body.Value}, body.Values...)
+	}
+	if body.Address == "" || len(body.Values) == 0 {
+		writeError(w, http.StatusBadRequest, "address と、value か values（1 個以上）を指定してください")
+		return
+	}
+	pt := r.PathValue("protocolType")
+	area, address, err := s.svc.ResolveMemoryAddress(pt, body.Address, true)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	noContent(w, s.svc.WriteBits(pt, area, address, body.Values))
+}
+
 // --- プロジェクトエクスポート/インポートハンドラー ---
 
 func (s *Server) handleExportProject(w http.ResponseWriter, r *http.Request) {

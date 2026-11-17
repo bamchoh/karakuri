@@ -272,6 +272,7 @@ internal/
   - レジスタ → 変数: この DataStore に書かれると（`Write*`）、その範囲にマッピングされた変数に反映する。プロトコルのサーバーにはこの DataStore を渡すので、クライアントの書き込み・画面・スクリプトのどれもここを通る
   - **どちらも、呼び出しが戻った時点で反映が終わっている**（別のゴルーチンに回さない。Modbus のクライアントに応答が返った時点で、変数は更新済み）
   - 行き来を防ぐ仕組み: 変数 → レジスタは内側の DataStore に直接書く。レジスタ → 変数は `VariableStore.UpdateValueFrom()` で自分を通知先から外す
+  - **書かれた範囲は、単位によらずビットの番号で比べる**（`syncRangeToVariables()`。ワードの書き込みは、ワードのエリアなら ワード × 16、ビットのエリアなら そのビットから 16 点。マッピングの範囲も同じ: BOOL は 1 ビット、ほかは ワード数の分）。以前は、ワードのエリアにビットで書く・ビットのエリアにワードで書くと、範囲を取り違えて変数に反映しなかった
   - **書かれた範囲の変数は、エリアごとの索引（`mappingsIn()`）から引く**。索引は、変数ストアの `LayoutVersion()`（マッピング・変数の追加と削除・型・構造体型を変えるたびに増える。値の変更では変わらない）が変わったときだけ `MappingIndex()` から作り直す。以前は、書いたアドレスごと・変わった変数ごとに全部のマッピングを探していて、変数の数の 2 乗で遅くなった（100 個の書き込みで 2.1ms → 0.29ms）
     - 変数ストアに、マッピングや型を変える関数を足すときは、`layoutVersion` を増やす（増やさないと、古い索引のまま同期する。`variable_datastore_index_test.go`）
   - **同じメモリを指すエリア**（`MemoryArea.BitsOf`）: 片方に書かれたら（レジスタへの書き込みでも、変数の変更でも）、もう片方にマッピングした変数を、メモリの値で更新する（`syncSharedAreas()`。範囲は「ワード × 16 + ビット」の番号で比べる）
@@ -281,6 +282,7 @@ internal/
   - `run()`: 変数の変更の通知（accessor の `SubscribeVariableChanges`）+ 1 秒ごとの再同期で、変数の値を `SetValue()`（変化したノードだけ uastack がサブスクリプションに即時通知）
   - `Node.OnWrite` でクライアントの書き込みを `WriteVariableValue` / `WriteVariableFieldValue` に転送
 - **DataStore** (`internal/domain/protocol/server.go`): プロトコル共通のメモリ操作インターフェース
+  - **どのエリアも、ビットでもワードでも読み書きできる**: ワードのエリアをビットで読み書きするときのアドレスはビットの番号（ワード × 16 + ビット）、ビットのエリアをワードで読み書きするときは、そのビットから 16 点を 1 ワードにする（最初の点がビット 0）。Modbus・FINS・SLMP・フェイク（`protocoltest`）の DataStore がこの決まりに従う。ホストの範囲の確かめ（`checkAreaRange()`）と変数との同期も、この決まりで数える
   - `ReadBits()`, `WriteBit()`, `ReadWords()`, `WriteWord()`: 汎用メモリ操作
   - `GetAreas()`: `MemoryArea` スライスを返す。`MemoryArea.OneOrigin` が true のエリアはUIで1オリジンアドレスを表示する（内部は常に0ベース）。Modbusの全4エリアは `OneOrigin: true`
   - `MemoryArea.ShortName`: マッピング列などに表示する短い名前（Modbus は `0` / `1` / `3` / `4`）。空ならエリア ID を表示する
@@ -689,6 +691,7 @@ JavaScript（goja）でPLC動作を記述。
 - **同時の接続**（各プロトコルの `concurrency_test.go`）: 1 つのサーバーに複数のクライアントを同時につなぎ、それぞれが自分の受け持ちのアドレスに書いては読む。応答が取り違えられないこと・どの書き込みも反映されることを確かめる（競合は CI の `-race` で見つける）
   - FINS（UDP / TCP）・SLMP（TCP / UDP × 3E / 4E を混ぜる）・Modbus TCP（他社製の simonvetter/modbus のクライアント。UnitID の応答設定を同時に切り替え続ける）・OPC UA（実際の変数ストア。同じ構造体の別のフィールドへの同時の書き込み・ホストの側の変数の更新も同時に走らせる）
   - FINS と SLMP は、読み書きの最中に Stop しても固まらず、また Start できることも確かめる（`TestStopDuringTraffic`）
+- **アドレスの書き方と、単位をまたいだ読み書き**: 書き方は各プロトコルの `address_test.go`（と `FuzzParseAddress`）。HTTP API を通して、全部のレジスタ型のプロトコルで、ワードの中のビットの書き込み・ビットのデバイスへのワードの書き込みが変数に反映すること、最後のビットまで書けることを `internal/protocols/memory_address_test.go` で確かめる。範囲と同期の決まりは `internal/infrastructure/httpapi/handlers_memory_test.go`（フェイク）
 - **他社製のクライアント**（各プロトコルの `interop_*_test.go`）: Karakuri のサーバーとクライアントは同じコードでフレームを作るので、同じ読み違えをしていても自分同士の試験では見つからない。別の作者のライブラリからつないで確かめる: OPC UA は gopcua/opcua、FINS は l1va/gofins、SLMP は future-architect/go-mcprotocol、Modbus TCP は simonvetter/modbus
   - テストだけで使う（`go.mod` の require に入るが、exe には入らない。`go list -deps .` で確かめられる）
 
@@ -731,6 +734,8 @@ JavaScript（goja）でPLC動作を記述。
   - エリアが大きく数も多いときは、最初に全部を確保せず、書かれたところだけを確保する（`sparse.Words` を使う。FINS と SLMP の `datastore.go` を参照）
   - ビットのエリアにワード単位で読み書きする要求は、DataStore にはビットとして渡す（ビットのエリアにワードで書くと、変数と同期する包みが、書かれた範囲を取り違える）
   - 番号を 16 進で書くデバイスがあるプロトコルは、`MemoryArea.HexAddress` を付ける（画面が 16 進で表示・入力する）
+  - DataStore は、ワードのエリアのビット・ビットのエリアのワードの読み書きにも対応する（`protocol.DataStore` の決まり）
+  - ファクトリーに `protocol.AddressParser`（`ParseAddress()`: そのプロトコルの PLC の書き方 → エリアとアドレス）を実装する（HTTP API で `D10.3` のようにアドレスを書けるようにする）。外から来る文字なので、ファズテストも足す
 
 ## 重要な実装ポイント
 
@@ -1095,7 +1100,11 @@ FINS のコマンドを Host Link（SYSMAC WAY）に載せて、シリアルで�
 - **値の JSON**: LINT / ULINT は、読むときは文字列（構造体・配列の中も。`PLCService.ReadVariableValue()`）。書くときは数値でも文字列でもよく、数値は桁を落とさずに読む（`decodeValueBody()` が `json.Number` を int64 / uint64 にする）
 - **フィールド・要素**: `/api/variables/{ref}/value?path=speed`（`[1]`、`[1].name`。添字は宣言どおり）。`/api/values` のキーは「名前 + パス」（`Motor1.speed`、`Values[1]`）。名前に `.` を含む変数があっても、いちばん長く一致する名前を選ぶ（`resolveValueKey()`）
 - **`PUT /api/values`**: 先にすべてのキーの変数があるかを確かめ、なければ 1 つも書かない。書くのは名前順で、途中で書けないものがあればそこで止まる（それより前は書かれている）
+- **メモリ（アドレスを文字で）**: `/api/memory/{protocolType}/words`・`/bits`（`GET ?address=D10&count=2`、`PUT {"address":"D10.3","value":true}`）。アドレスは PLC の書き方で、書き方はプロトコルが決める（`protocol.AddressParser`。SLMP / MC プロトコルは `D10`・`D10.3`（ビットの位置は 16 進）・`X1F`、FINS は `D100`・`CIO 100.05`・`W10.15`・`TF5`・`E0_100`、Modbus は `40001`・`40001.3`・`00001`）。`PLCService.ResolveMemoryAddress()` がエリアと 0 始まりのアドレスに直す
+  - ビットで読み書きするときに、ワード（`D10`）を指すと、そのワードのビット 0 から。ワードで読み書きするときに、ビットのデバイス（`X10`）を指すと、そこから 16 点を 1 ワードにする。ワードの中のビット（`D10.3`）をワードで読み書きするのはエラー
+  - 応答の `area`・`address` は、決まったエリアと 0 始まりのアドレス（ワードのエリアのビットは、ワード × 16 + ビット）
 - **メモリ**: アドレスは 0 始まり（画面の 1 始まりの表示とは違う）。`count` は 1〜65535。ワードの値は -32768〜65535（負の数は 2 の補数）。まとめての書き込み（`PUT .../words`・`PUT .../bits`）は、エリアの範囲に収まるかを先に確かめ、範囲外なら 1 つも書かない（`PLCService.WriteWords()` / `WriteBits()`）
+  - ワードのエリアをビットで（アドレスはビットの番号 = ワード × 16 + ビット）、ビットのエリアをワードで（そのビットから 16 点で 1 ワード）も読み書きできる（`protocol.DataStore` の決まり）。範囲は、その単位で数える（`checkAreaRange()`。以前は、ワードのエリアにビットで書くと、大きさをワードの数のまま比べて、後ろの 15/16 に書けなかった）
 - **部分の更新**: `PUT /api/variables/{ref}`（名前・データ型）、`PUT /api/clients/{ref}`（名前・設定）、`PUT .../polling`（周期・失敗の回数）は、省いたものをいまの値のままにする。保存したコマンドの `PUT` は、`mode` を省くと名前だけを変える
 - **クライアントの送信**: タイムアウト・例外応答などの通信の結果も 200 で返し、結果の `status` に入れる（16 進が読めない・コマンドの項目が違うなど、送る前の誤りは 400）
 
@@ -1107,7 +1116,7 @@ FINS のコマンドを Host Link（SYSMAC WAY）に載せて、シリアルで�
 |--------|------|
 | 仕様 | `GET /api/openapi.json` |
 | サーバー管理 | `/api/servers`、`/api/servers/{protocolType}`（削除・`/start`・`/stop`・`/status`・`/config`） |
-| メモリ操作 | `/api/memory/{protocolType}/areas`、`/api/memory/{protocolType}/{area}/words`・`/bits`（GET で読む・PUT でまとめて書く）、`.../words/{address}`・`.../bits/{address}`（1 つ書く） |
+| メモリ操作 | `/api/memory/{protocolType}/words`・`/bits`（アドレスを文字で: `?address=D10.3`）、`/api/memory/{protocolType}/areas`、`/api/memory/{protocolType}/{area}/words`・`/bits`（GET で読む・PUT でまとめて書く）、`.../words/{address}`・`.../bits/{address}`（1 つ書く） |
 | 変数 | `/api/variables`、`/api/variables/{ref}`（取得・名前と型の変更・削除）、`/value`、`/mappings`、`/node-publishings/{protocolType}` |
 | 値のまとめ読み書き | `/api/values`（`?names=A,B.x`） |
 | 型・マッピング | `/api/data-types`、`/api/struct-types`（`/{name}` で削除）、`/api/mapping-targets`、`/api/variable-statuses` |

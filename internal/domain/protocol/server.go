@@ -88,7 +88,13 @@ type ServerFactory interface {
 	MapToConfig(variantID string, settings map[string]interface{}) (ProtocolConfig, error)
 }
 
-// DataStore は、プロトコルが持つレジスタ（メモリエリア）を読み書きするインターフェース
+// DataStore は、プロトコルが持つレジスタ（メモリエリア）を読み書きするインターフェース。
+//
+// どのエリアも、ビットでもワードでも読み書きできる（できないエリアはエラーを返す）:
+//   - ワードのエリアをビットで読み書きするときの address は、ビットの番号（ワード × 16 + ビット）
+//   - ビットのエリアをワードで読み書きするときは、address のビットから 16 点ずつを 1 ワードにする（最初の点がビット 0）
+//
+// ホスト（変数との同期・範囲の確かめ）も、この決まりで範囲を数える
 type DataStore interface {
 	GetAreas() []MemoryArea
 	ReadBit(area string, address uint32) (bool, error)
@@ -235,4 +241,18 @@ type NodeAddress struct {
 type NodeVariable struct {
 	ID   string
 	Name string
+}
+
+// AddressParser は、利用者が書くアドレスの文字（三菱なら "D10.3"・"X1F"、オムロンなら "CIO 100.05"・"D100"、
+// Modbus なら "40001"）を、DataStore のエリアとアドレスに直す（ServerFactory が実装する。書き方はプロトコルが決める）。
+// HTTP API のメモリの読み書きで、エリアと 0 始まりの番号の代わりに使える
+type AddressParser interface {
+	ParseAddress(text string) (DeviceAddress, error)
+}
+
+// DeviceAddress は、AddressParser が読んだアドレス
+type DeviceAddress struct {
+	Area    string // DataStore のエリアの ID
+	Address uint32 // 0 始まり。Bit が true なら、ビットの番号（ワードのエリアなら ワード × 16 + ビット）
+	Bit     bool   // ビットを指している（ビットのデバイス、または「ワード.ビット」）
 }
