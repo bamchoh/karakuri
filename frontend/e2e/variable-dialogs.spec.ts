@@ -1,4 +1,4 @@
-import { test, expect, Page } from "@playwright/test";
+import { test, expect, Locator, Page } from "@playwright/test";
 import {
   addModbusServer,
   api,
@@ -171,71 +171,161 @@ test.describe("変数追加ダイアログ", () => {
 });
 
 test.describe("構造体型管理ダイアログ", () => {
-  test("型を登録・編集・削除できる", async ({ page }) => {
+  // 右の表の、フィールドの行と、その中の入力欄
+  const rows = (dialog: Locator) => dialog.getByTestId("struct-field-row");
+  const nameOf = (dialog: Locator, n: number) =>
+    dialog.getByLabel(`フィールド ${n} の名前`);
+  const typeOf = (dialog: Locator, n: number) =>
+    dialog.getByLabel(`フィールド ${n} の型`);
+  const arrayOf = (dialog: Locator, n: number) =>
+    dialog.getByLabel(`フィールド ${n} を配列にする`);
+  const boundsOf = (dialog: Locator, n: number) =>
+    dialog.getByLabel(`フィールド ${n} の配列の範囲`);
+  const typeItem = (dialog: Locator, name: string) =>
+    dialog.getByTestId("struct-type-list").locator(".struct-type-item", {
+      has: dialog.page().locator(".struct-type-name", {
+        hasText: new RegExp(`^${name}$`),
+      }),
+    });
+  const openDialog = async (page: Page) => {
     await page.getByRole("button", { name: "構造体型管理" }).click();
     const dialog = dialogByTitle(page, "構造体型管理");
-    await expect(dialog.getByText("新規構造体型")).toBeVisible();
+    await expect(dialog).toBeVisible();
+    return dialog;
+  };
 
-    // フィールドがない状態では登録できない
-    await field(dialog, "型名:").fill("Pump");
-    let alert = nextDialogMessage(page);
-    await dialog.getByRole("button", { name: "型を登録" }).click();
-    expect(await alert).toContain("少なくとも1つのフィールド");
+  test("フィールドを 1 行ずつ入れて登録し、編集・削除できる", async ({
+    page,
+  }) => {
+    const dialog = await openDialog(page);
+    const typeName = dialog.getByLabel("型名");
+    const save = dialog.getByRole("button", { name: "型を登録" });
 
-    // 1 つ目: STRING[10]、2 つ目: DINT の配列
-    const card = (i: number) =>
-      dialog
-        .locator(".dialog-row", {
-          has: page.locator("label", { hasText: /^名前:$/ }),
-        })
-        .nth(i)
-        .locator("xpath=..");
-    await field(card(0), "名前:").fill("label");
-    await field(card(0), "データ型:").selectOption("STRING");
-    await field(card(0), "バイト長:").fill("10");
-    await dialog.getByRole("button", { name: "+ フィールド追加" }).click();
-    await field(card(1), "名前:").fill("hist");
-    await field(card(1), "型カテゴリ:").selectOption("array");
-    await field(card(1), "要素型:").selectOption("DINT");
-    await shot(page, "struct-new");
-    await dialog.getByRole("button", { name: "型を登録" }).click();
+    // 何も入れていない間は、登録できない
+    await expect(save).toBeDisabled();
+    await expect(rows(dialog)).toHaveCount(1);
 
-    const listRow = dialog.locator("table.variable-table tbody tr", {
-      hasText: "Pump",
-    });
-    await expect(listRow).toContainText(
-      "label:STRING[10], hist:ARRAY[0..9] OF DINT",
+    // 型名だけでは登録できず、理由が出る
+    await typeName.fill("Pump");
+    await save.click();
+    await expect(dialog.locator(".struct-error")).toHaveText(
+      "フィールドを 1 つ以上入れてください",
     );
-    // 登録後はフォームが初期状態に戻る
-    await expect(field(dialog, "型名:")).toHaveValue("");
 
-    // 編集: 既存の定義がフォームに入り、型名は変更できない
-    await listRow.getByRole("button", { name: "編集" }).click();
-    await expect(dialog.getByText("構造体型を編集")).toBeVisible();
-    await expect(field(dialog, "型名:")).toHaveValue("Pump");
-    await expect(field(dialog, "型名:")).toBeDisabled();
-    await expect(field(card(0), "名前:")).toHaveValue("label");
-    await expect(field(card(0), "データ型:")).toHaveValue("STRING");
-    await expect(field(card(0), "バイト長:")).toHaveValue("10");
-    await expect(field(card(1), "型カテゴリ:")).toHaveValue("array");
-    await expect(field(card(1), "要素型:")).toHaveValue("DINT");
-    await field(card(1), "次元数:").selectOption("2");
+    // 1 行目: STRING[10]。名前の欄で Enter を押すと、次の行ができてそこに移る
+    await nameOf(dialog, 1).fill("label");
+    await typeOf(dialog, 1).selectOption("STRING");
+    await dialog.getByLabel("フィールド 1 のバイト長").fill("10");
+    await nameOf(dialog, 1).press("Enter");
+    await expect(rows(dialog)).toHaveCount(2);
+    await expect(nameOf(dialog, 2)).toBeFocused();
+
+    // 2 行目: DINT の配列。範囲は 1 つの欄に書く（個数だけでもよい）
+    await page.keyboard.type("hist");
+    await typeOf(dialog, 2).selectOption("DINT");
+    await arrayOf(dialog, 2).check();
+    await expect(boundsOf(dialog, 2)).toHaveValue("0..9");
+    await boundsOf(dialog, 2).fill("5");
+
+    // 位置とワード数、合計が出る（STRING[10] は 5 ワード、DINT 5 個は 10 ワード）
+    await expect(rows(dialog).nth(1).locator(".col-num")).toHaveText([
+      "5",
+      "10",
+    ]);
+    await expect(dialog.getByTestId("struct-total")).toHaveText(
+      "合計 15 ワード",
+    );
+
+    // 範囲が読めないと、その行に理由を出して登録しない
+    await boundsOf(dialog, 2).fill("9..0");
+    await save.click();
+    await expect(
+      rows(dialog).nth(1).locator(".struct-row-error"),
+    ).toBeVisible();
+    expect(await api<unknown[]>(page, "GetStructTypes")).toEqual([]);
+    await boundsOf(dialog, 2).fill("0..9");
+    await shot(page, "struct-new");
+    await save.click();
+
+    // 登録すると、左の一覧に出て、その型を選んだ状態になる
+    await expect(typeItem(dialog, "Pump")).toHaveClass(/selected/);
+    await expect(typeItem(dialog, "Pump")).toContainText("25W");
+    await expect(typeName).toHaveValue("Pump");
+    await expect(typeName).toBeDisabled();
+    expect(
+      (await api<any[]>(page, "GetStructTypes"))[0].fields.map(
+        (f: any) => `${f.name}:${f.dataType}`,
+      ),
+    ).toEqual(["label:STRING[10]", "hist:ARRAY[0..9] OF DINT"]);
+
+    // 編集: 2 次元にして保存する。変えるまでは「保存」「元に戻す」は押せない
+    const update = dialog.getByRole("button", { name: "保存" });
+    const revert = dialog.getByRole("button", { name: "元に戻す" });
+    await expect(update).toBeDisabled();
+    await expect(revert).toBeDisabled();
+    await boundsOf(dialog, 2).fill("0..9, 0..4");
     await shot(page, "struct-edit");
-    await dialog.getByRole("button", { name: "更新" }).click();
-    await expect(listRow).toContainText("hist:ARRAY[0..9, 0..4] OF DINT");
+    await update.click();
+    await expect(typeItem(dialog, "Pump")).toContainText("105W");
+
+    // 元に戻す: 保存していない変更を捨てる
+    await nameOf(dialog, 1).fill("renamed");
+    await revert.click();
+    await expect(nameOf(dialog, 1)).toHaveValue("label");
 
     // 削除は確認してから
     const confirm = nextDialogMessage(page);
-    await listRow.getByRole("button", { name: "削除" }).click();
+    await dialog.getByRole("button", { name: "この型を削除" }).click();
     expect(await confirm).toContain('構造体型 "Pump" を削除しますか');
-    await expect(listRow).toHaveCount(0);
+    await expect(typeItem(dialog, "Pump")).toHaveCount(0);
     expect(await api<unknown[]>(page, "GetStructTypes")).toEqual([]);
 
     await dialog.getByRole("button", { name: "閉じる" }).click();
     await expect(dialog).toBeHidden();
   });
 
-  test("フィールドの型に他の構造体型を選べるが、編集中の型自身は選べない", async ({
+  test("行を写す・並べ替える・消す", async ({ page }) => {
+    const dialog = await openDialog(page);
+    await dialog.getByLabel("型名").fill("IO");
+    await nameOf(dialog, 1).fill("in1");
+    await typeOf(dialog, 1).selectOption("BOOL");
+
+    // 写すと、すぐ下に、番号を進めた名前で入る（型も同じ）
+    await dialog.getByLabel("フィールド 1 を写す").click();
+    await expect(nameOf(dialog, 2)).toHaveValue("in2");
+    await expect(typeOf(dialog, 2)).toHaveValue("BOOL");
+    await expect(nameOf(dialog, 2)).toBeFocused();
+
+    await dialog
+      .getByRole("button", { name: "フィールド", exact: true })
+      .click();
+    await nameOf(dialog, 3).fill("count");
+
+    // 下へ・上へ（ボタンと Alt + 矢印）
+    await dialog.getByLabel("フィールド 1 を下へ").click();
+    await expect(nameOf(dialog, 1)).toHaveValue("in2");
+    await expect(nameOf(dialog, 2)).toHaveValue("in1");
+    await nameOf(dialog, 3).press("Alt+ArrowUp");
+    await expect(nameOf(dialog, 2)).toHaveValue("count");
+    await expect(nameOf(dialog, 2)).toBeFocused();
+    await expect(dialog.getByLabel("フィールド 1 を上へ")).toBeDisabled();
+    await expect(dialog.getByLabel("フィールド 3 を下へ")).toBeDisabled();
+
+    // 消す
+    await dialog.getByLabel("フィールド 1 を消す").click();
+    await expect(rows(dialog)).toHaveCount(2);
+
+    // Ctrl + Enter で保存
+    await nameOf(dialog, 1).press("Control+Enter");
+    await expect(typeItem(dialog, "IO")).toHaveClass(/selected/);
+    expect(
+      (await api<any[]>(page, "GetStructTypes"))[0].fields.map(
+        (f: any) => `${f.name}:${f.dataType}`,
+      ),
+    ).toEqual(["count:INT", "in1:BOOL"]);
+  });
+
+  test("フィールドの型に他の構造体型を選べるが、自分と、自分を使っている型は選べない", async ({
     page,
   }) => {
     await api(page, "RegisterStructType", MOTOR_TYPE);
@@ -243,64 +333,105 @@ test.describe("構造体型管理ダイアログ", () => {
     await openApp(page);
     await openVariables(page);
 
-    await page.getByRole("button", { name: "構造体型管理" }).click();
-    const dialog = dialogByTitle(page, "構造体型管理");
-    await field(dialog, "型名:").fill("Line");
-    await field(dialog, "名前:").fill("main");
-    const category = field(dialog, "型カテゴリ:");
-    await expect(category.locator("option")).toHaveText([
-      "スカラー",
-      "配列",
-      "構造体",
-    ]);
-    await category.selectOption("struct");
-    await expect(field(dialog, "構造体型:")).toHaveValue("Motor");
+    // 型があるときは、先頭の型を選んだ状態で開く
+    const dialog = await openDialog(page);
+    await expect(typeItem(dialog, "Motor")).toHaveClass(/selected/);
+    await expect(nameOf(dialog, 1)).toHaveValue("speed");
+    await expect(nameOf(dialog, 2)).toHaveValue("on");
 
-    // 2 つ目のフィールド: Motor の 2 次元配列
-    await dialog.getByRole("button", { name: "+ フィールド追加" }).click();
-    const second = dialog.locator(".dialog-field-editor").nth(1);
-    await field(second, "名前:").fill("spares");
-    await field(second, "型カテゴリ:").selectOption("array");
-    await field(second, "要素型:").selectOption("Motor");
-    await field(second, "次元数:").selectOption("2");
+    // 新しい型 Line: Motor と、Motor の 2 次元配列
+    await dialog.getByRole("button", { name: "新しい型" }).click();
+    await dialog.getByLabel("型名").fill("Line");
+    await nameOf(dialog, 1).fill("main");
+    await typeOf(dialog, 1).selectOption("Motor");
+    await nameOf(dialog, 1).press("Enter");
+    await nameOf(dialog, 2).fill("spares");
+    await typeOf(dialog, 2).selectOption("Motor");
+    await arrayOf(dialog, 2).check();
+    await boundsOf(dialog, 2).fill("0..9, 0..4");
     await dialog.getByRole("button", { name: "型を登録" }).click();
+    await expect(typeItem(dialog, "Line")).toHaveClass(/selected/);
+    expect(
+      (await api<any[]>(page, "GetStructTypes"))
+        .find((t: any) => t.name === "Line")
+        .fields.map((f: any) => `${f.name}:${f.dataType}`),
+    ).toEqual(["main:Motor", "spares:ARRAY[0..9, 0..4] OF Motor"]);
 
-    const listRow = dialog.locator("table.variable-table tbody tr", {
-      hasText: "Line",
-    });
-    await expect(listRow).toContainText(
-      "main:Motor, spares:ARRAY[0..9, 0..4] OF Motor",
-    );
+    // Line のフィールドには、Line 自身は選べない
+    const structOptions = (n: number) =>
+      typeOf(dialog, n).locator('optgroup[label="構造体"] option');
+    await expect(structOptions(1)).toHaveText(["Motor"]);
 
-    // 編集: 定義がフォームに戻る。選べる構造体型に Line 自身は出ない
-    await listRow.getByRole("button", { name: "編集" }).click();
-    const first = dialog.locator(".dialog-field-editor").nth(0);
-    await expect(field(first, "型カテゴリ:")).toHaveValue("struct");
-    await expect(field(first, "構造体型:")).toHaveValue("Motor");
-    await expect(field(first, "構造体型:").locator("option")).toHaveCount(1);
-    await expect(field(second, "要素型:")).toHaveValue("Motor");
-    await expect(field(second, "次元数:")).toHaveValue("2");
-    await expect(field(second, "終了インデックス(2次元目):")).toHaveValue("4");
-    await expect(
-      field(second, "要素型:").locator('optgroup[label="構造体型"] option'),
-    ).toHaveText([/^Motor /]);
+    // Motor のフィールドには、Motor を使っている Line も選べない（循環するため）
+    await typeItem(dialog, "Motor").click();
+    await expect(nameOf(dialog, 1)).toHaveValue("speed");
+    await expect(structOptions(1)).toHaveCount(0);
   });
 
-  test("閉じると入力は消える（Esc でも同じ）", async ({ page }) => {
-    for (const close of ["button", "Escape"] as const) {
-      await page.getByRole("button", { name: "構造体型管理" }).click();
-      const dialog = dialogByTitle(page, "構造体型管理");
-      await field(dialog, "型名:").fill("Temp");
-      if (close === "button") {
-        await dialog.getByRole("button", { name: "閉じる" }).click();
-      } else {
-        await page.keyboard.press("Escape");
-      }
-      await expect(dialog).toBeHidden();
-      await page.getByRole("button", { name: "構造体型管理" }).click();
-      await expect(field(dialog, "型名:")).toHaveValue("");
-      await dialog.getByRole("button", { name: "閉じる" }).click();
-    }
+  test("変数が使っている型も変えられ、名前の同じフィールドの値は残る", async ({
+    page,
+  }) => {
+    await api(page, "RegisterStructType", MOTOR_TYPE);
+    await createVariable(page, "M1", "Motor", { speed: 120, on: true });
+    await page.reload();
+    await openApp(page);
+    await openVariables(page);
+
+    const dialog = await openDialog(page);
+    // speed を DINT に広げ、limit を足す
+    await typeOf(dialog, 1).selectOption("DINT");
+    await dialog
+      .getByRole("button", { name: "フィールド", exact: true })
+      .click();
+    await nameOf(dialog, 3).fill("limit");
+    await dialog.getByRole("button", { name: "保存" }).click();
+    await expect(typeItem(dialog, "Motor")).toContainText("4W");
+    await expect(dialog.locator(".struct-error")).toHaveCount(0);
+
+    expect((await getVariable(page, "M1")).value).toEqual({
+      speed: 120,
+      on: true,
+      limit: 0,
+    });
+
+    // 使っている型は、削除できない（理由をダイアログの中に出す）
+    const confirm = nextDialogMessage(page);
+    await dialog.getByRole("button", { name: "この型を削除" }).click();
+    await confirm;
+    await expect(dialog.locator(".struct-error")).toContainText("M1");
+    await expect(typeItem(dialog, "Motor")).toBeVisible();
+  });
+
+  test("保存していない変更があると、閉じる・型を選び直すときに確かめる", async ({
+    page,
+  }) => {
+    await api(page, "RegisterStructType", MOTOR_TYPE);
+    await page.reload();
+    await openApp(page);
+    await openVariables(page);
+
+    // 変更がなければ、確かめずに閉じる（Esc でも）
+    let dialog = await openDialog(page);
+    await page.keyboard.press("Escape");
+    await expect(dialog).toBeHidden();
+
+    // 変更があれば確かめる。やめれば、そのまま
+    dialog = await openDialog(page);
+    await nameOf(dialog, 1).fill("velocity");
+    page.once("dialog", (d) => d.dismiss());
+    await dialog.getByRole("button", { name: "新しい型" }).click();
+    await expect(nameOf(dialog, 1)).toHaveValue("velocity");
+    page.once("dialog", (d) => d.dismiss());
+    await dialog.getByRole("button", { name: "閉じる" }).click();
+    await expect(dialog).toBeVisible();
+
+    // 捨てると閉じ、開き直すと元の定義
+    const confirm = nextDialogMessage(page);
+    await dialog.getByRole("button", { name: "閉じる" }).click();
+    expect(await confirm).toContain("保存していない変更");
+    await expect(dialog).toBeHidden();
+    dialog = await openDialog(page);
+    await expect(nameOf(dialog, 1)).toHaveValue("speed");
   });
 });
 

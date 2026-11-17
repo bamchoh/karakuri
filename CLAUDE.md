@@ -76,7 +76,7 @@ go build ./...
 
 `frontend/src/**/*.test.ts` に、state に依存しない純粋な関数の単体テストがある（`npm test`。開発サーバーなしで走り、CI でも実行する）。
 
-- 対象: `utils/address.ts`（アドレスの表示と入力の変換・範囲の検査・マッピング先のエリアの決め方）、`utils/register.ts`（ワードの結合・分解・書式）、`components/registerList.ts`（行の組み立て・選択の移動）、`utils/windowTitle.ts`（タイトルバーの文字）、`utils/rows.ts`（行を足せる表の行の追加・削除・更新）、`utils/certificates.ts`（証明書の一覧の分け方・書式）、`utils/watch.ts`（下の帯のモニタリングの入力の読み方・候補の絞り込み・畳んだ行の隠し方）
+- 対象: `utils/address.ts`（アドレスの表示と入力の変換・範囲の検査・マッピング先のエリアの決め方）、`utils/register.ts`（ワードの結合・分解・書式）、`components/registerList.ts`（行の組み立て・選択の移動）、`utils/windowTitle.ts`（タイトルバーの文字）、`utils/rows.ts`（行を足せる表の行の追加・削除・更新）、`utils/certificates.ts`（証明書の一覧の分け方・書式）、`utils/watch.ts`（下の帯のモニタリングの入力の読み方・候補の絞り込み・畳んだ行の隠し方）、`utils/structForm.ts`（構造体型のダイアログの行と型の文字列の変換・検査）
 - 画面の動き（クリック・入力・表示）は、こちらではなく Playwright で確かめる。**計算や変換を足すときは、コンポーネントの中に書かず純粋な関数にして、ここにテストを足す**
 - 設定は `frontend/vite.config.ts` の `test`（`src/**/*.test.ts` だけを対象にする。`e2e/*.spec.ts` は Playwright のテスト）。Vitest のバージョンは固定
 - テストのファイルも `npm run build` の型検査の対象
@@ -344,9 +344,9 @@ frontend/src/
 │   ├── ValueEditDialog.tsx     # 値の編集ダイアログ（再帰的エディタ）
 │   ├── MappingDialog.tsx       # マッピング設定ダイアログ（レジスタマッピング + ノード公開設定）
 │   ├── BulkMappingDialog.tsx   # 一括マッピング編集ダイアログ
-│   ├── StructTypeDialog.tsx    # 構造体型管理ダイアログ
+│   ├── StructTypeDialog.tsx    # 構造体型管理ダイアログ（左に型の一覧、右にフィールドの表）
 │   ├── StructArrayElementEditor.tsx  # 構造体配列要素のエディタ（ValueEditDialog で使用）
-│   ├── DataTypeFields.tsx      # データ型を選ぶ入力欄（変数追加・変数の編集・構造体型のフィールドで共通）
+│   ├── DataTypeFields.tsx      # データ型を選ぶ入力欄（変数追加・変数の編集で共通）
 │   ├── variableTypes.ts    # 変数のデータ型・値の純粋関数と行の型定義（state に依存しない）
 │   ├── AddressInput.tsx        # メモリエリアのアドレスの入力欄（1 始まり・「ワード.ビット」に対応）
 │   ├── AddressRangeHint.tsx    # エリアのアドレスの範囲と、範囲外のときの理由の表示
@@ -474,7 +474,7 @@ frontend/src/
   - 親は `ref.current?.isOpen()` で開閉を調べ、ダイアログが開いている間は行のキーボード操作を止める
   - Esc で閉じる処理は各ダイアログが `useEscapeKey` で持つ
 - **データ型を選ぶフォーム**: 入力欄は `DataTypeFields`、入力内容は `DataTypeFormValue`（`variableTypes.ts`）で共通。型の文字列との変換は `buildDataTypeFromForm()` / `parseDataTypeToForm()` を使い、ダイアログごとに組み立てない
-  - ダイアログごとの違いは props で渡す: 変数追加は「初期値」の行（`scalarExtra`）、構造体型のフィールドは短い文言（`compact`）と、編集中の型自身を除いた構造体型の一覧
+  - ダイアログごとの違いは props で渡す: 変数追加は「初期値」の行（`scalarExtra`）。構造体型のフィールドは、この欄ではなく、構造体型のダイアログの表で選ぶ
 - **共有するデータ**: `dataTypes` / `structTypes` / `variables` / `serverInstances` / `memoryAreasByProtocol` は `VariableView` が読み込み、props で渡す。保存後の再読み込みは `onChanged`（`loadVariables` / `loadStructTypes`）で行う
 - **画面のテスト**: `frontend/e2e/variable-dialogs.spec.ts` が各ダイアログの動きを確認する。ダイアログを変更したら実行する
 - **データ型サポート**: スカラー型・配列型・構造体型（詳細は「変数管理とデータ型システム」）
@@ -576,7 +576,7 @@ JavaScript（goja）でPLC動作を記述。
   - `UpdateVariable(id, name, dataType)`: 変数の名前・データ型を変更
   - `UpdateVariableFieldValue(id, fieldPath, value)`: 構造体フィールド・配列要素を部分更新（`fieldPath` は `.field` / `[添字]` の連結。添字は外部インデックス）
   - `GetDataTypes()`: サポートされているデータ型一覧を取得
-  - `GetStructTypes()`, `RegisterStructType()`, `DeleteStructType()`: 構造体型管理
+  - `GetStructTypes()`, `RegisterStructType()`, `UpdateStructType()`（フィールドを置き換える。使っている変数は残る）, `DeleteStructType()`: 構造体型管理
   - `GetVariableMappings()`, `UpdateVariableMappings()`: 変数のプロトコルマッピング設定
   - `UpdateVariableNodePublishing(variableID, protocolType, dto)`: ノード公開設定（公開するか・アクセスモード）
 - **スクリプト**:
@@ -825,13 +825,22 @@ JavaScript（goja）でPLC動作を記述。
 
 ### 構造体型管理ダイアログ
 
-- **編集機能**: 既存の構造体型を編集可能（編集ボタンで定義を読み込み、更新で保存）。更新は「古い型を削除して登録し直す」動き
-- **データ型解析**: フィールドのデータ型文字列を `parseDataTypeToForm()`（`variableTypes.ts`）でフォームの入力内容に変換
-  - `ARRAY[0..9, 0..4] OF 型` → 配列カテゴリ + 要素型 + 次元数 + 各次元の開始・終了インデックス
-  - `STRING[n]` → スカラーカテゴリ + STRING型 + バイト長
-  - 構造体型名 → 構造体カテゴリ + 型名
-- **自己参照の防止**: フィールドの型として、編集中の型自身は選べない
-- **型名の不変性**: 編集モード時は型名の入力欄を無効化（型名は変更不可）
+左に型の一覧（「新しい型」も）、右に選んだ型のフィールドの表（`StructTypeDialog.tsx`）。以前は、1 つのフィールドに 4〜8 行を使う縦並びのフォームで、フィールドが増えるとスクロールが長くなったので、表にした。
+
+- **1 フィールド 1 行**: 名前・型（スカラーと構造体型を 1 つの選択肢に。STRING はバイト長の欄が横に出る）・配列（チェックすると範囲の欄が出る）・位置（先頭からのワードのオフセット）・ワード数・行の操作（上へ / 下へ / 写す / 消す）
+  - 配列の範囲は 1 つの欄に書く: `0..9`、多次元は `0..2, 0..4`（3 次元まで）、個数だけ `10` と書けば `0..9`
+  - 名前の欄で Enter を押すと次の行へ（最後の行なら、行を足す）。Alt + ↑ / ↓ で行を動かす。Ctrl + Enter で保存
+  - 名前が空の行は、まだ書いていない行として保存しない
+- **行の計算と検査は `utils/structForm.ts` の純粋な関数**（行 ↔ データ型の文字列、範囲の読み方、検査、オフセットとワード数、行の移動と複製。テストは `structForm.test.ts`）。検査の理由は、保存を押したあとに、行の下・ダイアログの中に出す（alert は使わない）
+- **登録済みの型の保存は `UpdateStructType()`**（消して登録し直さない）。変数が使っている型も変えられる
+  - `variable.VariableStore.UpdateStructType()`（`struct_update.go`）: この型を中に持つ型のオフセットとワード数を計算し直し、この型を使う変数（配列の要素・ほかの構造体のフィールドとして使うものも）の値を新しい形に直す。名前の同じフィールドの値は残し（型が変わって収まらなければ既定値）、増えたフィールドは既定値、なくなったフィールドは捨てる。直した変数はリスナーに知らせる
+  - フィールドが正しくない・型が循環するときは、何も変えずにエラー。ホストは、ノードを公開しているサーバーに作り直すよう知らせる
+  - HTTP API は `PUT /api/struct-types/{name}`
+- **型名は変えられない**（登録済みの型では、型名の欄を無効にする）
+- **循環の防止**: フィールドの型に、自分と、自分を使っている型は選べない（`selectableStructs()`）。API を直接呼んでも、サーバー側が断る
+- **保存していない変更**: 「保存」「元に戻す」は、変更があるときだけ押せる。変更があるまま、閉じる・ほかの型を選ぶ・「新しい型」を押すと、捨ててよいかを確かめる
+- 開いたときは、型があれば先頭の型を、なければ新しい型を出す
+- **画面のテスト**: `variable-dialogs.spec.ts` の「構造体型管理ダイアログ」
 
 ### OPC UA 実装
 

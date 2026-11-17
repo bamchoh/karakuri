@@ -178,6 +178,8 @@ export function UpdateScript(arg1:string,arg2:string,arg3:string,arg4:number):Pr
 
 export function UpdateServerConfig(arg1:application.ServerConfigDTO):Promise<void>;
 
+export function UpdateStructType(arg1:application.StructTypeDTO):Promise<application.StructTypeDTO>;
+
 export function UpdateVariable(arg1:string,arg2:string,arg3:string):Promise<application.VariableDTO>;
 
 export function UpdateVariableFieldValue(arg1:string,arg2:string,arg3:any):Promise<void>;

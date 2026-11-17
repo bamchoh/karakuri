@@ -286,6 +286,21 @@ func (s *Server) handleRegisterStructType(w http.ResponseWriter, r *http.Request
 	writeJSON(w, http.StatusCreated, created)
 }
 
+// handleUpdateStructType は、構造体型のフィールドを置き換える（型名はパスのもの。本文の name は見ない）
+func (s *Server) handleUpdateStructType(w http.ResponseWriter, r *http.Request) {
+	var dto application.StructTypeDTO
+	if !decodeBody(w, r, &dto) {
+		return
+	}
+	dto.Name = r.PathValue("name")
+	updated, err := s.svc.UpdateStructType(dto)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, updated)
+}
+
 func (s *Server) handleDeleteStructType(w http.ResponseWriter, r *http.Request) {
 	noContent(w, s.svc.DeleteStructType(r.PathValue("name")))
 }

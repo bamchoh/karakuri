@@ -284,6 +284,22 @@ func TestStructTypes(t *testing.T) {
 		t.Errorf("登録した構造体型: %+v", created)
 	}
 	api.do("POST", "/api/struct-types", `{"name":"Q","fields":[{"name":"a","dataType":"NOPE"}]}`).isError(http.StatusBadRequest)
+	// フィールドを置き換える。使っている変数は残り、名前の同じフィールドの値も残る
+	api.do("POST", "/api/variables", `{"name":"UsesP","dataType":"P","value":{"a":5,"b":6}}`).status(http.StatusCreated)
+	var updated application.StructTypeDTO
+	api.do("PUT", "/api/struct-types/P", `{"name":"ignored","fields":[{"name":"c","dataType":"INT"},{"name":"a","dataType":"DINT"}]}`).status(http.StatusOK).json(&updated)
+	if updated.Name != "P" || updated.WordCount != 3 || updated.Fields[1].Offset != 1 {
+		t.Fatalf("変えた構造体型: %+v", updated)
+	}
+	var usesP map[string]interface{}
+	api.do("GET", "/api/variables/UsesP/value", "").status(http.StatusOK).json(&usesP)
+	if value, _ := usesP["value"].(map[string]interface{}); value["a"] != float64(5) || value["c"] != float64(0) || len(value) != 2 {
+		t.Fatalf("型を変えたあとの変数の値: %+v", usesP)
+	}
+	api.do("PUT", "/api/struct-types/P", `{"fields":[]}`).isError(http.StatusBadRequest)
+	api.do("PUT", "/api/struct-types/Nope", `{"fields":[{"name":"a","dataType":"INT"}]}`).isError(http.StatusBadRequest)
+	api.do("DELETE", "/api/variables/UsesP", "").status(http.StatusNoContent)
+
 	api.do("DELETE", "/api/struct-types/P", "").status(http.StatusNoContent)
 	api.do("DELETE", "/api/struct-types/P", "").isError(http.StatusBadRequest)
 }

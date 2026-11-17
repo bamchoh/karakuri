@@ -199,6 +199,11 @@
     },
     "/api/struct-types/{name}": {
       "parameters": [{ "name": "name", "in": "path", "required": true, "schema": { "type": "string" } }],
+      "put": {
+        "tags": ["変数"], "summary": "構造体型のフィールドを置き換える（型名は変えられない。使っている変数は残り、名前の同じフィールドの値を残して新しい形に直る）",
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/StructType" }, "example": { "fields": [{ "name": "speed", "dataType": "DINT" }, { "name": "running", "dataType": "BOOL" }] } } } },
+        "responses": { "200": { "description": "変えた構造体型", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/StructType" } } } }, "400": { "$ref": "#/components/responses/Error" } }
+      },
       "delete": { "tags": ["変数"], "summary": "構造体型を削除する（使っている変数・型があれば削除できない）", "responses": { "204": { "description": "削除した" }, "400": { "$ref": "#/components/responses/Error" } } }
     },
     "/api/mapping-targets": {
