@@ -348,6 +348,8 @@ func (s *PLCService) RemoveClient(id string) error {
 	}
 	// この接続先へのマッピングを、変数から外す
 	s.removeMappingsForKey(clientMappingKey(id))
+	// この接続先のモニタリング項目も消す
+	s.removeMonitoringItems(func(item *MonitoringItemDTO) bool { return item.ClientID == id })
 	go s.emitVariablesChanged()
 	m.clientLog(inst.id, inst.name).Infof("接続先を削除しました")
 	return nil

@@ -651,6 +651,11 @@ func (a *App) ReorderMonitoringItem(id string, newIndex int) error {
 	return a.plcService.ReorderMonitoringItem(id, newIndex)
 }
 
+// GetMonitoringValues は、レジスタ以外のモニタリング項目（変数・接続先の値）のいまの値を返す
+func (a *App) GetMonitoringValues() []application.MonitoringValueDTO {
+	return a.plcService.GetMonitoringValues()
+}
+
 // ClearMonitoringItems は全モニタリング項目を削除する
 func (a *App) ClearMonitoringItems() {
 	a.plcService.ClearMonitoringItems()

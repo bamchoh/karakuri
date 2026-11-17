@@ -76,7 +76,7 @@ go build ./...
 
 `frontend/src/**/*.test.ts` に、state に依存しない純粋な関数の単体テストがある（`npm test`。開発サーバーなしで走り、CI でも実行する）。
 
-- 対象: `utils/address.ts`（アドレスの表示と入力の変換・範囲の検査・マッピング先のエリアの決め方）、`utils/register.ts`（ワードの結合・分解・書式）、`components/registerList.ts`（行の組み立て・選択の移動）、`utils/windowTitle.ts`（タイトルバーの文字）、`utils/rows.ts`（行を足せる表の行の追加・削除・更新）、`utils/certificates.ts`（証明書の一覧の分け方・書式）
+- 対象: `utils/address.ts`（アドレスの表示と入力の変換・範囲の検査・マッピング先のエリアの決め方）、`utils/register.ts`（ワードの結合・分解・書式）、`components/registerList.ts`（行の組み立て・選択の移動）、`utils/windowTitle.ts`（タイトルバーの文字）、`utils/rows.ts`（行を足せる表の行の追加・削除・更新）、`utils/certificates.ts`（証明書の一覧の分け方・書式）、`utils/watch.ts`（下の帯のモニタリングの入力の読み方・候補の絞り込み）
 - 画面の動き（クリック・入力・表示）は、こちらではなく Playwright で確かめる。**計算や変換を足すときは、コンポーネントの中に書かず純粋な関数にして、ここにテストを足す**
 - 設定は `frontend/vite.config.ts` の `test`（`src/**/*.test.ts` だけを対象にする。`e2e/*.spec.ts` は Playwright のテスト）。Vitest のバージョンは固定
 - テストのファイルも `npm run build` の型検査の対象
@@ -97,7 +97,7 @@ go build ./...
 
 `frontend/e2e/` に、ブラウザで画面を操作して確認するテストがある。`task dev` が立てる開発用サーバー（`http://localhost:34115`）に接続するため、Go 側の API とプロトコルの実装を含めた動作を確認できる。手順と注意は `frontend/e2e/README.md` を参照。
 
-- 画面ごとのテスト: 画面の外枠（タイトル・左の帯・HTTP API の表示）`app-shell.spec.ts`、通信画面の右側の配置 `pane-layout.spec.ts`、アプリ全体のログ `app-log.spec.ts`、アドレスの範囲 `register-range.spec.ts`、FINS（「ワード.ビット」のアドレス・項目の表示条件）`fins.spec.ts`、SLMP（16 進のアドレス）`slmp.spec.ts`、通信画面（サーバー）`server-panel.spec.ts`、変数画面 `variable-dialogs.spec.ts` / `node-publishing.spec.ts`、サーバーの「レジスタ」「モニタリング」のタブ `register-panel.spec.ts` / `monitoring.spec.ts`、スクリプト画面 `script-panel.spec.ts`、通信画面（クライアント）`client-panel.spec.ts` / `client-polling.spec.ts` / `client-mapping.spec.ts` / `client-saved-commands.spec.ts` / `client-opcua.spec.ts` / `client-serial.spec.ts`、OPC UA の暗号化・ユーザー認証・証明書のタブ `opcua-security.spec.ts`（Modbus RTU / ASCII・FINS の Host Link・MC プロトコル（シリアル）。実機の確認は、テストを流す側で `KARAKURI_SERIAL_PAIR` を設定したときだけ）
+- 画面ごとのテスト: 画面の外枠（タイトル・左の帯・HTTP API の表示）`app-shell.spec.ts`、下の帯のモニタリング `watch-panel.spec.ts`、通信画面の右側の配置 `pane-layout.spec.ts`、アプリ全体のログ `app-log.spec.ts`、アドレスの範囲 `register-range.spec.ts`、FINS（「ワード.ビット」のアドレス・項目の表示条件）`fins.spec.ts`、SLMP（16 進のアドレス）`slmp.spec.ts`、通信画面（サーバー）`server-panel.spec.ts`、変数画面 `variable-dialogs.spec.ts` / `node-publishing.spec.ts`、サーバーの「レジスタ」「モニタリング」のタブ `register-panel.spec.ts` / `monitoring.spec.ts`、スクリプト画面 `script-panel.spec.ts`、通信画面（クライアント）`client-panel.spec.ts` / `client-polling.spec.ts` / `client-mapping.spec.ts` / `client-saved-commands.spec.ts` / `client-opcua.spec.ts` / `client-serial.spec.ts`、OPC UA の暗号化・ユーザー認証・証明書のタブ `opcua-security.spec.ts`（Modbus RTU / ASCII・FINS の Host Link・MC プロトコル（シリアル）。実機の確認は、テストを流す側で `KARAKURI_SERIAL_PAIR` を設定したときだけ）
 - 画面を変更したら、該当するテストを実行する（なければ追加する）。`shot()` で撮ったスクリーンショット（`frontend/e2e/.screenshots/`）で見た目も確認する
 - データの準備は `api(page, "メソッド名", ...)` で Go 側の API を直接呼び、確認したい操作だけを画面で行う
 - **テストはアプリのサーバー・変数・モニタリング項目・スクリプトをすべて削除する。** 開発サーバーは `KARAKURI_CONFIG_DIR` を一時フォルダに向けて起動する
@@ -163,6 +163,7 @@ internal/
 │   ├── plc_service_scripts.go    # スクリプト管理・コンソールログ
 │   ├── plc_service_project.go    # プロジェクト Export/Import
 │   ├── plc_service_monitoring.go # モニタリング項目と設定ファイル
+│   ├── plc_service_monitoring_values.go # レジスタ以外のモニタリング項目（変数・接続先の値）のいまの値
 │   ├── plc_service_variables.go  # 変数・マッピング・ノード公開設定・構造体型
 │   ├── plc_service_applog.go     # アプリ全体のログ（取得・消去・画面への通知）
 │   ├── app_events.go             # Wails イベントの送信（WailsAppStateEmitter）と変数変更の間引き
@@ -362,7 +363,9 @@ frontend/src/
 │   ├── ClientSubscriptionView.tsx # サブスクリプション（通知の間隔・監視項目の追加・届いた値）。対応するプロトコルの接続先だけ
 │   ├── CertificatesView.tsx    # 証明書のタブ（サーバーと接続先で共通。自分の証明書・拒否・信頼の一覧と、信頼・拒否・削除）。証明書のストアを持つプロトコルだけ
 │   ├── clientFormat.ts         # クライアント（通信画面の右側）で共通の表示の書式（状態の名前・時刻・かかった時間）
-│   ├── AppLogPanel.tsx     # アプリ全体のログの欄（どのページでも画面の下に出す。開閉できる）
+│   ├── AppLogPanel.tsx     # 下の帯（どのページでも画面の下に出す。開閉できる）。アプリ全体のログと、モニタリングの欄を切り替える
+│   ├── WatchPanel.tsx      # 下の帯のモニタリング（レジスタ・変数・接続先の値の一覧・追加・書き込み）
+│   ├── WatchDialogs.tsx    # モニタリングに足すものを選ぶダイアログ・変数の書き込みダイアログ
 │   ├── Sidebar.tsx         # 左のアイコンの帯（上にページの切り替え、下にプロジェクトを開く・保存）
 │   └── HttpApiIndicator.tsx # HTTP API の URL とポートの変更（ログの見出しの行の右端に出す）
 └── App.tsx                 # 画面の外枠（左の帯・ページ・下のログの欄）
@@ -377,6 +380,14 @@ frontend/src/
   - 隠れている間は、周期的な読み直しを止める。タイマーを足すときは `usePageActive()`（`components/usePageActive.ts`）が true の間だけ動かす
   - 画面を開いたときにだけ読むもの（変数画面のサーバーとエリア・接続先の保存したコマンドと履歴）は、ページが出るたびにも読み直す（隠れている間に、ほかのページ・スクリプト・HTTP API で変わるため）。「ページを移れば読み直される」ことには頼れない
   - ログの行から移るときの「選んでほしいもの」（`selectRequest`）は、そのページが出ているときだけ渡す
+- **下の帯の「モニタリング」**（`AppLogPanel` の見出しの「モニタリング」。中身は `WatchPanel`）: 登録した値を、どのページにいても下の欄で見られる（スクリプトを書きながら、レジスタや変数の値を見るため。以前は 2 画面で並べる作りにしたが、使いにくいのでやめた）
+  - 出せるもの: レジスタ・変数（まるごと。フィールド・要素は `fieldPath` で指せる）・接続先の値（サブスクリプションの監視項目・ポーリングの読み取り項目）。追加は、欄の「レジスタ」「変数」「接続先の値」のボタンから（変数と接続先の値は、候補の一覧からチェックで選ぶ `WatchPickDialog`）
+  - 項目は、サーバーの「モニタリング」のタブと同じ並び（`MonitoringItemDTO`）。`kind` が空ならレジスタ、`variable` / `subscription` / `poll` はそれ以外。サーバーのタブには、そのサーバーのレジスタだけが出る
+  - レジスタの値は画面がメモリを読んで作り、ほかの値は `GetMonitoringValues()`（`plc_service_monitoring_values.go`）が作る。200ms ごとに読み直す（欄を開いている間だけ）
+  - 接続先の項目は、接続先の ID と項目の要約（`summary`）で指す（項目の ID は、プロジェクトを読み込むと変わるため）。監視・ポーリングが止まっている・失敗している間は、最後の値を薄く出して理由を添える（`status: "stale"`）
+  - 値を押すと書ける: レジスタは `RegisterWriteDialog`、変数は数値・真偽・文字列だけ（`VariableWriteDialog`。入力の読み方は `utils/watch.ts` の `parseVariableInput()`）。構造体・配列と接続先の値は書けない
+  - 変数・接続先を消すと、それを指す項目も消す（`removeMonitoringItems()`）。監視項目・読み取り項目だけを消したときは残り、「監視項目がありません」と出る
+  - 画面のテスト: `frontend/e2e/watch-panel.spec.ts`、ホスト側は `plc_service_monitoring_values_test.go`
 - **色は `App.css` の先頭の変数で決める**。新しく色を足すときは、16 進の値を直接書かず、変数を使う
   - 面: `--bg-app`（左の帯）→ `--bg-sidebar`（一覧）→ `--bg-panel`（中身）→ `--bg-elevated`（見出し・ダイアログ・ボタン）。入力欄は `--bg-input`、ログ・コンソール・コードは `--bg-code`
   - **強調（`--accent`、青）は「選んでいるもの・フォーカス・押せる値・主なボタン」に使う。緑（`--success`）は「起動中・正常」の状態だけに使う**（選択と状態を、色で見分けられるようにするため）
@@ -551,6 +562,7 @@ JavaScript（goja）でPLC動作を記述。
   - `ReadBits(protocolType, area, address, count)`, `WriteBit(protocolType, area, address, value)`
   - `ReadWords(protocolType, area, address, count)`, `WriteWord(protocolType, area, address, value)`
 - **モニタリング**:
+  - `GetMonitoringValues()`: レジスタ以外の項目（変数・接続先の値）のいまの値
   - `GetMonitoringItems()`, `AddMonitoringItem()`, `UpdateMonitoringItem()`, `DeleteMonitoringItem()`, `MoveMonitoringItem()`, `ReorderMonitoringItem()`, `ClearMonitoringItems()`
 - **変数管理**:
   - `GetVariables()`, `CreateVariable()`, `UpdateVariableValue()`, `DeleteVariable()`: 変数CRUD操作
@@ -692,7 +704,7 @@ JavaScript（goja）でPLC動作を記述。
   - 実際の COM ポートでの試験: `rtu/serial_hw_test.go`（配線・RTU と ASCII の読み書き・応答の時間）と `rtu/serial_hw_unplug_test.go`（手で抜き差しする）、`internal/protocols/integration_serial_hw_test.go`（Karakuri の Modbus RTU / ASCII・FINS の Host Link・MC プロトコル（シリアル）のサーバーに、同じプロトコルのクライアントからつなぐ。ポーリングと変数マッピングも）。COM ポートを取り合うので、パッケージをまたいで流すときは `go test -p 1` にする。2 つのポートをクロスでつなぎ、環境変数 `KARAKURI_SERIAL_PAIR`（`COM4,COM6` の形。サーバー側, マスター側）を設定したときだけ動く（CI では飛ばす）。抜き差しは `KARAKURI_SERIAL_UNPLUG=1` も要る。CPU の使い方は OS の側（`Get-Process rtu.test` の `TotalProcessorTime`）で見る（Go の `runtime/metrics` の CPU 時間は、システムコールの中の時間を数えない）
 - **OPC UA**（`internal/protocols/opcua/`）: 実際の OPC UA クライアントでつなぐ。`host_integration_test.go` は実際の変数ストアを使う（他のテストはフェイクの変数ストアを使うため、変数ストアが持つ値の型や型変換を通らない）
 - 設定フォルダに書き込むパッケージのテストは、`TestMain` で `KARAKURI_CONFIG_DIR` を一時フォルダに向ける
-- **プロジェクトのファイルの互換**（`internal/protocols/project_compat_test.go`）: `testdata/projects/` の各ファイル（そのバージョンのアプリで保存したもの。いまは `v0.0.48.json` と `v0.0.51.json`。v0.0.48 は、OPC UA のセキュリティの項目が既定値で増えるので `v0.0.48.expected.json` と比べる）を読み込んで保存し直し、元と同じになることを確かめる。読み込みは、読めない変数・構造体型・コマンドなどを黙って読み飛ばすので、エラーにならないだけでは足りない
+- **プロジェクトのファイルの互換**（`internal/protocols/project_compat_test.go`）: `testdata/projects/` の各ファイル（そのバージョンのアプリで保存したもの。いまは `v0.0.48.json`・`v0.0.51.json`・`v0.0.52.json`（モニタリングに変数・接続先の値が入った）。v0.0.48 は、OPC UA のセキュリティの項目が既定値で増えるので `v0.0.48.expected.json` と比べる）を読み込んで保存し直し、元と同じになることを確かめる。読み込みは、読めない変数・構造体型・コマンドなどを黙って読み飛ばすので、エラーにならないだけでは足りない
   - 置いたファイルは書き換えない（利用者の手元にあるファイルの代わり）。保存の形を変えて、保存し直したものが元と違うのが正しいときは、期待する内容を `<名前>.expected.json` に置く
   - 保存の形を変えたら、新しいバージョンのファイルを足す: `KARAKURI_WRITE_PROJECT_FIXTURE=v0.0.49 go test -run TestWriteProjectFixture ./internal/protocols`（全プロトコルのサーバーと接続先・全部の型の変数・構造体型・マッピング・公開・スクリプト・モニタリングを、既定値でない値で作る）
 - **後片付けの漏れ**（`internal/protocols/leak_test.go`）: サーバーの起動・停止、クライアントの送信・切断・削除、ポーリングとサブスクリプションの開始・停止、スクリプトの開始・停止を 20 回くり返して、ゴルーチンが増えないことを確かめる（Modbus TCP・FINS・SLMP・OPC UA）。シリアル（Modbus RTU / ASCII・Host Link・MC プロトコル）は、実機の試験 `TestHW_NoGoroutineLeak_Serial`（`integration_serial_hw_test.go`。`KARAKURI_SERIAL_PAIR` を設定したときだけ）

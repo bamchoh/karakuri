@@ -281,6 +281,21 @@ func buildFullProject(t *testing.T, svc *application.PLCService) {
 	must(t, err)
 	_, err = svc.AddMonitoringItem(&application.MonitoringItemDTO{ProtocolType: "modbus-tcp", MemoryArea: bit, Address: 5, BitWidth: 1, Endianness: "big", DisplayFormat: "decimal"})
 	must(t, err)
+	// レジスタ以外のモニタリング項目: 変数と、接続先ごとの読み取り項目・監視項目（あれば、最初のもの）
+	_, err = svc.AddMonitoringItem(&application.MonitoringItemDTO{Kind: application.MonitoringKindVariable, VariableID: ids["Int"]})
+	must(t, err)
+	_, err = svc.AddMonitoringItem(&application.MonitoringItemDTO{Kind: application.MonitoringKindVariable, VariableID: ids["Line1"], FieldPath: "motor.speed"})
+	must(t, err)
+	for _, c := range svc.GetClients() {
+		if poll, err := svc.GetClientPolling(c.ID); err == nil && len(poll.Items) > 0 {
+			_, err = svc.AddMonitoringItem(&application.MonitoringItemDTO{Kind: application.MonitoringKindPoll, ClientID: c.ID, Summary: poll.Items[0].Summary})
+			must(t, err)
+		}
+		if sub, err := svc.GetClientSubscription(c.ID); err == nil && len(sub.Items) > 0 {
+			_, err = svc.AddMonitoringItem(&application.MonitoringItemDTO{Kind: application.MonitoringKindSubscription, ClientID: c.ID, Summary: sub.Items[0].Summary})
+			must(t, err)
+		}
+	}
 }
 
 // changedSettings は、項目の既定値から変えた設定を作る（数値は +1、選択肢は最後のもの、パスワードは決まった文字）

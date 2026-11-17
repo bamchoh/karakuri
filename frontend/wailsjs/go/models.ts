@@ -843,6 +843,11 @@ export namespace application {
 	    bitWidth: number;
 	    endianness: string;
 	    displayFormat: string;
+	    kind?: string;
+	    variableId?: string;
+	    fieldPath?: string;
+	    clientId?: string;
+	    summary?: string;
 	
 	    static createFrom(source: any = {}) {
 	        return new MonitoringItemDTO(source);
@@ -858,6 +863,35 @@ export namespace application {
 	        this.bitWidth = source["bitWidth"];
 	        this.endianness = source["endianness"];
 	        this.displayFormat = source["displayFormat"];
+	        this.kind = source["kind"];
+	        this.variableId = source["variableId"];
+	        this.fieldPath = source["fieldPath"];
+	        this.clientId = source["clientId"];
+	        this.summary = source["summary"];
+	    }
+	}
+	export class MonitoringValueDTO {
+	    id: string;
+	    source: string;
+	    label: string;
+	    text: string;
+	    value?: any;
+	    status: string;
+	    error?: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new MonitoringValueDTO(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.source = source["source"];
+	        this.label = source["label"];
+	        this.text = source["text"];
+	        this.value = source["value"];
+	        this.status = source["status"];
+	        this.error = source["error"];
 	    }
 	}
 	export class NodeAddressDTO {
