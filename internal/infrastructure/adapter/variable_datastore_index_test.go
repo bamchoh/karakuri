@@ -7,7 +7,7 @@ import (
 	"karakuri/internal/domain/variable"
 )
 
-// レジスタ → 変数の同期は、マッピングの索引（mappingsIn）を使う。
+// レジスタ → 変数の同期は、マッピングの索引（overlapping）を使う。
 // マッピング・型・変数の追加と削除のあとに、古い索引のまま同期しない
 func TestVariableBackedDataStore_IndexFollowsLayoutChanges(t *testing.T) {
 	store := variable.NewVariableStore()
